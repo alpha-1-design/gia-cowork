@@ -51,22 +51,24 @@ export const PowerSection: React.FC = () => {
             <Cpu size={11} className="mt-0.5 shrink-0 text-emerald-400" />
             <p className="text-[9px] leading-relaxed" style={{ color: 'var(--gia-muted)' }}>
               GIA will hold a screen wake lock and run a background heartbeat to prevent the browser from suspending the tab.
-              On Android, the native foreground service already keeps the process alive.
+              On GIA Cowork, the system tray daemon already keeps the process alive in the background.
             </p>
           </div>
         </div>
       )}
 
-      <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--gia-border)' }}>
-        <Switch
-          checked={hapticFeedback}
-          onChange={setHapticFeedback}
-          label="Haptic Feedback"
-          description="Vibrate briefly when AI finishes responding."
-          icon={<Vibrate size={13} />}
-          accentColor="#a855f7"
-        />
-      </div>
+      {typeof navigator !== 'undefined' && 'vibrate' in navigator && (
+        <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--gia-border)' }}>
+          <Switch
+            checked={hapticFeedback}
+            onChange={setHapticFeedback}
+            label="Haptic Feedback"
+            description="Vibrate briefly when AI finishes responding."
+            icon={<Vibrate size={13} />}
+            accentColor="#a855f7"
+          />
+        </div>
+      )}
 
       <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--gia-border)' }}>
         <Switch

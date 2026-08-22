@@ -31,7 +31,7 @@ export const InstallSection: React.FC = () => {
       <div className="flex items-center gap-2">
         <Smartphone size={14} style={{ color: '#3b82f6' }} />
         <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--gia-muted)' }}>
-          Install GIA
+          Get GIA on Your Phone
         </span>
       </div>
 
