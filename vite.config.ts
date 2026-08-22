@@ -9,7 +9,7 @@ const host = process.env.TAURI_DEV_HOST
 export default defineConfig({
   test: {
     globals: true,
-    environment: 'jsdom',
+    environment: 'happy-dom',
     setupFiles: './src/test/setup.ts',
     css: false,
     pool: 'threads',

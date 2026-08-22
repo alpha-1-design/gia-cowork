@@ -59,7 +59,7 @@ const ChatModule: React.FC = () => {
     processingFiles, processingFileName,
     showScrollBtn, undoMsg, showSkillPicker,
     expandedMsgs, setExpandedMsgs, showThoughts, setShowThoughts,
-    liveThoughts, showKnowledge, setShowKnowledge,
+    liveThoughts, liveSegments, showKnowledge, setShowKnowledge,
     isDragging, showFileManager, setShowFileManager, showTools,
     inputContainerHeight,
     scrollRef, inputContainerRef, fileRef, imgRef,
@@ -407,6 +407,7 @@ const ChatModule: React.FC = () => {
           showThoughts={showThoughts}
           setShowThoughts={setShowThoughts}
           liveThoughts={liveThoughts}
+          liveSegments={liveSegments}
           thinkingPhase={thinkingPhase}
           currentTool={currentTool}
           responseTimesRef={responseTimesRef}
