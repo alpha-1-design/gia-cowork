@@ -1,0 +1,265 @@
+/**
+ * Deep system embedding — provides real-time system context to GIA.
+ * OS info, hardware, battery, network, display, locale, timezone.
+ */
+
+import { logger } from '../utils/logger';
+
+export interface SystemInfo {
+  platform: string;
+  userAgent: string;
+  language: string;
+  timezone: string;
+  timezoneOffset: number;
+  screen: {
+    width: number;
+    height: number;
+    colorDepth: number;
+    pixelRatio: number;
+  };
+  hardware: {
+    cpuCores: number | null;
+    memoryGB: number | null;
+    touchScreen: boolean;
+  };
+  battery: {
+    charging: boolean | null;
+    level: number | null;
+    dischargingTime: number | null;
+  } | null;
+  network: {
+    online: boolean;
+    type: string | null;
+    downlink: number | null;
+    rtt: number | null;
+  };
+  os: string;
+  isMobile: boolean;
+  isDesktop: boolean;
+  isNativeApp: boolean;
+  container: 'browser' | 'capacitor' | 'pwa';
+}
+
+class SystemService {
+  private _batteryListener: (() => void) | null = null;
+  private _networkListener: (() => void) | null = null;
+  private _onChange: ((info: SystemInfo) => void) | null = null;
+  private _lastInfo: SystemInfo | null = null;
+  private _formattedContext = '';
+
+  get formattedContext(): string {
+    return this._formattedContext;
+  }
+
+  setChangeHandler(handler: (info: SystemInfo) => void): void {
+    this._onChange = handler;
+  }
+
+  async getInfo(): Promise<SystemInfo> {
+    const w = window as { Capacitor?: { isNativePlatform: () => boolean } };
+    const isCapacitor = typeof w?.Capacitor?.isNativePlatform === 'function' &&
+      (w as { Capacitor: { isNativePlatform: () => boolean } }).Capacitor.isNativePlatform();
+
+    const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches ||
+      (window.navigator as { standalone?: boolean })?.standalone === true;
+
+    const platform = this._getPlatform();
+    const info: SystemInfo = {
+      platform: navigator.platform || 'unknown',
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezoneOffset: new Date().getTimezoneOffset(),
+      screen: {
+        width: screen.width,
+        height: screen.height,
+        colorDepth: screen.colorDepth,
+        pixelRatio: devicePixelRatio || 1,
+      },
+      hardware: {
+        cpuCores: navigator.hardwareConcurrency || null,
+        memoryGB: (navigator as { deviceMemory?: number }).deviceMemory || null,
+        touchScreen: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
+      },
+      battery: null,
+      network: {
+        online: navigator.onLine,
+        type: null,
+        downlink: null,
+        rtt: null,
+      },
+      os: platform,
+      isMobile: /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent),
+      isDesktop: !/Android|iPhone|iPad|iPod|webOS|Mobile/i.test(navigator.userAgent),
+      isNativeApp: isCapacitor,
+      container: isCapacitor ? 'capacitor' : isStandalone ? 'pwa' : 'browser',
+    };
+
+    const nav = navigator as unknown as {
+      deviceMemory?: number;
+      connection?: {
+        effectiveType?: string;
+        downlink?: number;
+        rtt?: number;
+        addEventListener?: (...a: unknown[]) => void;
+        removeEventListener?: (...a: unknown[]) => void;
+      };
+      getBattery?: () => Promise<{
+        charging?: boolean;
+        level?: number;
+        dischargingTime?: number;
+        addEventListener?: (...a: unknown[]) => void;
+        removeEventListener?: (...a: unknown[]) => void;
+      }>;
+    };
+
+    // Network info
+    try {
+      const conn = nav.connection;
+      if (conn) {
+        info.network.type = conn.effectiveType || null;
+        info.network.downlink = conn.downlink || null;
+        info.network.rtt = conn.rtt || null;
+      }
+    } catch (e) { logger.error('[SystemService] Failed to get network info:', e); }
+
+    // Battery info
+    try {
+      const battery = await nav.getBattery?.();
+      if (battery) {
+        info.battery = {
+          charging: battery.charging ?? null,
+          level: battery.level ?? null,
+          dischargingTime: battery.dischargingTime === Infinity ? null : (battery.dischargingTime ?? null),
+        };
+      }
+    } catch (e) { logger.error('[SystemService] Failed to get battery info:', e); }
+
+    this._lastInfo = info;
+    this._formattedContext = this._buildContext(info);
+    return info;
+  }
+
+  private _buildContext(info: SystemInfo): string {
+    const batteryStr = info.battery
+      ? `${Math.round((info.battery.level || 0) * 100)}%${info.battery.charging ? ' (charging)' : ''}`
+      : 'unknown';
+    const lines = [
+      `- System: ${info.os} on ${info.container}`,
+      `- Hardware: ${info.hardware.cpuCores || '?'} cores · ${info.hardware.memoryGB || '?'} GB RAM`,
+      `- Network: ${info.network.online ? 'Online' : 'Offline'}${info.network.type ? ` (${info.network.type})` : ''}`,
+      `- Battery: ${batteryStr}`,
+      `- Screen: ${info.screen.width}x${info.screen.height}`,
+      `- Timezone: ${info.timezone}`,
+    ];
+    return lines.join('\n');
+  }
+
+  async startMonitoring(): Promise<void> {
+    const nav = navigator as unknown as {
+      connection?: {
+        effectiveType?: string;
+        downlink?: number;
+        addEventListener?: (...a: unknown[]) => void;
+        removeEventListener?: (...a: unknown[]) => void;
+      };
+      getBattery?: () => Promise<{
+        charging?: boolean;
+        level?: number;
+        dischargingTime?: number;
+        addEventListener?: (...a: unknown[]) => void;
+        removeEventListener?: (...a: unknown[]) => void;
+      }>;
+    };
+    await this.getInfo();
+
+    // Network changes
+    const updateNetwork = () => {
+      if (!this._lastInfo) return;
+      this._lastInfo.network.online = navigator.onLine;
+      const conn = nav.connection;
+      if (conn) {
+        this._lastInfo.network.type = conn.effectiveType || this._lastInfo.network.type;
+        this._lastInfo.network.downlink = conn.downlink || this._lastInfo.network.downlink;
+      }
+      this._formattedContext = this._buildContext(this._lastInfo);
+      this._onChange?.({ ...this._lastInfo });
+    };
+
+    window.addEventListener('online', updateNetwork);
+    window.addEventListener('offline', updateNetwork);
+
+    const conn = nav.connection;
+    if (conn && typeof conn.addEventListener === 'function') {
+      conn.addEventListener('change', updateNetwork);
+    }
+
+    this._networkListener = () => {
+      window.removeEventListener('online', updateNetwork);
+      window.removeEventListener('offline', updateNetwork);
+      if (conn && typeof conn.removeEventListener === 'function') {
+        conn.removeEventListener('change', updateNetwork);
+      }
+    };
+
+    // Battery changes
+    try {
+      const battery = await nav.getBattery?.();
+      if (battery) {
+        const updateBattery = () => {
+          if (!this._lastInfo || !this._lastInfo.battery) return;
+          this._lastInfo.battery.charging = battery.charging ?? null;
+          this._lastInfo.battery.level = battery.level ?? null;
+          this._onChange?.({ ...this._lastInfo });
+        };
+        if (typeof battery.addEventListener === 'function') {
+          battery.addEventListener('chargingchange', updateBattery);
+          battery.addEventListener('levelchange', updateBattery);
+        }
+        this._batteryListener = () => {
+          if (typeof battery.removeEventListener === 'function') {
+            battery.removeEventListener('chargingchange', updateBattery);
+            battery.removeEventListener('levelchange', updateBattery);
+          }
+        };
+      }
+    } catch (e) { logger.error('[SystemService] Failed to start battery monitoring:', e); }
+  }
+
+  stopMonitoring(): void {
+    this._networkListener?.();
+    this._batteryListener?.();
+    this._networkListener = null;
+    this._batteryListener = null;
+  }
+
+  private _getPlatform(): string {
+    const ua = navigator.userAgent;
+    if (/Win/.test(ua)) return 'Windows';
+    if (/Mac/.test(ua)) return 'macOS';
+    if (/Linux/.test(ua)) return 'Linux';
+    if (/Android/.test(ua)) return 'Android';
+    if (/iPhone|iPad|iPod/.test(ua)) return 'iOS';
+    return 'Unknown';
+  }
+
+  formatInfo(info: SystemInfo): string {
+    const lines = [
+      `OS: ${info.os}`,
+      `Platform: ${info.platform}`,
+      `Container: ${info.container}`,
+      `Language: ${info.language}`,
+      `Timezone: ${info.timezone} (UTC${info.timezoneOffset >= 0 ? '-' : '+'}${Math.abs(info.timezoneOffset / 60)})`,
+      `Screen: ${info.screen.width}x${info.screen.height} @${info.screen.pixelRatio}x`,
+      `CPU: ${info.hardware.cpuCores || 'unknown'} cores`,
+      `Memory: ${info.hardware.memoryGB || 'unknown'} GB`,
+      `Touch: ${info.hardware.touchScreen ? 'Yes' : 'No'}`,
+      `Online: ${info.network.online ? 'Yes' : 'No'}`,
+      `Network: ${info.network.type || 'unknown'}`,
+      `Battery: ${info.battery ? `${Math.round((info.battery.level || 0) * 100)}%${info.battery.charging ? ' (charging)' : ''}` : 'unknown'}`,
+    ];
+    return lines.join('\n');
+  }
+}
+
+export default new SystemService();

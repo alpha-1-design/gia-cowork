@@ -1,0 +1,314 @@
+import { PDFDocument, StandardFonts, rgb, PageSizes, type PDFPage, type PDFFont } from 'pdf-lib';
+
+const FONT_SIZE = 11;
+const HEADING_SIZE = 16;
+const SUBHEADING_SIZE = 14;
+const LINE_HEIGHT = 1.4;
+const MARGIN = 50;
+const PAGE_WIDTH = PageSizes.A4[0];
+const PAGE_HEIGHT = PageSizes.A4[1];
+const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+const PARAGRAPH_GAP = 8;
+
+interface PdfContent {
+  title: string;
+  body: string;
+  author?: string;
+  fontSize?: number;
+}
+
+interface TextLine {
+  text: string;
+  bold?: boolean;
+  size?: number;
+  indent?: number;
+}
+
+const UNICODE_REPLACEMENTS: Record<string, string> = {
+  '─': '-',
+  '━': '-',
+  '│': '|',
+  '┃': '|',
+  '┄': '-',
+  '┅': '-',
+  '┈': '-',
+  '┉': '-',
+  '┌': '+',
+  '┐': '+',
+  '└': '+',
+  '┘': '+',
+  '├': '+',
+  '┤': '+',
+  '┬': '+',
+  '┴': '+',
+  '┼': '+',
+  '—': '-',
+  '–': '-',
+  '•': '*',
+  '…': '...',
+  '“': '"',
+  '”': '"',
+  '‘': "'",
+  '’': "'",
+  '«': '"',
+  '»': '"',
+  '→': '->',
+  '←': '<-',
+  '⇒': '=>',
+  '⇔': '<=>',
+  '≤': '<=',
+  '≥': '>=',
+  '≠': '!=',
+  '±': '+/-',
+  '×': '*',
+  '÷': '/',
+  '°': ' deg',
+  '™': 'TM',
+  '©': '(c)',
+  '®': '(R)',
+};
+
+export function sanitizeWinAnsi(text: string): string {
+  if (!text) return '';
+  let result = '';
+  for (const char of text) {
+    if (UNICODE_REPLACEMENTS[char] !== undefined) {
+      result += UNICODE_REPLACEMENTS[char];
+      continue;
+    }
+    const code = char.charCodeAt(0);
+    if (code === 0x0A || code === 0x0D || code === 0x09) {
+      result += char;
+    } else if (code >= 0x20 && code <= 0x7E) {
+      result += char;
+    } else if (code >= 0xA0 && code <= 0xFF && code !== 0xAD) {
+      result += char;
+    } else {
+      result += '?';
+    }
+  }
+  return result;
+}
+
+function parseMarkdownLine(line: string): TextLine {
+  const trimmed = line.trim();
+  if (!trimmed) return { text: '' };
+
+  if (trimmed.startsWith('### ')) {
+    return { text: trimmed.slice(4), bold: true, size: SUBHEADING_SIZE };
+  }
+  if (trimmed.startsWith('## ')) {
+    return { text: trimmed.slice(3), bold: true, size: SUBHEADING_SIZE };
+  }
+  if (trimmed.startsWith('# ')) {
+    return { text: trimmed.slice(2), bold: true, size: HEADING_SIZE };
+  }
+  if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+    const bulletText = trimmed.slice(2);
+    const bold = /\*\*(.+?)\*\*/.test(bulletText);
+    return { text: `  * ${bulletText.replace(/\*\*(.+?)\*\*/g, '$1')}`, bold, indent: 10 };
+  }
+  if (/^\d+[.)]\s/.test(trimmed)) {
+    const match = trimmed.match(/^(\d+[.)]\s)(.*)/);
+    if (match) {
+      const content = match[2].replace(/\*\*(.+?)\*\*/g, '$1');
+      return { text: `  ${match[1]}${content}`, indent: 10 };
+    }
+  }
+
+  const hasBold = /\*\*(.+?)\*\*/.test(trimmed);
+  const clean = trimmed.replace(/\*\*(.+?)\*\*/g, '$1');
+  return { text: clean, bold: hasBold };
+}
+
+function wrapText(
+  text: string,
+  font: { widthOfTextAtSize: (text: string, size: number) => number },
+  fontSize: number,
+  maxWidth: number,
+): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(test, fontSize) <= maxWidth) {
+      current = test;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+      if (font.widthOfTextAtSize(word, fontSize) > maxWidth) {
+        const chars = word.split('');
+        let charLine = '';
+        for (const ch of chars) {
+          const charTest = charLine + ch;
+          if (font.widthOfTextAtSize(charTest, fontSize) <= maxWidth) {
+            charLine = charTest;
+          } else {
+            lines.push(charLine);
+            charLine = ch;
+          }
+        }
+        if (charLine) current = charLine;
+      }
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function drawWrappedText(
+  page: PDFPage,
+  text: string,
+  font: PDFFont,
+  fontSize: number,
+  x: number,
+  y: number,
+  maxWidth: number,
+): number {
+  const lines = wrapText(text, font, fontSize, maxWidth);
+  let currentY = y;
+  for (const line of lines) {
+    page.drawText(line, {
+      x,
+      y: currentY,
+      size: fontSize,
+      font,
+      color: rgb(0, 0, 0),
+    });
+    currentY -= fontSize * LINE_HEIGHT;
+  }
+  return currentY;
+}
+
+function drawHeader(
+  page: PDFPage,
+  title: string,
+  author: string | undefined,
+  font: PDFFont,
+  boldFont: PDFFont,
+  y: number,
+): number {
+  let currentY = y;
+  const cleanTitle = sanitizeWinAnsi(title);
+  const cleanAuthor = author ? sanitizeWinAnsi(author) : undefined;
+
+  page.drawText(cleanTitle, {
+    x: MARGIN,
+    y: currentY,
+    size: HEADING_SIZE,
+    font: boldFont,
+    color: rgb(0.1, 0.1, 0.1),
+  });
+  currentY -= HEADING_SIZE * 1.4;
+
+  page.drawLine({
+    start: { x: MARGIN, y: currentY },
+    end: { x: PAGE_WIDTH - MARGIN, y: currentY },
+    thickness: 0.5,
+    color: rgb(0.6, 0.6, 0.6),
+  });
+  currentY -= 12;
+
+  if (cleanAuthor) {
+    page.drawText(`Generated by GIA - ${cleanAuthor}`, {
+      x: MARGIN,
+      y: currentY,
+      size: 8,
+      font,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+    currentY -= 8 * LINE_HEIGHT;
+  }
+
+  currentY -= PARAGRAPH_GAP;
+  return currentY;
+}
+
+export class PdfGenerationService {
+  async generate(content: PdfContent): Promise<Uint8Array> {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+    const fontSize = content.fontSize || FONT_SIZE;
+
+    let page = doc.addPage(PageSizes.A4);
+    let currentY = PAGE_HEIGHT - MARGIN;
+
+    currentY = drawHeader(page, content.title, content.author, font, boldFont, currentY);
+
+    const sanitizedBody = sanitizeWinAnsi(content.body);
+    const bodyLines = sanitizedBody.split('\n');
+
+    for (const rawLine of bodyLines) {
+      if (currentY < MARGIN + 40) {
+        page = doc.addPage(PageSizes.A4);
+        currentY = PAGE_HEIGHT - MARGIN;
+      }
+
+      const line = parseMarkdownLine(rawLine);
+      const trimmed = line.text.trim();
+
+      if (!trimmed && !rawLine.trim()) {
+        currentY -= PARAGRAPH_GAP;
+        continue;
+      }
+      if (!trimmed) continue;
+
+      const isHeader = line.size !== undefined;
+      const actualSize = line.size || fontSize;
+      const fontToUse = line.bold || isHeader ? boldFont : font;
+      const x = MARGIN + (line.indent || 0);
+
+      if (isHeader) {
+        page.drawText(trimmed, {
+          x,
+          y: currentY,
+          size: actualSize,
+          font: boldFont,
+          color: rgb(0.15, 0.15, 0.15),
+        });
+        currentY -= actualSize * 1.5;
+        currentY -= PARAGRAPH_GAP;
+        continue;
+      }
+
+      currentY = drawWrappedText(page, trimmed, fontToUse, actualSize, x, currentY, CONTENT_WIDTH - (line.indent || 0));
+
+      if (line.bold && !isHeader) {
+        currentY -= 2;
+      }
+
+      if (/^[{(-]/.test(trimmed) || /[})]-$/.test(trimmed)) {
+        currentY -= 2;
+      }
+    }
+
+    const pageCount = doc.getPageCount();
+    for (let i = 0; i < pageCount; i++) {
+      const p = doc.getPage(i);
+      const footerText = `- ${i + 1} of ${pageCount} -`;
+      const footerWidth = font.widthOfTextAtSize(footerText, 8);
+      p.drawText(footerText, {
+        x: (PAGE_WIDTH - footerWidth) / 2,
+        y: 20,
+        size: 8,
+        font,
+        color: rgb(0.6, 0.6, 0.6),
+      });
+      p.drawText('Generated by GIA', {
+        x: MARGIN,
+        y: 20,
+        size: 7,
+        font,
+        color: rgb(0.7, 0.7, 0.7),
+      });
+    }
+
+    return await doc.save();
+  }
+}
+
+export const pdfGenerationService = new PdfGenerationService();
+
