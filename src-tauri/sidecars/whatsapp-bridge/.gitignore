@@ -1,0 +1,6 @@
+node_modules/
+# This is a live WhatsApp linked-device session. Anyone who gets these
+# files can act as your paired account until you unlink it. Never commit,
+# never share, treat exactly like a password.
+auth/
+*.log

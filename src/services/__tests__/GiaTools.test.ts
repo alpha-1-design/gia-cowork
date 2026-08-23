@@ -105,7 +105,7 @@ describe('GiaTools', () => {
         'image_generation', 'save_memory', 'forget_memory', 'request_clarification',
         // Device & system
         'device_info', 'device_health', 'get_user_location', 'weather', 'define', 'clipboard', 'share_content',
-        'set_alarm', 'send_sms', 'send_whatsapp', 'send_email', 'make_phone_call', 'open_url',
+        'set_alarm', 'send_whatsapp', 'send_email', 'open_url', 'messaging_send',
         // Security
         'security_install_tools', 'security_scan', 'security_firewall', 'security_trace', 'security_quarantine',
         // Social / connectors / gateway / messaging

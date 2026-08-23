@@ -31,31 +31,6 @@ export const EmailIcon: React.FC<AnimatedIconProps> = ({ size = 20, color = '#ea
   </svg>
 );
 
-export const SMSIcon: React.FC<AnimatedIconProps> = ({ size = 20, color = '#3b82f6', animated = true }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <path d="M3 10c0-3.3 2.7-6 6-6h6c3.3 0 6 2.7 6 6v4c0 3.3-2.7 6-6 6H9c-3.3 0-6-2.7-6-6v-2l-1.5 1.5v-3.5z" stroke={color} strokeWidth="1.5" fill={`${color}12`} />
-    <circle cx="8" cy="12" r="1" fill={color}>
-      {animated && <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" begin="0s" />}
-    </circle>
-    <circle cx="12" cy="12" r="1" fill={color}>
-      {animated && <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" begin="0.3s" />}
-    </circle>
-    <circle cx="16" cy="12" r="1" fill={color}>
-      {animated && <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" begin="0.6s" />}
-    </circle>
-  </svg>
-);
-
-export const PhoneIcon: React.FC<AnimatedIconProps> = ({ size = 20, color = '#22c55e', animated = true }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3.1 19.5 19.5 0 01-6-6A19.8 19.8 0 012 4.2 2 2 0 014 2h3a2 2 0 012 1.7c.1.9.3 1.8.6 2.6a2 2 0 01-.5 2.1l-1.3 1.3a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.5c.9.3 1.7.5 2.6.6A2 2 0 0122 16.9z" stroke={color} strokeWidth="1.5" fill={`${color}12`} />
-    {animated && <circle cx="12" cy="10" r="5" fill="none" stroke={color} strokeWidth="0.8" opacity="0.3">
-      <animate attributeName="r" values="5;9;5" dur="2s" repeatCount="indefinite" />
-      <animate attributeName="opacity" values="0.3;0;0.3" dur="2s" repeatCount="indefinite" />
-    </circle>}
-  </svg>
-);
-
 export const ShareIcon: React.FC<AnimatedIconProps> = ({ size = 20, color = '#a855f7', animated = true }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <circle cx="18" cy="5" r="3" stroke={color} strokeWidth="1.5" fill={`${color}20`} />
@@ -125,19 +100,6 @@ export const MonitorIcon: React.FC<AnimatedIconProps> = ({ size = 20, color = '#
     {animated && <line x1="4" y1="7" x2="20" y2="7" stroke={color} strokeWidth="0.8" opacity="0.5">
       <animate attributeName="opacity" values="0.5;0.1;0.5" dur="3s" repeatCount="indefinite" />
     </line>}
-  </svg>
-);
-
-export const ContactsIcon: React.FC<AnimatedIconProps> = ({ size = 20, color = '#8b5cf6', animated = true }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <circle cx="9" cy="8" r="4" stroke={color} strokeWidth="1.3" fill={`${color}15`} />
-    <path d="M3 21c0-3.3 2.7-6 6-6" stroke={color} strokeWidth="1.3" strokeLinecap="round" />
-    <circle cx="17" cy="10" r="3" stroke={color} strokeWidth="1.3" fill={`${color}15`} />
-    <path d="M21 18c0-2.5-1.8-4.5-4-5" stroke={color} strokeWidth="1.3" strokeLinecap="round" />
-    {animated && <circle cx="9" cy="8" r="5.5" fill="none" stroke={color} strokeWidth="0.5" opacity="0.3">
-      <animate attributeName="r" values="4.5;6;4.5" dur="2s" repeatCount="indefinite" />
-      <animate attributeName="opacity" values="0.3;0;0.3" dur="2s" repeatCount="indefinite" />
-    </circle>}
   </svg>
 );
 
@@ -486,8 +448,7 @@ export const ToolIcon: React.FC<{ toolId: string; size?: number; color?: string;
     // Communication
     send_whatsapp: <WhatsAppIcon size={size} color={c} animated={animated} />,
     send_email: <EmailIcon size={size} color={c} animated={animated} />,
-    send_sms: <SMSIcon size={size} color={c} animated={animated} />,
-    make_phone_call: <PhoneIcon size={size} color={c} animated={animated} />,
+
     share: <ShareIcon size={size} color={c} animated={animated} />,
     // Utilities
     clipboard: <ClipboardIcon size={size} color={c} animated={animated} />,
@@ -495,7 +456,7 @@ export const ToolIcon: React.FC<{ toolId: string; size?: number; color?: string;
     screen_brightness: <BrightnessIcon size={size} color={c} animated={animated} />,
     // System
     device_info: <MonitorIcon size={size} color={c} animated={animated} />,
-    get_contacts: <ContactsIcon size={size} color={c} animated={animated} />,
+
     open_url: <LinkIcon size={size} color={c} animated={animated} />,
     // Web
     web_search: <SearchIcon size={size} color={c} animated={animated} />,

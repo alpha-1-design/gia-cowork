@@ -99,49 +99,6 @@ class DeviceIntegration {
     }
   }
 
-  async sendSMS(phone: string, message: string): Promise<{ method: string }> {
-    const cleaned = validatePhone(phone);
-    validateString(message, 'Message');
-
-    try {
-      if (this.isCapacitor()) {
-        const { GIASMS } = await import('./GIASMS');
-        const result = await GIASMS.sendSMS({ phone: cleaned, message });
-        if (result.success) return { method: 'sms_manager' };
-      }
-    } catch (e) {
-      logger.warn('[DeviceIntegration] Native SMS failed:', e);
-    }
-
-    try {
-      if (this.isCapacitor()) {
-        const { Share } = await import('@capacitor/share');
-        await Share.share({ text: message, title: 'Send SMS', dialogTitle: 'Send via' });
-        return { method: 'capacitor_share' };
-      }
-    } catch (e) {
-      logger.warn('[DeviceIntegration] Share SMS fallback failed:', e);
-    }
-
-    const text = encodeURIComponent(message);
-    window.location.href = `sms:${cleaned}${cleaned ? `?body=${text}` : ''}`;
-    return { method: 'sms_link' };
-  }
-
-  async makeCall(phone: string): Promise<{ method: string }> {
-    const cleaned = validatePhone(phone);
-    if (!/^\+?\d{5,15}$/.test(cleaned)) {
-      throw new Error(`Invalid phone number format: ${phone}`);
-    }
-    try {
-      window.location.href = `tel:${cleaned}`;
-      return { method: 'tel_link' };
-    } catch (e) {
-      logger.warn('[DeviceIntegration] makeCall failed:', e);
-      throw new Error('Failed to open phone dialer');
-    }
-  }
-
   async shareContent(title: string, text: string, url?: string): Promise<{ method: string }> {
     try {
       if (this.isCapacitor()) {
@@ -352,46 +309,6 @@ class DeviceIntegration {
   private async getSystemInfo(): Promise<SystemInfo> {
     const { default: systemService } = await import('./SystemService');
     return await systemService.getInfo();
-  }
-
-  async getContacts(query?: string): Promise<Contact[]> {
-    try {
-      if (this.isCapacitor()) {
-        const { Contacts } = await import('@capacitor-community/contacts');
-        const permission = await Contacts.requestPermissions();
-        if (permission?.contacts !== 'granted') {
-          throw new Error('Contacts permission denied');
-        }
-        const result = await Contacts.getContacts({
-          projection: {
-            name: true,
-            phones: true,
-            emails: true,
-          },
-        });
-        const contacts = (result.contacts || []).map((c: { contactId?: string; displayName?: string; phones?: { number?: string | null; label?: string | null }[]; emails?: { address?: string | null; label?: string | null }[]; thumbnail?: string }) => ({
-          id: c.contactId || '',
-          name: c.displayName || 'Unknown',
-          phones: (c.phones || []).map(p => ({ number: p.number ?? '', label: p.label ?? '' })),
-          emails: (c.emails || []).map(e => ({ address: e.address ?? '', label: e.label ?? '' })),
-          photo: c.thumbnail,
-        }));
-        if (query) {
-          const q = query.toLowerCase();
-          return contacts.filter(c =>
-            c.name.toLowerCase().includes(q) ||
-            c.phones.some(p => p.number.includes(q)) ||
-            c.emails.some(e => e.address.toLowerCase().includes(q))
-          ).slice(0, 50);
-        }
-        return contacts.slice(0, 100);
-      }
-    } catch (e) {
-      logger.warn('[DeviceIntegration] Contacts failed:', e);
-      throw e;
-    }
-
-    throw new Error('Contacts access requires native Android/iOS app');
   }
 
   async openUrl(url: string): Promise<{ method: string }> {

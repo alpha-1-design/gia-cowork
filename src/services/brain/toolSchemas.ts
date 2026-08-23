@@ -415,14 +415,6 @@ export const toolSchemas: Record<string, { description: string; required: string
   },
 
   // Device integration tools
-  send_sms: {
-    description: 'Send an SMS text message directly without opening the SMS app.',
-    required: ['phone', 'message'],
-    properties: {
-      phone: { type: 'string', description: 'Recipient phone number with country code' },
-      message: { type: 'string', description: 'SMS message content' },
-    }
-  },
   send_whatsapp: {
     description: 'Send a WhatsApp message to a specific phone number.',
     required: ['phone', 'message'],
@@ -438,13 +430,6 @@ export const toolSchemas: Record<string, { description: string; required: string
       to: { type: 'string', description: 'Recipient email address' },
       subject: { type: 'string', description: 'Email subject' },
       body: { type: 'string', description: 'Email body text' },
-    }
-  },
-  make_phone_call: {
-    description: 'Initiate a phone call by opening the dialer with a pre-filled number.',
-    required: ['phone'],
-    properties: {
-      phone: { type: 'string', description: 'Phone number with country code' },
     }
   },
   share: {
@@ -488,14 +473,6 @@ export const toolSchemas: Record<string, { description: string; required: string
     description: 'Check device health: storage usage, battery level, memory pressure. Alerts on risks.',
     required: [],
     properties: {}
-  },
-  get_contacts: {
-    description: 'Search or list contacts from the device address book.',
-    required: [],
-    properties: {
-      query: { type: 'string', description: 'Optional search query' },
-      maxResults: { type: 'number', description: 'Max results (default 20, max 100)' },
-    }
   },
   open_url: {
     description: 'Open a URL in the default browser or external app.',
@@ -647,11 +624,11 @@ export function toolToProtocolType(id: string): ProtocolType {
     pause_goal: 'settings_change', goal_progress: 'environment_info',
     set_autonomy_config: 'settings_change',
     // Device integration tools
-    send_sms: 'device_action', send_whatsapp: 'device_action',
-    send_email: 'device_action', make_phone_call: 'device_action',
+    send_whatsapp: 'device_action',
+    send_email: 'device_action',
     share: 'device_action', clipboard: 'device_action',
     vibrate: 'device_action', screen_brightness: 'device_action',
-    device_info: 'device_action', device_health: 'device_action', get_contacts: 'device_action',
+    device_info: 'device_action', device_health: 'device_action',
     open_url: 'device_action', set_alarm: 'device_action',
     save_memory: 'memory_modification', get_directions: 'location_access',
     // Email tools
@@ -677,13 +654,13 @@ export function toolToProtocolType(id: string): ProtocolType {
 
 export function toolToImpact(id: string): ProtocolImpact {
   const readTools = ['web_search', 'read_url', 'filesystem_read', 'list_files', 'get_environment_info',
-    'get_user_location', 'search_places', 'device_info', 'device_health', 'get_contacts',
+    'get_user_location', 'search_places', 'device_info', 'device_health',
     'email_list', 'email_read', 'email_search', 'email_status',
     'calendar_list_events', 'calendar_status',
     'messaging_status', 'bible_verse', 'daily_devotion'];
   const writeTools = ['filesystem_write', 'export_brain', 'import_brain', 'zip_project', 'build_project', 'install_skill', 'forget_memory', 'save_memory',
     'toggle_feature', 'show_notification', 'summarize_conversation',
-    'send_sms', 'send_whatsapp', 'send_email', 'make_phone_call',
+    'send_whatsapp', 'send_email',
     'share', 'clipboard', 'vibrate', 'screen_brightness', 'open_url', 'set_alarm',
     'email_connect', 'email_disconnect', 'email_send',
     'calendar_connect', 'calendar_disconnect', 'calendar_create_event', 'calendar_update_event', 'calendar_delete_event',

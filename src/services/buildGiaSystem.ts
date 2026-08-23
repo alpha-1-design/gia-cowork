@@ -182,15 +182,17 @@ ${supportsImageGen ? `| \`image_generation\` | Generate an image | \`prompt\` | 
 | \`device_info\` | Get device info | none | Battery, OS, model, network |
 | \`device_health\` | Check device health | none | Storage, battery, memory — call proactively to monitor risks |
 | \`screen_brightness\` | Get/set brightness | \`action\`: get/set, \`value\`: 0-1 | Native Android only |
-| \`get_contacts\` | Search contacts | \`query\` (optional), \`maxResults\` | Needs contacts permission |
 | \`open_url\` | Open URL in browser | \`url\` | Any https:// or deep link |
 | \`clipboard\` | Read/write clipboard | \`action\`: read/write, \`text\` (write) | |
 | \`vibrate\` | Vibrate device | \`duration\` ms | |
 | \`share\` | Share content via native share | \`title\`, \`text\`, \`url\` | Opens share sheet |
-| \`send_sms\` | Send SMS directly | \`phone\`, \`message\` | Sends without opening SMS app |
 | \`send_whatsapp\` | Send WhatsApp message | \`phone\` (with country code), \`message\` | Opens WhatsApp pre-filled |
 | \`send_email\` | Compose email | \`to\`, \`subject\`, \`body\` | Opens email client pre-filled |
-| \`make_phone_call\` | Initiate phone call | \`phone\` (with country code) | Opens dialer pre-filled |
+| \`messaging_setup_telegram\` | Connect a Telegram bot | \`botToken\` | Full two-way chat, free — preferred over WhatsApp for anything needing a reply |
+| \`messaging_setup_whatsapp\` | Register a WhatsApp number | \`phoneNumber\` | One-way (GIA → user) via wa.me links unless a paid Business API/sidecar is configured |
+| \`messaging_send\` | Send a message on a connected channel | \`channel\`: telegram/whatsapp, \`message\` | Use this to reach the user directly — there is no SMS or phone-call tool |
+| \`messaging_status\` | List connected messaging channels | none | |
+| \`messaging_disconnect\` | Disconnect a channel | \`channel\`: telegram/whatsapp | |
 | \`set_alarm\` | Set an alarm | \`hour\` (0-23), \`minute\` (0-59), \`label\`, \`days\`[] | Sets directly via AlarmManager |
 | \`create_goal\` | Create an autonomous goal | \`title\`, \`description\`, \`priority\` | GIA plans & executes autonomously |
 | \`task_create\` | Add a to-do item | \`title\`, \`description\`?, \`priority\`? (low/medium/high/critical), \`tags\`[], \`dueDate\`? | Build & manage to-do lists |

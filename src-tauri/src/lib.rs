@@ -1,17 +1,20 @@
 mod terminal;
 mod presence;
+mod whatsapp_bridge;
 
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
 use terminal::TerminalState;
+use whatsapp_bridge::WhatsAppBridgeState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(Arc::new(TerminalState::default()))
+        .manage(WhatsAppBridgeState::default())
         .invoke_handler(tauri::generate_handler![
             terminal::terminal_exec,
             terminal::terminal_kill,
@@ -20,6 +23,10 @@ pub fn run() {
             terminal::terminal_get_status,
             terminal::terminal_reinstall_rootfs,
             presence::get_presence,
+            whatsapp_bridge::whatsapp_bridge_start,
+            whatsapp_bridge::whatsapp_bridge_stop,
+            whatsapp_bridge::whatsapp_notify,
+            whatsapp_bridge::whatsapp_status,
         ])
         .setup(|app| {
             // System tray so GIA Cowork can run as a background daemon,

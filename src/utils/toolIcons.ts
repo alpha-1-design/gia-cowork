@@ -1,9 +1,9 @@
 export function getToolColor(toolId: string): string {
   const colors: Record<string, string> = {
-    send_whatsapp: '#25D366', send_email: '#ea4335', send_sms: '#3b82f6',
-    make_phone_call: '#22c55e', share: '#a855f7', clipboard: '#f59e0b',
+    send_whatsapp: '#25D366', send_email: '#ea4335',
+    share: '#a855f7', clipboard: '#f59e0b',
     vibrate: '#ec4899', screen_brightness: '#f97316', device_info: '#06b6d4',
-    get_contacts: '#8b5cf6', open_url: '#6366f1',
+    open_url: '#6366f1',
     web_search: '#3b82f6', web_scrape: '#10b981', http_request: '#ec4899',
     terminal_run: '#22c55e', environment_info: '#3b82f6', github: '#f0f0f0',
     wikipedia: '#f59e0b', weather: '#3b82f6', define: '#f59e0b',

@@ -1,0 +1,22 @@
+{
+  "name": "gia-cowork-whatsapp-bridge",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Sidecar process giving GIA Cowork real two-way WhatsApp messaging and outbound calling, via a second WhatsApp account paired as a linked device. Unofficial (not Meta's Business API) -- see README.md before running this on an account you care about.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "pair": "node src/server.js --pair-only"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "baileys-caller": "git+https://github.com/SheIITear/baileys-caller.git",
+    "qrcode-terminal": "^0.12.0",
+    "pino": "^9.5.0",
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

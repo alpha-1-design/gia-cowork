@@ -9,19 +9,18 @@ import { ClaudeTerminalBlock } from './ClaudeTerminalBlock';
 
 const STATUS_LABELS: Record<string, string> = {
   send_whatsapp: 'WhatsApp message prepared', send_email: 'Email composed',
-  send_sms: 'SMS ready', make_phone_call: 'Phone dialer opened',
   share: 'Content shared', clipboard: 'Clipboard updated',
   vibrate: 'Device vibrated', screen_brightness: 'Brightness adjusted',
-  device_info: 'Device info retrieved', get_contacts: 'Contacts fetched',
+  device_info: 'Device info retrieved',
   open_url: 'URL opened', web_search: 'Search completed',
   web_scrape: 'Page fetched', http_request: 'Request completed',
 };
 
 const TOOL_COLORS: Record<string, string> = {
-  send_whatsapp: '#25D366', send_email: '#ea4335', send_sms: '#3b82f6',
-  make_phone_call: '#22c55e', share: '#a855f7', clipboard: '#f59e0b',
+  send_whatsapp: '#25D366', send_email: '#ea4335',
+  share: '#a855f7', clipboard: '#f59e0b',
   vibrate: '#ec4899', screen_brightness: '#f97316', device_info: '#06b6d4',
-  get_contacts: '#8b5cf6', open_url: '#6366f1', web_search: '#3b82f6',
+  open_url: '#6366f1', web_search: '#3b82f6',
   web_scrape: '#10b981', http_request: '#ec4899',
 };
 

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GIAAlarmWeb } from '../GIAAlarm.web';
 import { GIAIntentWeb } from '../GIAIntent.web';
-import { GIASMSWeb } from '../GIASMS.web';
 
 describe('GIAAlarmWeb', () => {
   const web = new GIAAlarmWeb();
@@ -15,16 +14,6 @@ describe('GIAAlarmWeb', () => {
   it('cancelAlarm throws on web platform', async () => {
     await expect(web.cancelAlarm({ alarmId: 1 })).rejects.toThrow(
       'Alarm cancelling requires native Android app'
-    );
-  });
-});
-
-describe('GIASMSWeb', () => {
-  const web = new GIASMSWeb();
-
-  it('sendSMS throws on web platform', async () => {
-    await expect(web.sendSMS({ phone: '+1234567890', message: 'hello' })).rejects.toThrow(
-      'SMS sending requires native Android app'
     );
   });
 });

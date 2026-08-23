@@ -88,68 +88,6 @@ const sendEmail: Tool = {
   },
 };
 
-const sendSMS: Tool = {
-  id: 'send_sms',
-  name: 'send_sms',
-  description: 'Send an SMS text message directly. On Android with SEND_SMS permission, sends without opening any app. Falls back to opening SMS app.',
-  schema: {
-    type: 'object',
-    properties: {
-      phone: { type: 'string', description: 'Recipient phone number' },
-      message: { type: 'string', description: 'SMS text content' },
-    },
-    required: ['phone', 'message'],
-  },
-  execute: async (args) => {
-    const schema = z.object({
-      phone: z.string().min(5).max(20),
-      message: z.string().min(1).max(1000),
-    });
-    const parsed = schema.safeParse(args);
-    if (!parsed.success) return { success: false, content: '', error: formatZodError(parsed.error.issues) };
-    try {
-      const di = (await import('../DeviceIntegration')).default;
-      await di.sendSMS(parsed.data.phone, parsed.data.message);
-      return {
-        success: true,
-        content: `## 💬 SMS Composed\n\n**To:** \`${parsed.data.phone}\`\n\n**Message:**\n> ${parsed.data.message.slice(0, 300)}${parsed.data.message.length > 300 ? '…' : ''}\n\n*SMS app opened with pre-filled message — tap send.*`,
-      };
-    } catch (e: unknown) {
-      return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
-    }
-  },
-};
-
-const makeCall: Tool = {
-  id: 'make_phone_call',
-  name: 'make_phone_call',
-  description: 'Initiate a phone call. Opens the phone dialer with the specified number pre-filled. The user must press the call button.',
-  schema: {
-    type: 'object',
-    properties: {
-      phone: { type: 'string', description: 'Phone number to call (with country code, e.g. +233501234567)' },
-    },
-    required: ['phone'],
-  },
-  execute: async (args) => {
-    const schema = z.object({
-      phone: z.string().min(5).max(20),
-    });
-    const parsed = schema.safeParse(args);
-    if (!parsed.success) return { success: false, content: '', error: formatZodError(parsed.error.issues) };
-    try {
-      const di = (await import('../DeviceIntegration')).default;
-      const result = await di.makeCall(parsed.data.phone);
-      return {
-        success: true,
-        content: `## 📞 Phone Call Initiated\n\n**Number:** \`${parsed.data.phone}\`\n**Method:** ${result.method === 'tel_link' ? '🔗 Phone Dialer' : '📱 Native'}\n\n*Phone dialer opened with the number pre-filled. Press the call button to connect.*`,
-      };
-    } catch (e: unknown) {
-      return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
-    }
-  },
-};
-
 const shareContent: Tool = {
   id: 'share',
   name: 'share',
@@ -330,49 +268,6 @@ const deviceInfoTool: Tool = {
   },
 };
 
-const contactsTool: Tool = {
-  id: 'get_contacts',
-  name: 'get_contacts',
-  description: 'Search or list contacts from the device address book. Requires contacts permission on mobile. Supports searching by name, phone, or email.',
-  schema: {
-    type: 'object',
-    properties: {
-      query: { type: 'string', description: 'Optional search query — matches name, phone number, or email' },
-      maxResults: { type: 'number', description: 'Maximum results to return (default: 20, max: 100)' },
-    },
-    required: [],
-  },
-  execute: async (args) => {
-    const schema = z.object({
-      query: z.string().max(200).optional(),
-      maxResults: z.number().min(1).max(100).default(20),
-    });
-    const parsed = schema.safeParse(args);
-    if (!parsed.success) return { success: false, content: '', error: formatZodError(parsed.error.issues) };
-    try {
-      const di = (await import('../DeviceIntegration')).default;
-      const contacts = await di.getContacts(parsed.data.query);
-      const max = parsed.data.maxResults;
-      const selected = contacts.slice(0, max);
-      if (selected.length === 0) return { success: true, content: 'No contacts found.' };
-      const summary = `Found ${contacts.length} contact${contacts.length !== 1 ? 's' : ''}${parsed.data.query ? ` matching "${parsed.data.query}"` : ''}.`;
-      const lines = selected.map((c, i) => {
-        const phones = c.phones.map(p => `  📞 **${p.label || 'Phone'}:** \`${p.number}\``).join('\n');
-        const emails = c.emails.map(e => `  ✉️ **${e.label || 'Email'}:** \`${e.address}\``).join('\n');
-        return `### ${i + 1}. ${c.name}\n${phones}${emails ? '\n' + emails : ''}`;
-      });
-      const footer = contacts.length > max ? `\n\n_Showing ${max} of ${contacts.length} contacts. Use \`maxResults\` to see more._` : '';
-      return {
-        success: true,
-        content: `## 👤 Contacts\n\n${summary}\n\n${lines.join('\n\n')}${footer}`,
-        sources: selected.map(c => ({ title: c.name, url: c.phones[0]?.number || '' })),
-      };
-    } catch (e: unknown) {
-      return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
-    }
-  },
-};
-
 const openUrlTool: Tool = {
   id: 'open_url',
   name: 'open_url',
@@ -469,14 +364,11 @@ const setAlarmTool: Tool = {
 export const deviceIntegrationTools: Tool[] = [
   sendWhatsApp,
   sendEmail,
-  sendSMS,
-  makeCall,
   shareContent,
   clipboardTool,
   vibrateTool,
   brightnessTool,
   deviceInfoTool,
-  contactsTool,
   openUrlTool,
   setAlarmTool,
 ];
