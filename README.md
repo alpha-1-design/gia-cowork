@@ -4,7 +4,7 @@
 
 Built with [Tauri 2](https://tauri.app) — a Rust backend with a React 19 / TypeScript / Vite frontend.
 
-**Version:** 0.2.0 (mobile GIA is on the `2.4.x` line).
+**Version:** 0.1.0 (mobile GIA is on the `2.4.x` line).
 
 ---
 
