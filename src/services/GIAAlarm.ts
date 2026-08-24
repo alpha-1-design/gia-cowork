@@ -2,7 +2,7 @@ import { registerPlugin } from '@capacitor/core';
 import { isTauri } from '../platform';
 
 export interface GIAAlarmPlugin {
-  setAlarm(options: { hour: number; minute: number; label?: string }): Promise<{ success: boolean; method: string; alarmId: number }>;
+  setAlarm(options: { hour: number; minute: number; label?: string }): Promise<{ success: boolean; method: string; alarmId: number; batteryOptimized?: boolean }>;
   cancelAlarm(options: { alarmId: number }): Promise<void>;
 }
 
@@ -35,7 +35,8 @@ function desktopAlarmPlugin(): GIAAlarmPlugin {
         timers.delete(id);
       }, delay);
       timers.set(id, timer);
-      return { success: true, method: 'desktop-timer', alarmId: id };
+      // Desktop has no Android battery-optimization whitelist, so the warning is never needed.
+      return { success: true, method: 'desktop-timer', alarmId: id, batteryOptimized: false };
     },
     async cancelAlarm({ alarmId }) {
       const t = timers.get(alarmId);

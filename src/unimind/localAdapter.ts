@@ -1,5 +1,6 @@
 import LocalLLMService, { LOCAL_LLM_MODELS, type LocalModelId } from '../services/LocalLLMService';
-import { learningLoop, type LoopContext, type LoopTrace, type LoopConfig } from './learningLoop';
+import { learningLoop, type LoopContext, type LoopTrace } from './learningLoop';
+import type { LoopConfig } from './types';
 
 // Builds a model-agnostic `generate` callback backed by the loaded LOCAL model.
 // The loop core never imports a provider — this adapter is the only place
