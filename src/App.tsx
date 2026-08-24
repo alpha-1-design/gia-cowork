@@ -21,6 +21,7 @@ import CommandPalette from './components/CommandPalette';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useNotificationStore } from './store/useNotificationStore';
 import type { IncomingNotification } from './services/SmartNotificationEngine';
+import type { WhatsAppIncomingMessage } from './services/WhatsAppBridgeService';
 import BiometricService from './services/BiometricService';
 import { useProviderStore } from './store/useProviderStore';
 import { logger } from './utils/logger';
@@ -499,6 +500,53 @@ const App: React.FC = () => {
       };
       check();
       setInterval(check, 15000);
+    });
+
+    // Two-way WhatsApp (OpenClaw-style) — poll the bridge for incoming
+    // messages, surface them as notifications, and answer through GiaBrain.
+    import('./services/WhatsAppBridgeService').then(async ({ whatsAppBridgeService }) => {
+      let cursor = Date.now();
+      const answer = async (m: WhatsAppIncomingMessage) => {
+        const phone = m.from.split('@')[0];
+        const label = `WhatsApp · ${phone}`;
+        // Surface in-app + desktop notifications so the user sees it arrived.
+        try {
+          useNotificationStore.getState().addNotification({ app: 'WhatsApp', title: label, body: m.text.slice(0, 120), source: 'whatsapp', category: 'message' });
+          const { default: desktopNotifs } = await import('./services/DesktopNotifications');
+          desktopNotifs.notify(label, { body: m.text.slice(0, 120) });
+        } catch { /* notifications are best-effort */ }
+        // Auto-respond (unless disabled) — same pattern as Telegram.
+        const { isWhatsAppAutoRespond } = await import('./services/tools/whatsappBridge');
+        if (!isWhatsAppAutoRespond()) return;
+        try {
+          const { default: GiaBrain } = await import('./services/GiaBrain');
+          const res = await GiaBrain.generate({
+            prompt: m.text,
+            systemPrompt: `You are GIA, ${phone}'s personal AI assistant, chatting with them over WhatsApp. Be concise, natural, and genuinely helpful. Respond conversationally in plain text — no markdown headers.`,
+            onStream: undefined,
+          });
+          await whatsAppBridgeService.notify({ to: m.from, text: res.text });
+          logger.log(`[WhatsApp] Replied to ${phone}`);
+        } catch (e) {
+          logger.warn('[WhatsApp] Reply failed:', e);
+          whatsAppBridgeService.notify({ to: m.from, text: 'Sorry — I hit an error. Try again in a moment.' }).catch(() => {});
+        }
+      };
+      const poll = async () => {
+        try {
+          const status = await whatsAppBridgeService.status();
+          if (!status || !status.connected) { cursor = Date.now(); return; }
+          const res = await whatsAppBridgeService.messages(cursor);
+          if (!res) return;
+          for (const m of res.messages) {
+            if (m.ts <= cursor) continue;
+            cursor = Math.max(cursor, m.ts);
+            void answer(m);
+          }
+        } catch { /* bridge polling is best-effort */ }
+      };
+      poll();
+      setInterval(poll, 6000);
     });
 
     // Rich MCP content renderers (images, video, audio, JSON, markdown, code)

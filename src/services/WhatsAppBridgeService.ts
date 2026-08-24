@@ -24,6 +24,15 @@ export interface WhatsAppBridgeStatus {
   qr: string | null;
 }
 
+export interface WhatsAppIncomingMessage {
+  id: string;
+  /** Remote JID, e.g. "233201234567@s.whatsapp.net". */
+  from: string;
+  fromName: string | null;
+  text: string;
+  ts: number;
+}
+
 export const whatsAppBridgeService = {
   available(): boolean {
     return isTauri();
@@ -63,5 +72,15 @@ export const whatsAppBridgeService = {
     if (!isTauri()) return null;
     const { invoke } = await import('@tauri-apps/api/core');
     return invoke('whatsapp_notify', { args });
+  },
+
+  /**
+   * Fetch incoming (person -> GIA) messages newer than `since` (epoch ms).
+   * The caller keeps its own cursor so nothing is missed or double-seen.
+   */
+  async messages(since: number): Promise<{ messages: WhatsAppIncomingMessage[]; now: number } | null> {
+    if (!isTauri()) return null;
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke('whatsapp_messages', { since });
   },
 };

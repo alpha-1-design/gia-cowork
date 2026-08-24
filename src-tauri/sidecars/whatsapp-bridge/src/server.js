@@ -50,6 +50,9 @@ let lastQr = null;
 const messageStatus = new Map();
 /** Pending escalation timers keyed by the message id that triggered them. */
 const pendingEscalations = new Map();
+/** Incoming (person -> GIA) text messages, oldest first, for GET /messages. */
+const incomingMessages = [];
+const MAX_INCOMING = 200;
 
 function normalizeJid(to) {
   if (to.includes('@')) return to;
@@ -84,6 +87,31 @@ async function connectWhatsApp() {
       logger.warn(`[whatsapp-bridge] connection closed (code ${statusCode}), reconnect=${shouldReconnect}`);
       if (shouldReconnect) setTimeout(connectWhatsApp, 3000);
       else logger.error('[whatsapp-bridge] logged out -- delete auth dir and re-pair to reconnect');
+    }
+  });
+
+  // Capture incoming messages so GIA can answer them (OpenClaw-style
+  // two-way channel). Only private-chat text messages from other people;
+  // our own sends are filtered by key.fromMe, and groups are skipped for
+  // now (they need their own mention-aware handling pass).
+  sock.ev.on('messages.upsert', ({ messages, type }) => {
+    if (type !== 'notify') return;
+    for (const msg of messages) {
+      const key = msg?.key;
+      if (!key || key.fromMe) continue;
+      if (key.remoteJid && key.remoteJid.endsWith('@g.us')) continue;
+      const text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text;
+      if (!text || !text.trim()) continue;
+      const entry = {
+        id: key.id,
+        from: key.remoteJid || 'unknown',
+        fromName: null,
+        text: text.slice(0, 4000),
+        ts: Date.now(),
+      };
+      incomingMessages.push(entry);
+      if (incomingMessages.length > MAX_INCOMING) incomingMessages.shift();
+      logger.warn(`[whatsapp-bridge] incoming from ${entry.from}: ${text.slice(0, 60)}`);
     }
   });
 
@@ -193,6 +221,14 @@ app.use((req, res, next) => {
 
 app.get('/status', (_req, res) => {
   res.json({ connected, jid: selfJid, pairing: !!lastQr, qr: lastQr });
+});
+
+// Incoming messages newer than ?since=<epoch_ms>. The client keeps its own
+// cursor (last seen ts) so nothing is missed or delivered twice.
+app.get('/messages', (req, res) => {
+  const since = Number(req.query.since || 0);
+  const messages = incomingMessages.filter((m) => m.ts > since);
+  res.json({ messages, now: Date.now() });
 });
 
 app.post('/send', async (req, res) => {

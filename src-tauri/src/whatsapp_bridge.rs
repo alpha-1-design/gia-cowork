@@ -141,6 +141,24 @@ pub async fn whatsapp_status(state: tauri::State<'_, WhatsAppBridgeState>) -> Re
     reqwest_blocking_get(&format!("http://127.0.0.1:{BRIDGE_PORT}/status"), &token)
 }
 
+/// Fetch incoming (person -> GIA) WhatsApp messages newer than `since`
+/// (epoch ms). This is what makes the bridge a real two-way channel: the
+/// frontend polls it and answers through GiaBrain, OpenClaw-style.
+#[tauri::command]
+pub async fn whatsapp_messages(
+    state: tauri::State<'_, WhatsAppBridgeState>,
+    since: Option<u64>,
+) -> Result<serde_json::Value, String> {
+    let token = bridge_token(&state)?;
+    reqwest_blocking_get(
+        &format!(
+            "http://127.0.0.1:{BRIDGE_PORT}/messages?since={}",
+            since.unwrap_or(0)
+        ),
+        &token,
+    )
+}
+
 // Minimal blocking HTTP helpers using std -- avoids pulling in a full
 // async HTTP client dependency just for a handful of localhost calls to
 // the sidecar. Fine here since these are local loopback requests.

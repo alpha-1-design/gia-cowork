@@ -113,9 +113,48 @@ const whatsappNotifyTool: Tool = {
   },
 };
 
+// OpenClaw-style two-way answering: when enabled (default), incoming
+// WhatsApp messages are answered automatically through GiaBrain.
+let autoRespondEnabled = true;
+
+export function setWhatsAppAutoRespond(enabled: boolean): void {
+  autoRespondEnabled = enabled;
+}
+
+export function isWhatsAppAutoRespond(): boolean {
+  return autoRespondEnabled;
+}
+
+const whatsappAutoRespondTool: Tool = {
+  id: 'whatsapp_auto_respond',
+  name: 'whatsapp_auto_respond',
+  description:
+    'Control automatic answering of incoming WhatsApp messages. "on" (default): GIA replies to every message it receives on WhatsApp. "off": incoming messages are only surfaced as notifications, not answered.',
+  schema: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['on', 'off', 'status'], description: '"on", "off", or "status"' },
+    },
+    required: ['action'],
+  },
+  execute: async (args) => {
+    const action = String((args as { action?: string }).action || 'status').toLowerCase();
+    if (action === 'on') {
+      setWhatsAppAutoRespond(true);
+      return { success: true, content: 'Auto-respond is **on** — GIA will answer incoming WhatsApp messages.' };
+    }
+    if (action === 'off') {
+      setWhatsAppAutoRespond(false);
+      return { success: true, content: 'Auto-respond is **off** — incoming messages will only notify.' };
+    }
+    return { success: true, content: `Auto-respond is currently ${isWhatsAppAutoRespond() ? '**on**' : '**off**'}.` };
+  },
+};
+
 export const whatsAppBridgeTools: Tool[] = [
   whatsappBridgeStartTool,
   whatsappBridgeStatusTool,
   whatsappBridgeStopTool,
   whatsappNotifyTool,
+  whatsappAutoRespondTool,
 ];
