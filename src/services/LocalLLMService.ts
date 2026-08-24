@@ -2,10 +2,9 @@ import { logger } from '../utils/logger';
 
 // ── Types ───────────────────────────────────────────────────────────
 
-export type LocalModelId =
-  | 'Xenova/Qwen2.5-0.5B-Instruct'
-  | 'Xenova/Qwen2.5-1.5B-Instruct'
-  | 'Xenova/Qwen2.5-3B-Instruct';
+// Open model reference — any model hub id (HuggingFace, Ollama, etc.).
+// No fixed catalog: the UI lets you load any model, not just the curated few.
+export type LocalModelId = string;
 
 export interface LocalLLMMeta {
   id: LocalModelId;
@@ -77,6 +76,22 @@ export const LOCAL_LLM_MODELS: LocalLLMMeta[] = [
     parameters: '3B',
   },
 ];
+
+// User-added models (any hub id). Not locked to the curated catalog above.
+const CUSTOM_MODELS: LocalLLMMeta[] = [];
+
+export function addCustomModel(meta: Omit<LocalLLMMeta, 'downloadSize' | 'ramEstimate'> & Partial<Pick<LocalLLMMeta, 'downloadSize' | 'ramEstimate'>>): void {
+  if (CUSTOM_MODELS.some(m => m.id === meta.id)) return;
+  CUSTOM_MODELS.push({
+    downloadSize: 'unknown',
+    ramEstimate: 'unknown',
+    ...meta,
+  });
+}
+
+export function allLocalModels(): LocalLLMMeta[] {
+  return [...LOCAL_LLM_MODELS, ...CUSTOM_MODELS];
+}
 
 // ── Service ─────────────────────────────────────────────────────────
 

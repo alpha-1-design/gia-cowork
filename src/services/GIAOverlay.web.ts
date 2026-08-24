@@ -7,8 +7,11 @@ type ListenerMap = Map<string, Array<OverlayHandler>>;
 export class GIAOverlayWeb implements GIAOverlayPlugin {
   private listeners: ListenerMap = new Map();
 
+  // On desktop the floating overlay is a native Tauri window (needs a Rust
+  // command). On plain web it is unsupported, so we degrade gracefully instead
+  // of throwing. Circle-to-search itself still works via screen capture.
   async startOverlay(): Promise<void> {
-    throw new Error('Circle to Search is not available in web browser. Use the GIA Android app.');
+    return;
   }
 
   async hideOverlay(): Promise<void> {

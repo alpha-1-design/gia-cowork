@@ -290,7 +290,7 @@ export const VoiceSection: React.FC = () => {
         </span>
       </div>
       <p className="text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>
-        Uses Whisper ONNX model (tiny.en, ~50MB) for on-device speech-to-text. No data leaves your phone.
+        Uses Whisper ONNX model (tiny.en, ~50MB) for on-device speech-to-text. No data leaves your device.
       </p>
 
       <div className="flex items-center gap-2">

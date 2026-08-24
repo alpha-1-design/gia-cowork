@@ -1,4 +1,6 @@
 import { logger } from '../utils/logger';
+import { isTauri } from '../platform';
+import { invoke } from '@tauri-apps/api/core';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -17,6 +19,8 @@ export interface DeviceCapabilities {
   isMobile: boolean;
   /** True if actual measurements (storage estimate) were obtained. */
   measured: boolean;
+  /** True if real RAM was obtained from the OS (Tauri desktop), not estimated. */
+  ramMeasured?: boolean;
   /** Human-readable notes about detection confidence. */
   notes: string[];
 }
@@ -84,16 +88,43 @@ export async function detectDeviceCapabilities(): Promise<DeviceCapabilities> {
   const notes: string[] = [];
   const isMobile = detectMobile();
 
-  // ── RAM ───────────────────────────────────────────────────────
-  const rawMem = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
-  let totalRAMGB: number;
-  if (typeof rawMem === 'number' && rawMem > 0) {
-    totalRAMGB = rawMem;
-    notes.push(`Reported device memory: ${rawMem} GB`);
-  } else {
-    // No deviceMemory API (Firefox/Safari): estimate from platform.
-    totalRAMGB = isMobile ? 4 : 8;
-    notes.push('deviceMemory API unavailable — estimated from device class');
+  let totalRAMGB = 0;
+  let ramMeasured = false;
+  let cpuCoresHint: number | null = null;
+
+  // ── RAM (real, from the OS when running in Tauri desktop) ──────
+  // Chromium's navigator.deviceMemory is capped at ~8 GB and rounded, so on a
+  // real desktop it reports 8 GB regardless of actual RAM. On Tauri we ask the
+  // Rust backend for the true figure instead of trusting the browser.
+  if (isTauri()) {
+    try {
+      const info = await invoke<{ total_ram_gb: number; cpu_cores: number }>('system_info');
+      if (info.total_ram_gb > 0) {
+        totalRAMGB = info.total_ram_gb;
+        ramMeasured = true;
+        notes.push(`Real system RAM (from OS): ${totalRAMGB.toFixed(1)} GB`);
+      }
+      if (info.cpu_cores > 0) {
+        cpuCoresHint = info.cpu_cores;
+        notes.push(`Real CPU cores (from OS): ${info.cpu_cores}`);
+      }
+    } catch (e) {
+      notes.push('system_info unavailable — falling back to browser estimate');
+      logger.warn('[deviceCaps] system_info invoke failed', e);
+    }
+  }
+
+  // ── RAM (browser estimate fallback, only if OS report failed) ─
+  if (!ramMeasured) {
+    const rawMem = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
+    if (typeof rawMem === 'number' && rawMem > 0) {
+      totalRAMGB = rawMem;
+      notes.push(`Reported device memory: ${rawMem} GB`);
+    } else {
+      // No deviceMemory API (Firefox/Safari): estimate from platform.
+      totalRAMGB = isMobile ? 4 : 8;
+      notes.push('deviceMemory API unavailable — estimated from device class');
+    }
   }
 
   // Chrome-only JS heap as a sanity hint.
@@ -109,7 +140,7 @@ export async function detectDeviceCapabilities(): Promise<DeviceCapabilities> {
   const availableRAMGB = Math.max(0, totalRAMGB - reserve);
 
   // ── CPU ───────────────────────────────────────────────────────
-  const cpuCores = navigator.hardwareConcurrency || (isMobile ? 4 : 8);
+  const cpuCores = cpuCoresHint ?? navigator.hardwareConcurrency ?? (isMobile ? 4 : 8);
 
   // ── Storage ───────────────────────────────────────────────────
   let availableStorageGB = isMobile ? 8 : 32; // conservative default if we can't measure
@@ -139,6 +170,7 @@ export async function detectDeviceCapabilities(): Promise<DeviceCapabilities> {
     hasGPU,
     isMobile,
     measured,
+    ramMeasured,
     notes,
   };
   return cachedCaps;

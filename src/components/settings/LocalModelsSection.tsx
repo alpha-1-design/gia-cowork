@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Download, AlertTriangle, CheckCircle, RefreshCw, Cpu, HardDrive, Zap, XCircle, ShieldAlert, Info } from 'lucide-react';
+import { Download, AlertTriangle, CheckCircle, RefreshCw, Cpu, HardDrive, Zap, XCircle, ShieldAlert, Info, Play, Square } from 'lucide-react';
+import { runLocalLearningLoop, learningLoop, type LoopTrace } from '../../unimind';
 import { logger } from '../../utils/logger';
-import LocalLLMService, { LOCAL_LLM_MODELS, type LocalModelId, type LocalLLMState, type DownloadProgress } from '../../services/LocalLLMService';
+import LocalLLMService, { LOCAL_LLM_MODELS, addCustomModel, allLocalModels, type LocalModelId, type LocalLLMState, type DownloadProgress } from '../../services/LocalLLMService';
 import { detectDeviceCapabilities, checkModelCompatibility, recommendModel, type DeviceCapabilities } from '../../services/DeviceCapabilities';
+import { HuggingFaceBrowser } from './HuggingFaceBrowser';
+import { OllamaBrowser } from './OllamaBrowser';
 
 type ModelStatusKey = 'not_loaded' | 'loading' | 'ready' | 'error';
 
@@ -49,7 +52,7 @@ export const LocalModelsSection: React.FC = () => {
     detectDeviceCapabilities().then(c => {
       if (cancelled) return;
       setCaps(c);
-      const rec = recommendModel(c, LOCAL_LLM_MODELS);
+      const rec = recommendModel(c, allLocalModels());
       setRecommendedId((rec as LocalModelId) ?? null);
     }).catch(e => logger.warn('[LocalModelsSection] capability detection failed', e));
     return () => { cancelled = true; };
@@ -86,6 +89,53 @@ export const LocalModelsSection: React.FC = () => {
     refresh();
   }, [service, refresh]);
 
+  // ── Custom model entry (unlock any model, not just the catalog) ──
+  const [customId, setCustomId] = useState('');
+  const [customError, setCustomError] = useState<string | null>(null);
+  const [source, setSource] = useState<'curated' | 'huggingface' | 'ollama'>('curated');
+  const addCustom = useCallback(() => {
+    const id = customId.trim();
+    if (!id) return;
+    if (!/^[\w.\-/]+$/.test(id)) {
+      setCustomError('Use a model id like "org/name" or "ollama/model"');
+      return;
+    }
+    addCustomModel({
+      id,
+      label: id.split('/').pop() || id,
+      description: 'Custom model — loaded on demand from the model hub. RAM/storage estimates unknown; verify against your device.',
+      parameters: 'custom',
+    });
+    setCustomId('');
+    setCustomError(null);
+    setRefreshKey(k => k + 1);
+  }, [customId]);
+
+  // ── Autonomous self-learning loop (runs on the local model) ──────
+  const [loopTask, setLoopTask] = useState('');
+  const [loopRunning, setLoopRunning] = useState(false);
+  const [loopLog, setLoopLog] = useState<string[]>([]);
+  const [loopTrace, setLoopTrace] = useState<LoopTrace | null>(null);
+
+  const handleRunLoop = useCallback(async () => {
+    const task = loopTask.trim();
+    if (!task || loopRunning) return;
+    setLoopRunning(true);
+    setLoopLog([]);
+    setLoopTrace(null);
+    try {
+      const trace = await runLocalLearningLoop(task, {
+        onIteration: (it) =>
+          setLoopLog((l) => [...l, `Step ${it.index + 1}${it.action ? ' → acted' : ''}: ${it.thought.slice(0, 140)}`]),
+      });
+      setLoopTrace(trace);
+    } catch (err) {
+      setLoopLog((l) => [...l, `Error: ${err instanceof Error ? err.message : 'failed'}`]);
+    } finally {
+      setLoopRunning(false);
+    }
+  }, [loopTask, loopRunning]);
+
   return (
     <div className="gia-card p-4" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       <div className="flex items-center gap-2">
@@ -104,13 +154,58 @@ export const LocalModelsSection: React.FC = () => {
         <p>These models run <strong>100% locally on your device</strong> using ONNX runtime. Download a model, load it, then set <strong>local-llm</strong> as your provider in Engine Room.</p>
       </div>
 
+      {/* Load any model — not locked to the curated catalog */}
+      <div className="px-3 py-2 rounded-xl" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)' }}>
+        <p className="text-[10px] font-semibold mb-1.5" style={{ color: 'var(--gia-text)' }}>Load any model</p>
+        <div className="flex gap-2">
+          <input
+            value={customId}
+            onChange={e => setCustomId(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addCustom(); }}
+            placeholder="HuggingFace / Ollama id, e.g. Xenova/Qwen2.5-7B or llama3.1"
+            className="flex-1 min-w-0 px-2 py-1.5 rounded text-[10px] outline-none"
+            style={{ background: 'var(--gia-bg-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }}
+          />
+          <button
+            onClick={addCustom}
+            className="shrink-0 px-2.5 py-1.5 rounded text-[10px] font-medium transition-colors"
+            style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}
+          >
+            <Download size={10} className="inline mr-1" />Add
+          </button>
+        </div>
+        {customError && (
+          <p className="text-[9px] mt-1" style={{ color: '#f87171' }}>{customError}</p>
+        )}
+      </div>
+
+      {/* Source tabs: curated catalog, or live browse from HF / Ollama */}
+      <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)' }}>
+        {(['curated', 'huggingface', 'ollama'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setSource(s)}
+            className="flex-1 px-2 py-1.5 rounded-lg text-[10px] font-medium capitalize transition-colors"
+            style={{
+              background: source === s ? 'rgba(34,197,94,0.12)' : 'transparent',
+              color: source === s ? '#34d399' : 'var(--gia-muted)',
+            }}
+          >
+            {s === 'curated' ? 'Curated' : s === 'huggingface' ? 'HuggingFace' : 'Ollama'}
+          </button>
+        ))}
+      </div>
+
+      {source === 'huggingface' && <HuggingFaceBrowser />}
+      {source === 'ollama' && <OllamaBrowser />}
+
       {/* Device capability summary */}
       {caps && (
         <div className="px-3 py-2 rounded-xl text-[10px] leading-relaxed" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-muted)' }}>
           <div className="flex items-center gap-1.5 mb-1.5">
             <Cpu size={10} style={{ color: '#22c55e' }} />
             <span className="font-semibold" style={{ color: 'var(--gia-text)' }}>Your device</span>
-            {!caps.measured && (
+            {!caps.ramMeasured && !caps.measured && (
               <span className="ml-auto inline-flex items-center gap-1" style={{ color: 'var(--gia-muted-2)' }}>
                 <Info size={9} /> estimated
               </span>
@@ -125,8 +220,9 @@ export const LocalModelsSection: React.FC = () => {
         </div>
       )}
 
+      {source === 'curated' && (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {LOCAL_LLM_MODELS.map((model) => {
+        {allLocalModels().map((model) => {
           const state = statuses[model.id];
           const statusKey: ModelStatusKey = (state?.status || 'not_loaded') as ModelStatusKey;
           const cfg = STATUS_CONFIG[statusKey];
@@ -287,13 +383,67 @@ export const LocalModelsSection: React.FC = () => {
           );
         })}
       </div>
+      )}
 
       {activeModelId && (
         <div className="text-[10px] text-center py-1 px-2 rounded-lg" style={{ background: 'rgba(34,197,94,0.08)', color: '#34d399' }}>
-          Active: {LOCAL_LLM_MODELS.find(m => m.id === activeModelId)?.label || activeModelId}
+          Active: {allLocalModels().find(m => m.id === activeModelId)?.label || activeModelId}
           {' · '}Switch to <strong>local-llm</strong> provider in Engine Room to use it
         </div>
       )}
+
+      {/* Autonomous self-learning loop — runs on the local model */}
+      <div className="rounded-xl p-3" style={{ background: 'var(--gia-surface-2)', border: '1px solid rgba(34,197,94,0.2)' }}>
+        <div className="flex items-center gap-1.5 mb-2">
+          <Play size={11} style={{ color: '#22c55e' }} />
+          <span className="text-[10px] font-semibold" style={{ color: 'var(--gia-text)' }}>Autonomous learning loop</span>
+          <span className="ml-auto text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>bounded · on-device</span>
+        </div>
+        <p className="text-[9px] leading-relaxed mb-2" style={{ color: 'var(--gia-muted-2)' }}>
+          Leave GIA running on a task. The local model reflects, accumulates its own trace (memory of what it tried), and feeds past attempts back in. Stops on completion, stall, or max steps — so a shaky local model can't loop forever.
+        </p>
+        <textarea
+          value={loopTask}
+          onChange={e => setLoopTask(e.target.value)}
+          placeholder="Task to run autonomously, e.g. 'Draft a daily standup summary from my notes'"
+          rows={2}
+          className="w-full px-2 py-1.5 rounded text-[10px] outline-none resize-none mb-2"
+          style={{ background: 'var(--gia-bg-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }}
+        />
+        <div className="flex gap-2">
+          {loopRunning ? (
+            <button
+              onClick={() => learningLoop.stop()}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[10px] font-medium"
+              style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
+            >
+              <Square size={9} /> Stop
+            </button>
+          ) : (
+            <button
+              onClick={handleRunLoop}
+              disabled={!loopTask.trim()}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[10px] font-medium transition-colors disabled:opacity-50"
+              style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}
+            >
+              <Play size={9} /> Run loop
+            </button>
+          )}
+        </div>
+        {loopLog.length > 0 && (
+          <div className="mt-2 max-h-40 overflow-y-auto rounded-lg p-2 space-y-1" style={{ background: 'var(--gia-bg-2)', border: '1px solid var(--gia-border)' }}>
+            {loopLog.map((line, i) => (
+              <p key={i} className="text-[9px] leading-snug" style={{ color: 'var(--gia-muted)' }}>{line}</p>
+            ))}
+          </div>
+        )}
+        {loopTrace && (
+          <div className="mt-2 text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>
+            Finished: {loopTrace.iterations.length} step(s) · {loopTrace.haltedReason || 'complete'}
+            {loopTrace.finishedAt && ` · ${new Date(loopTrace.finishedAt).toLocaleTimeString()}`}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

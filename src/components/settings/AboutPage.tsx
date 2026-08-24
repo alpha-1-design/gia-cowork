@@ -3,6 +3,7 @@ import { BarChart3, Trash2, Smartphone, Globe } from 'lucide-react';
 import { SubPageHeader } from './SubPageHeader';
 import { useGiaStore } from '../../store/useGiaStore';
 import { isNativePlatform } from '../../utils/helpers';
+import { isTauri } from '../../platform';
 import AnalyticsService from '../../services/AnalyticsService';
 import ConfirmDialog from '../ConfirmDialog';
 
@@ -21,7 +22,7 @@ export const AboutPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         <ul className="space-y-1.5 pl-3" style={{ listStyle: 'disc' }}>
           <li><strong style={{ color: '#94a3b8' }}>Usage Analytics</strong> — Toggle local-only analytics tracking. When enabled, GIA tracks which features you use (number of chats, tool calls, modules visited). <strong>All data stays on your device</strong> — nothing is sent anywhere. Used purely to help improve your experience.</li>
           <li><strong style={{ color: '#94a3b8' }}>Danger Zone</strong> — <span style={{ color: '#f87171' }}>Clear All Chats</span> permanently deletes every conversation. This is irreversible. Your profile, identity, skills, and plugins are preserved — only chat history is removed.</li>
-          <li><strong style={{ color: '#94a3b8' }}>Platform Info</strong> — Shows whether you're on web or native (Android/iOS), the Capacitor version, and which device features are available (Files, Voice, Biometrics, etc.).</li>
+          <li><strong style={{ color: '#94a3b8' }}>Platform Info</strong> — Shows whether you're on the desktop app (Linux/Tauri), native mobile (Android/iOS), or web, and which device features are available (Files, Voice, Biometrics, etc.).</li>
         </ul>
         <p className="mt-2 text-[10px]" style={{ color: 'var(--gia-muted-2)' }}>
           Tip: Analytics is completely optional and local-only. If you're troubleshooting, you can clear chats here as a last resort — but try archiving or searching first. The version info is handy when reporting bugs.
@@ -81,19 +82,19 @@ export const AboutPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       <div className="px-4 py-3">
         <div className="flex items-center justify-center gap-2 text-[10px]" style={{ color: 'var(--gia-muted)' }}>
           <Smartphone size={11} />
-          <span>{isNativePlatform() ? 'Android/iOS' : 'Web Browser'}</span>
+          <span>{isTauri() ? 'Desktop (Linux)' : isNativePlatform() ? 'Android/iOS' : 'Web Browser'}</span>
           <span className="mx-1">·</span>
           <Globe size={11} />
-          <span>Capacitor 8</span>
+          <span>Tauri · GIA Cowork</span>
         </div>
         <div className="flex flex-wrap justify-center gap-1.5 mt-2">
           {[
-            { label: 'Files', available: isNativePlatform() },
-            { label: 'Voice', available: isNativePlatform() },
-            { label: 'Biometrics', available: isNativePlatform() },
+            { label: 'Files', available: isTauri() || isNativePlatform() },
+            { label: 'Voice', available: true },
+            { label: 'Biometrics', available: isTauri() || isNativePlatform() },
             { label: 'TTS', available: true },
             { label: 'Code Run', available: true },
-            { label: 'Notifications', available: isNativePlatform() },
+            { label: 'Notifications', available: isTauri() || isNativePlatform() },
           ].map(f => (
             <span key={f.label} className="px-2 py-0.5 rounded-full text-[9px] font-medium" style={{
               background: f.available ? 'rgba(52,211,153,0.1)' : 'rgba(251,191,36,0.1)',
@@ -110,7 +111,7 @@ export const AboutPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       <div className="gia-card p-4" style={{ borderColor: 'rgba(139,92,246,0.2)', background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(59,130,246,0.06))' }}>
         <p className="text-sm font-semibold mb-2" style={{ color: '#c4b5fd' }}>🌌 GIA Everywhere</p>
         <p className="text-[11px] leading-relaxed mb-2" style={{ color: 'var(--gia-muted)' }}>
-          GIA started as an app. It's about to stop being just an app. <strong style={{ color: '#a78bfa' }}>GIA Desktop is coming</strong> — same brain, bigger canvas, and they sync: phone to desktop, desktop to phone. Your memory, your agents, your context, following you like they always should.
+          GIA started as an app. It's no longer just an app. <strong style={{ color: '#a78bfa' }}>GIA Desktop is here</strong> — same brain, bigger canvas, and they sync: phone to desktop, desktop to phone. Your memory, your agents, your context, following you like they always should.
         </p>
         <p className="text-[11px] leading-relaxed mb-2" style={{ color: 'var(--gia-muted)' }}>Not stopping at two screens:</p>
         <div className="flex flex-wrap gap-1.5 mb-2">
@@ -125,7 +126,7 @@ export const AboutPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
       {/* Version */}
       <p className="text-center text-[10px] pb-4" style={{ color: 'var(--gia-muted-2)' }}>
-        GIA v2.4.0.0 · Built by Samuel Mensah · Alpha-1 Studio, Ghana
+        GIA Cowork v0.1.0 · Built by Samuel Mensah · Alpha-1 Studio, Ghana
       </p>
 
       <ConfirmDialog

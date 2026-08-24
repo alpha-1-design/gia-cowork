@@ -1,6 +1,7 @@
 mod terminal;
 mod presence;
 mod whatsapp_bridge;
+mod screen;
 
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem};
@@ -9,10 +10,39 @@ use tauri::Manager;
 use terminal::TerminalState;
 use whatsapp_bridge::WhatsAppBridgeState;
 
+#[derive(serde::Serialize)]
+struct SystemInfo {
+    total_ram_gb: f64,
+    cpu_cores: u32,
+}
+
+/// Real hardware report from the OS (not the browser-capped deviceMemory).
+/// Reads /proc/meminfo on Linux; falls back to 0 so the caller can estimate.
+#[tauri::command]
+fn system_info() -> SystemInfo {
+    let total_ram_gb: f64 = std::fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("MemTotal:"))
+                .and_then(|l| l.split_whitespace().nth(1))
+                .and_then(|n| n.parse::<f64>().ok())
+        })
+        .map(|kb| kb / (1024.0 * 1024.0))
+        .unwrap_or(0.0);
+
+    let cpu_cores = std::thread::available_parallelism()
+        .map(|n| n.get() as u32)
+        .unwrap_or(0);
+
+    SystemInfo { total_ram_gb, cpu_cores }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(Arc::new(TerminalState::default()))
         .manage(WhatsAppBridgeState::default())
         .invoke_handler(tauri::generate_handler![
@@ -23,10 +53,20 @@ pub fn run() {
             terminal::terminal_get_status,
             terminal::terminal_reinstall_rootfs,
             presence::get_presence,
+            screen::screen_capture,
+            screen::screen_capture_area,
+            screen::screen_tap,
+            screen::screen_double_tap,
+            screen::screen_right_tap,
+            screen::screen_drag,
+            screen::screen_type_text,
+            screen::screen_key,
+            screen::screen_scroll,
             whatsapp_bridge::whatsapp_bridge_start,
             whatsapp_bridge::whatsapp_bridge_stop,
             whatsapp_bridge::whatsapp_notify,
             whatsapp_bridge::whatsapp_status,
+            system_info,
         ])
         .setup(|app| {
             // System tray so GIA Cowork can run as a background daemon,

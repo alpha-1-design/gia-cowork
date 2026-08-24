@@ -1,4 +1,7 @@
 
+import { isTauri } from '../platform';
+import { captureScreenDesktop } from './desktopScreenCapture';
+
 /**
  * CircleToSearchService.ts
  *
@@ -72,6 +75,10 @@ export async function isAvailable(): Promise<boolean> {
  * Returns the absolute path to the saved image, or null on failure.
  */
 export async function startCapture(): Promise<string | null> {
+  // On desktop, capture the real screen via the web Screen Capture API.
+  if (isTauri()) {
+    return captureScreenDesktop();
+  }
   try {
     const plugin = await getPlugin();
     const { path } = await plugin.startCapture();

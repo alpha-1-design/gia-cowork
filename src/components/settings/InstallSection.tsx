@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Smartphone, ExternalLink, Mail, Globe } from 'lucide-react';
+import { Monitor, ExternalLink, Mail, Globe } from 'lucide-react';
 import QRCode from 'qrcode';
 
 export const InstallSection: React.FC = () => {
-  const [repo, setRepo] = useState(() => localStorage.getItem('gia-github-repo') || 'alpha-1-design/gia-app');
+  const [repo, setRepo] = useState(() => localStorage.getItem('gia-github-repo') || 'alpha-1-design/gia-cowork');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [qrError, setQrError] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -29,9 +29,9 @@ export const InstallSection: React.FC = () => {
   return (
     <div className="gia-card p-4" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <div className="flex items-center gap-2">
-        <Smartphone size={14} style={{ color: '#3b82f6' }} />
+        <Monitor size={14} style={{ color: '#3b82f6' }} />
         <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--gia-muted)' }}>
-          Get GIA on Your Phone
+          Get GIA for Desktop
         </span>
       </div>
 
@@ -48,7 +48,7 @@ export const InstallSection: React.FC = () => {
       </div>
 
       <p className="text-[10px] text-center" style={{ color: 'var(--gia-muted-2)' }}>
-        Scan with your phone to download the latest APK
+        Download the latest Linux release (.deb / AppImage) below
       </p>
 
       <div className="flex gap-2">
@@ -56,7 +56,7 @@ export const InstallSection: React.FC = () => {
           className="gia-input"
           value={repo}
           onChange={e => setRepo(e.target.value)}
-          placeholder="owner/gia-app"
+          placeholder="owner/gia-cowork"
           style={{ fontSize: '11px', flex: 1 }}
         />
         <button

@@ -19,7 +19,7 @@ export const SystemPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         <p className="font-semibold mb-2" style={{ color: '#34d399' }}>About this panel</p>
         <p className="mb-2">Tune how GIA runs under the hood — security, permissions, voice control, power usage, and reliability. These settings affect GIA's behaviour across all modules.</p>
         <ul className="space-y-1.5 pl-3" style={{ listStyle: 'disc' }}>
-          <li><strong style={{ color: '#34d399' }}>Security</strong> — Lock GIA behind biometrics (fingerprint/face). Enable app lock so GIA requires authentication before opening. On Android, this uses the device's built-in biometric system.</li>
+          <li><strong style={{ color: '#34d399' }}>Security</strong> — Lock GIA behind biometrics (fingerprint/face). Enable app lock so GIA requires authentication before opening. On desktop, this uses your OS login (PAM / system keyring where available).</li>
           <li><strong style={{ color: '#34d399' }}>Code Execution</strong> — Configure the sandbox endpoint (Piston API) GIA uses to run code. Default is a public instance, or you can point to your own. Code runs in isolated containers.</li>
           <li><strong style={{ color: '#34d399' }}>Protocols & Approvals</strong> — Control which tools require your explicit approval before running. Eg: require confirmation before GIA deletes files or executes terminal commands. Safer defaults for newer users.</li>
           <li><strong style={{ color: '#34d399' }}>Voice Control</strong> — Set a wake word ("Hey GIA"), choose recognition language, enable background wake word (Porcupine engine), and toggle TTS for spoken responses. Test wake word detection in the diagnostics section.</li>

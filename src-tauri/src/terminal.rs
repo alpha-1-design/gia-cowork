@@ -9,7 +9,7 @@
 //! (see TerminalService.ts) so the shared TypeScript frontend needs only a
 //! thin platform adapter, not a rewrite.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::io::Read;
 use std::process::{Child, Command, Stdio};
@@ -264,10 +264,12 @@ pub fn terminal_get_status(
     state: tauri::State<'_, Arc<TerminalState>>,
 ) -> Result<StatusInfo, String> {
     let mut sessions = state.0.lock().map_err(|e| e.to_string())?;
-    let count = sessions
-        .iter_mut()
-        .filter(|(_, e)| matches!(e.child.try_wait(), Ok(None)))
-        .count();
+    let mut count = 0;
+    for (_, e) in sessions.iter_mut() {
+        if matches!(e.child.try_wait(), Ok(None)) {
+            count += 1;
+        }
+    }
     Ok(StatusInfo {
         running: true,
         session_count: count,

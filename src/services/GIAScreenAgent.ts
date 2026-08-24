@@ -1,4 +1,7 @@
 import { registerPlugin, PluginListenerHandle } from '@capacitor/core';
+import { isTauri } from '../platform';
+import { captureScreenDesktop } from './desktopScreenCapture';
+import { screenControl } from './screenControl';
 
 export interface ScreenElement {
   type: string;
@@ -53,8 +56,54 @@ export interface ScreenAgentPlugin {
   removeAllListeners(): Promise<void>;
 }
 
+function desktopScreenAgentPlugin(): ScreenAgentPlugin {
+  return {
+    async capture() {
+      const dataUrl = await captureScreenDesktop();
+      return {
+        screenshotPath: undefined,
+        text: '',
+        elementCount: 0,
+        elements: [],
+        timestamp: Date.now(),
+        ...(dataUrl ? { screenshotPath: dataUrl } : {}),
+      } as ScreenCaptureResult;
+    },
+    async getScreenContent() {
+      return this.capture();
+    },
+    async getAccessibilityTree() {
+      return { tree: '', timestamp: Date.now() };
+    },
+    async performTap(options: { x: number; y: number }) {
+      await screenControl.tap(options.x, options.y);
+    },
+    async tapText() {
+      // Desktop has no Android view-tree to resolve text → coordinates. The
+      // real primitive is performTap(x, y); expose that instead. Returning
+      // "not found" is honest rather than faking a tap on the wrong spot.
+      return { clicked: false, foundOn: 'desktop', bounds: {} as ScreenElement['bounds'] };
+    },
+    async startWatching() {},
+    async stopWatching() {},
+    async showOrb() {},
+    async hideOrb() {},
+    async isOrbShowing() {
+      return { showing: false, size: 0 };
+    },
+    async setOrbSize() {},
+    async addListener() {
+      return { remove: () => {} } as PluginListenerHandle;
+    },
+    async removeAllListeners() {},
+  };
+}
+
 const GIAScreenAgent = registerPlugin<ScreenAgentPlugin>('GIAScreenAgent', {
-  web: () => import('./GIAScreenAgent.web').then(m => m.GIAScreenAgentWeb),
+  web: () => {
+    if (isTauri()) return Promise.resolve(desktopScreenAgentPlugin());
+    return import('./GIAScreenAgent.web').then(m => m.GIAScreenAgentWeb);
+  },
 });
 
 export { GIAScreenAgent };

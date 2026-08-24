@@ -13,6 +13,7 @@
 use serde::{Deserialize, Serialize};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use tauri::Manager;
 
 const BRIDGE_PORT: u16 = 8765;
 

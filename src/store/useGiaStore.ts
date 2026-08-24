@@ -4,6 +4,7 @@ import { idbStorage } from './idb-storage';
 import { genId } from '../utils/id';
 import { useMemoryStore } from './useMemoryStore';
 import type { MessageSegment } from '../utils/streamParser';
+import { isTauri } from '../platform';
 
 export type { MessageSegment };
 
@@ -588,7 +589,7 @@ export const useGiaStore = create<GiaState>()(
       useWhisper: localStorage.getItem('gia-use-whisper') === 'true',
       customInstructions: (() => { try { return localStorage.getItem('gia-custom-instructions') || ''; } catch { return ''; } })(),
       pinnedMemories: (() => { try { return JSON.parse(localStorage.getItem('gia-pinned-memories') || '[]'); } catch { return []; } })(),
-      theme: 'dark',
+      theme: isTauri() ? 'obsidian-aurora' : 'dark',
       reduceMotion: (() => { try { return localStorage.getItem('gia-reduce-motion') === 'true'; } catch { return false; } })(),
       hiddenModules: [],
       connectionStatus: navigator.onLine ? 'online' : 'offline',
