@@ -101,15 +101,16 @@ const whatsappNotifyTool = defineTool({
 });
 
 // OpenClaw-style two-way answering: when enabled (default), incoming
-// WhatsApp messages are answered automatically through GiaBrain.
-let autoRespondEnabled = true;
+// WhatsApp messages are answered automatically through GiaBrain. The
+// toggle lives in WhatsAppSession so it persists across app restarts.
+import { whatsAppSession } from '../whatsappSession';
 
 export function setWhatsAppAutoRespond(enabled: boolean): void {
-  autoRespondEnabled = enabled;
+  whatsAppSession.setAutoRespond(enabled);
 }
 
 export function isWhatsAppAutoRespond(): boolean {
-  return autoRespondEnabled;
+  return whatsAppSession.isAutoRespond();
 }
 
 const whatsappAutoRespondTool = defineTool({

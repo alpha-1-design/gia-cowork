@@ -502,51 +502,115 @@ const App: React.FC = () => {
       setInterval(check, 15000);
     });
 
-    // Two-way WhatsApp (OpenClaw-style) — poll the bridge for incoming
-    // messages, surface them as notifications, and answer through GiaBrain.
+    // Two-way WhatsApp (OpenClaw-style) — event-driven, zero polling.
+    // The sidecar pushes every incoming message over stdout -> Rust ->
+    // `whatsapp://incoming` Tauri event the moment it lands, so this
+    // costs nothing when idle. We surface notifications, keep per-chat
+    // conversation memory, and answer bursts through GiaBrain.
     import('./services/WhatsAppBridgeService').then(async ({ whatsAppBridgeService }) => {
-      let cursor = Date.now();
-      const answer = async (m: WhatsAppIncomingMessage) => {
+      const { whatsAppSession } = await import('./services/whatsappSession');
+      const { default: GiaBrain } = await import('./services/GiaBrain');
+
+      const notifyIncoming = async (m: WhatsAppIncomingMessage) => {
         const phone = m.from.split('@')[0];
-        const label = `WhatsApp · ${phone}`;
-        // Surface in-app + desktop notifications so the user sees it arrived.
+        const label = `WhatsApp · ${m.fromName || phone}`;
         try {
           useNotificationStore.getState().addNotification({ app: 'WhatsApp', title: label, body: m.text.slice(0, 120), source: 'whatsapp', category: 'message' });
           const { default: desktopNotifs } = await import('./services/DesktopNotifications');
           desktopNotifs.notify(label, { body: m.text.slice(0, 120) });
         } catch { /* notifications are best-effort */ }
-        // Auto-respond (unless disabled) — same pattern as Telegram.
-        const { isWhatsAppAutoRespond } = await import('./services/tools/whatsappBridge');
-        if (!isWhatsAppAutoRespond()) return;
+      };
+
+      // Answer a burst with full conversation context.
+      whatsAppSession.onAnswer = async (req) => {
+        const phone = req.jid.split('@')[0];
+        const who = req.name || phone;
         try {
-          const { default: GiaBrain } = await import('./services/GiaBrain');
+          const prior = req.history
+            .slice(0, -1) // drop the just-added burst; it is req.texts
+            .map((t) => `${t.role === 'user' ? who : 'GIA'}: ${t.text.slice(0, 500)}`)
+            .join('\n');
           const res = await GiaBrain.generate({
-            prompt: m.text,
-            systemPrompt: `You are GIA, ${phone}'s personal AI assistant, chatting with them over WhatsApp. Be concise, natural, and genuinely helpful. Respond conversationally in plain text — no markdown headers.`,
+            prompt: `Recent conversation:\n${prior || '(none)'}\n\nNew message from ${who}:\n${req.texts.join(' | ')}`,
+            systemPrompt: `You are GIA, the personal AI assistant of the person who owns this computer, chatting with them over WhatsApp. The person messaging you is ${who}. Be concise, natural, and genuinely helpful — like a capable friend, not a helpdesk. Plain text only: no markdown, no headers, no emoji spam. If they ask for something you cannot do from chat, say so briefly and offer what you CAN do.`,
             onStream: undefined,
           });
-          await whatsAppBridgeService.notify({ to: m.from, text: res.text });
-          logger.log(`[WhatsApp] Replied to ${phone}`);
+          const reply = whatsAppSession.capReply(res.text.trim());
+          await whatsAppBridgeService.notify({ to: req.jid, text: reply });
+          logger.log(`[WhatsApp] Replied to ${who}`);
+          return reply;
         } catch (e) {
           logger.warn('[WhatsApp] Reply failed:', e);
-          whatsAppBridgeService.notify({ to: m.from, text: 'Sorry — I hit an error. Try again in a moment.' }).catch(() => {});
+          try {
+            await whatsAppBridgeService.notify({ to: req.jid, text: 'Sorry — I hit a snag. Try again in a moment.' });
+          } catch { /* best-effort */ }
+          return null;
         }
       };
-      const poll = async () => {
+
+      whatsAppSession.onIncoming = (m) => { void notifyIncoming(m); };
+
+      // One-time catch-up + contact names when the app starts (only if
+      // the bridge is already connected). Live delivery is push.
+      const catchUp = async () => {
         try {
           const status = await whatsAppBridgeService.status();
-          if (!status || !status.connected) { cursor = Date.now(); return; }
-          const res = await whatsAppBridgeService.messages(cursor);
-          if (!res) return;
-          for (const m of res.messages) {
-            if (m.ts <= cursor) continue;
-            cursor = Math.max(cursor, m.ts);
-            void answer(m);
+          if (!status || !status.connected) return;
+          const [contactsRes, msgsRes] = await Promise.allSettled([
+            whatsAppBridgeService.contacts(),
+            whatsAppBridgeService.messages(whatsAppSession.getCursor()),
+          ]);
+          if (contactsRes.status === 'fulfilled' && contactsRes.value) {
+            for (const [jid, name] of Object.entries(contactsRes.value.contacts || {})) {
+              whatsAppSession.noteName(jid, String(name));
+            }
           }
-        } catch { /* bridge polling is best-effort */ }
+          if (msgsRes.status === 'fulfilled' && msgsRes.value) {
+            for (const m of msgsRes.value.messages) {
+              if (m.ts > whatsAppSession.getCursor()) whatsAppSession.enqueue(m);
+            }
+          }
+        } catch { /* catch-up is best-effort */ }
       };
-      poll();
-      setInterval(poll, 6000);
+
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        void listen('whatsapp://incoming', (e) => {
+          const m = (e.payload as { message?: WhatsAppIncomingMessage })?.message;
+          if (m) whatsAppSession.enqueue(m);
+        });
+        void listen('whatsapp://status', (e) => {
+          const status = (e.payload as { status?: { connected?: boolean; jid?: string | null; pairing?: boolean; loggedOut?: boolean } })?.status;
+          if (status?.connected) {
+            logger.log(`[WhatsApp] Bridge connected (${status.jid || 'paired'}) — catching up`);
+            void catchUp();
+          } else if (status?.loggedOut) {
+            logger.warn('[WhatsApp] Bridge logged out — re-pair via whatsapp_bridge_start');
+          }
+        });
+      } catch (e) {
+        logger.warn('[WhatsApp] event listeners unavailable:', e);
+      }
+
+      // If the bridge is already running when the app launches, catch up
+      // without waiting for a status event.
+      void catchUp();
+    });
+
+    // Unimind — cross-device spine. Auto-connect if a relay is configured
+    // (set via unimind_connect or Settings), surface phone chat as
+    // notifications, and let the follow-lock rule run.
+    import('./services/unimindClient').then(async ({ unimindClient }) => {
+      if (unimindClient.getRelayUrl()) void unimindClient.connect();
+      unimindClient.onChat = (peer, text) => {
+        try {
+          useNotificationStore.getState().addNotification({ app: 'Unimind', title: `📱 ${peer.name || 'Phone'}`, body: text.slice(0, 120), source: 'whatsapp', category: 'message' });
+          void import('./services/DesktopNotifications').then(({ default: desktopNotifs }) => desktopNotifs.notify(`📱 ${peer.name || 'Phone'}`, { body: text.slice(0, 120) }));
+        } catch { /* best-effort */ }
+      };
+      unimindClient.onStatusChange = (connected) => {
+        logger.log(`[Unimind] ${connected ? 'connected' : 'disconnected'}`);
+      };
     });
 
     // Rich MCP content renderers (images, video, audio, JSON, markdown, code)

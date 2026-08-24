@@ -76,11 +76,18 @@ export const whatsAppBridgeService = {
 
   /**
    * Fetch incoming (person -> GIA) messages newer than `since` (epoch ms).
-   * The caller keeps its own cursor so nothing is missed or double-seen.
+   * Used once on startup to catch up; live delivery is via push events.
    */
   async messages(since: number): Promise<{ messages: WhatsAppIncomingMessage[]; now: number } | null> {
     if (!isTauri()) return null;
     const { invoke } = await import('@tauri-apps/api/core');
     return invoke('whatsapp_messages', { since });
+  },
+
+  /** Known contact names (jid -> display name). */
+  async contacts(): Promise<{ contacts: Record<string, string> } | null> {
+    if (!isTauri()) return null;
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke('whatsapp_contacts');
   },
 };

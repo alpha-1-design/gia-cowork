@@ -54,6 +54,36 @@ const pendingEscalations = new Map();
 const incomingMessages = [];
 const MAX_INCOMING = 200;
 
+/**
+ * Contact names: jid -> display name. Populated from Baileys
+ * contacts.update events (notify/verifiedName) and from the pushName on
+ * each incoming message, so the frontend can label chats with a real
+ * name instead of a bare phone number.
+ */
+const contactNames = new Map();
+
+/**
+ * Emit a structured event to stdout for the Rust supervisor to forward
+ * to the frontend as a Tauri event. This is the push channel that makes
+ * two-way WhatsApp instant and battery-friendly: no polling -- the
+ * moment a message arrives here, the frontend hears about it.
+ *
+ * Line format: `[gia-event] {json}` on a single line. Rust reads stdout
+ * line-by-line and re-emits via `app.emit`.
+ */
+function emitEvent(type, payload) {
+  try {
+    process.stdout.write(`[gia-event] ${JSON.stringify({ type, ...payload })}\n`);
+  } catch (e) {
+    logger.warn('[whatsapp-bridge] failed to emit event:', e.message);
+  }
+}
+
+/** Resolve the best display name we have for a jid. */
+function resolveContactName(jid) {
+  return contactNames.get(jid) || null;
+}
+
 function normalizeJid(to) {
   if (to.includes('@')) return to;
   const digits = to.replace(/[^\d]/g, '');
@@ -79,14 +109,26 @@ async function connectWhatsApp() {
       selfJid = sock.user?.id || null;
       lastQr = null;
       logger.warn(`[whatsapp-bridge] connected as ${selfJid}`);
+      emitEvent('status', { status: { connected: true, jid: selfJid, pairing: false } });
     }
     if (connection === 'close') {
       connected = false;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       logger.warn(`[whatsapp-bridge] connection closed (code ${statusCode}), reconnect=${shouldReconnect}`);
+      emitEvent('status', { status: { connected: false, jid: selfJid, pairing: !!lastQr, loggedOut: statusCode === DisconnectReason.loggedOut } });
       if (shouldReconnect) setTimeout(connectWhatsApp, 3000);
       else logger.error('[whatsapp-bridge] logged out -- delete auth dir and re-pair to reconnect');
+    }
+  });
+
+  // Keep a name map for contacts so incoming chats can be labelled with
+  // real names (notify/verifiedName from the address book / WhatsApp).
+  sock.ev.on('contacts.update', (updates) => {
+    for (const u of updates) {
+      if (!u?.id) continue;
+      const name = u.notify || u.verifiedName || u.name;
+      if (name) contactNames.set(u.id, name);
     }
   });
 
@@ -102,16 +144,22 @@ async function connectWhatsApp() {
       if (key.remoteJid && key.remoteJid.endsWith('@g.us')) continue;
       const text = msg?.message?.conversation || msg?.message?.extendedTextMessage?.text;
       if (!text || !text.trim()) continue;
+      const from = key.remoteJid || 'unknown';
+      // pushName is the sender's profile name on their own device -- the
+      // cheapest reliable name signal we get on the wire.
+      if (msg.pushName && !contactNames.has(from)) contactNames.set(from, msg.pushName);
       const entry = {
         id: key.id,
-        from: key.remoteJid || 'unknown',
-        fromName: null,
+        from,
+        fromName: resolveContactName(from),
         text: text.slice(0, 4000),
         ts: Date.now(),
       };
       incomingMessages.push(entry);
       if (incomingMessages.length > MAX_INCOMING) incomingMessages.shift();
-      logger.warn(`[whatsapp-bridge] incoming from ${entry.from}: ${text.slice(0, 60)}`);
+      logger.warn(`[whatsapp-bridge] incoming from ${entry.fromName || entry.from}: ${text.slice(0, 60)}`);
+      // Push immediately -- no polling on the frontend.
+      emitEvent('incoming', { message: entry });
     }
   });
 
@@ -223,8 +271,15 @@ app.get('/status', (_req, res) => {
   res.json({ connected, jid: selfJid, pairing: !!lastQr, qr: lastQr });
 });
 
-// Incoming messages newer than ?since=<epoch_ms>. The client keeps its own
-// cursor (last seen ts) so nothing is missed or delivered twice.
+// Known contact names, so the frontend can label chats without waiting
+// for the next message's pushName.
+app.get('/contacts', (_req, res) => {
+  res.json({ contacts: Object.fromEntries(contactNames) });
+});
+
+// Incoming messages newer than ?since=<epoch_ms>. Used once on startup
+// to catch up on anything that arrived while the app was closed; live
+// delivery is via the stdout push events, not polling.
 app.get('/messages', (req, res) => {
   const since = Number(req.query.since || 0);
   const messages = incomingMessages.filter((m) => m.ts > since);

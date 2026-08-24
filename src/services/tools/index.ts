@@ -62,6 +62,8 @@ import { terminalTools } from './terminal';
 import { webSearchTools } from './webSearch';
 import { websocketTools } from './websocket';
 import { whatsAppBridgeTools } from './whatsappBridge';
+import { systemControlTools } from './systemControl';
+import { unimindTools } from './unimind';
 
 export function registerAllTools(): void {
   const allToolsLists: (Tool | Tool[])[] = [
@@ -126,6 +128,8 @@ export function registerAllTools(): void {
     webSearchTools,
     websocketTools,
     whatsAppBridgeTools,
+    systemControlTools,
+    unimindTools,
   ];
 
   for (const item of allToolsLists) {

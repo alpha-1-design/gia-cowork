@@ -67,6 +67,7 @@ pub fn run() {
             whatsapp_bridge::whatsapp_notify,
             whatsapp_bridge::whatsapp_status,
             whatsapp_bridge::whatsapp_messages,
+            whatsapp_bridge::whatsapp_contacts,
             system_info,
         ])
         .setup(|app| {

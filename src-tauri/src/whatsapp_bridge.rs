@@ -11,9 +11,10 @@
 //! requests.
 
 use serde::{Deserialize, Serialize};
+use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 const BRIDGE_PORT: u16 = 8765;
 
@@ -82,6 +83,31 @@ pub fn whatsapp_bridge_start(
             "Failed to start WhatsApp bridge: {e}. Make sure Node.js is installed and `npm install` was run in src-tauri/sidecars/whatsapp-bridge."
         ))?;
 
+    // Push channel: the sidecar writes `[gia-event] {json}` lines to its
+    // stdout whenever something happens (incoming message, connection
+    // state change). Read that stream here and re-emit each event to the
+    // frontend as `whatsapp://<type>`. This is what makes two-way
+    // WhatsApp event-driven -- the UI never polls, so there's no battery
+    // or CPU cost when idle. The thread ends when the child exits (pipe
+    // closes).
+    if let Some(stdout) = child.stdout.take() {
+        let app = app_handle.clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                let Ok(line) = line else { break };
+                let Some(json) = line.strip_prefix("[gia-event] ") else { continue };
+                if let Ok(payload) = serde_json::from_str::<serde_json::Value>(json) {
+                    let event_type = payload
+                        .get("type")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("event");
+                    let _ = app.emit(&format!("whatsapp://{event_type}"), &payload);
+                }
+            }
+        });
+    }
+
     *guard = Some(BridgeHandle { child, token });
     Ok(BridgeStartResult { started: true, already_running: false })
 }
@@ -141,9 +167,20 @@ pub async fn whatsapp_status(state: tauri::State<'_, WhatsAppBridgeState>) -> Re
     reqwest_blocking_get(&format!("http://127.0.0.1:{BRIDGE_PORT}/status"), &token)
 }
 
+/// Fetch known contact names (jid -> display name) so the frontend can
+/// label chats.
+#[tauri::command]
+pub async fn whatsapp_contacts(
+    state: tauri::State<'_, WhatsAppBridgeState>,
+) -> Result<serde_json::Value, String> {
+    let token = bridge_token(&state)?;
+    reqwest_blocking_get(&format!("http://127.0.0.1:{BRIDGE_PORT}/contacts"), &token)
+}
+
 /// Fetch incoming (person -> GIA) WhatsApp messages newer than `since`
-/// (epoch ms). This is what makes the bridge a real two-way channel: the
-/// frontend polls it and answers through GiaBrain, OpenClaw-style.
+/// (epoch ms). Used once on startup to catch up on anything that arrived
+/// while the app was closed; live delivery is via the `whatsapp://incoming`
+/// push events, not polling.
 #[tauri::command]
 pub async fn whatsapp_messages(
     state: tauri::State<'_, WhatsAppBridgeState>,

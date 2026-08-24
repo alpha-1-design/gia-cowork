@@ -25,13 +25,14 @@ import { NeuraPage } from '../components/settings/NeuraPage';
 import { NexusPage } from '../components/settings/NexusPage';
 import { MicalPage } from '../components/settings/MicalPage';
 import { TerminalPage } from '../components/settings/TerminalPage';
+import { UnimindPage } from '../components/settings/UnimindPage';
 import { SkillsMarketplaceUI } from '../components/settings/SkillsMarketplaceSection';
 import { DashboardModule } from './DashboardModule';
 import { providerRegistry } from '../services/ProviderRegistry';
 import { getProviderCapabilities, CAPABILITY_LABELS } from '../services/providers/capabilities';
 import type { ProviderCapabilities } from '../services/providers/capabilities';
 
-type SettingsPage = 'main' | 'profile-identity' | 'connections' | 'system' | 'local-ai' | 'app-extensions' | 'about' | 'dashboard' | 'neura' | 'nexus' | 'mical' | 'skills-marketplace' | 'sandbox' | 'mcp' | 'knowledge' | 'terminal';
+type SettingsPage = 'main' | 'profile-identity' | 'connections' | 'system' | 'local-ai' | 'app-extensions' | 'about' | 'dashboard' | 'neura' | 'nexus' | 'mical' | 'skills-marketplace' | 'sandbox' | 'mcp' | 'knowledge' | 'terminal' | 'unimind';
 
 const CATEGORIES: { id: SettingsPage; icon: React.ReactNode; label: string; desc: string; sections: string; color: string }[] = [
   { id: 'profile-identity', icon: <UserCircle size={20} />, label: 'Profile & Identity', desc: 'Your profile, GIA identity, skills, memory & brain export', sections: '5 sections', color: '#a855f7' },
@@ -42,6 +43,7 @@ const CATEGORIES: { id: SettingsPage; icon: React.ReactNode; label: string; desc
   { id: 'local-ai', icon: <Cpu size={20} />, label: 'Local AI', desc: 'On-device LLM models & vision recognition', sections: '2 sections', color: '#22c55e' },
   { id: 'app-extensions', icon: <Puzzle size={20} />, label: 'App & Extensions', desc: 'Plugins, install APK, code history & developer settings', sections: '5 sections', color: '#a855f7' },
   { id: 'skills-marketplace', icon: <Sparkles size={20} />, label: 'Skills Marketplace', desc: 'Install, create, and manage GIA skills', sections: 'Marketplace', color: '#f59e0b' },
+  { id: 'unimind', icon: <Smartphone size={20} />, label: 'Unimind', desc: 'Pair your phone — presence, remote actions, lock & unlock across devices', sections: 'Cross-device', color: '#8b5cf6' },
   { id: 'dashboard', icon: <Activity size={20} />, label: 'Dashboard', desc: 'Performance analytics, tool usage, error tracking & insights', sections: '6 sections', color: '#3b82f6' },
   { id: 'about', icon: <Info size={20} />, label: 'About', desc: 'Analytics, version info & danger zone', sections: '3 sections', color: '#94a3b8' },
 ];
@@ -146,6 +148,7 @@ const SettingsModule: React.FC = () => {
   if (settingsPage === 'mcp') return <MCPPage onBack={() => setSettingsPage('main')} />;
   if (settingsPage === 'knowledge') return <KnowledgePage onBack={() => setSettingsPage('main')} />;
   if (settingsPage === 'terminal') return <TerminalPage onBack={() => setSettingsPage('main')} />;
+  if (settingsPage === 'unimind') return <UnimindPage onBack={() => setSettingsPage('main')} />;
 
   // ── Main page ────────────────────────────────────────────
   return (
