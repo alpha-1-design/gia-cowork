@@ -17,6 +17,10 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ApiKeyInputPanel from './components/ApiKeyInputPanel';
 import { SourcesPanel } from './components/SourcesPanel';
 import AppNavigation from './components/AppNavigation';
+import CommandPalette from './components/CommandPalette';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useNotificationStore } from './store/useNotificationStore';
+import type { IncomingNotification } from './services/SmartNotificationEngine';
 import BiometricService from './services/BiometricService';
 import { useProviderStore } from './store/useProviderStore';
 import { logger } from './utils/logger';
@@ -203,6 +207,12 @@ const App: React.FC = () => {
   }, []);
   const [showTaskBoard, setShowTaskBoard] = useState(false);
   const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Desktop command palette — Ctrl/Cmd+K opens it anywhere in the app.
+  useKeyboardShortcuts([
+    { key: 'k', ctrl: true, handler: () => setPaletteOpen(o => !o), preventDefault: true },
+  ]);
   const [showSetup, setShowSetup] = useState(false);
   const [updateNotification, setUpdateNotification] = useState<UpdateInfo | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -416,11 +426,83 @@ const App: React.FC = () => {
     const trackActivity = () => {
       useAutonomyStore.getState().setLastUserActivity();
       if (svc) svc.idleManager.ping();
+      // Feed the activity-learning engines (adaptive scheduler + fusion engine)
+      import('./services/AdaptiveScheduler').then(a => a.default.recordActivity('interaction')).catch(() => {});
+      import('./services/ContextFusionEngine').then(c => c.contextFusionEngine.recordActivity('interaction')).catch(() => {});
     };
     window.addEventListener('mousedown', trackActivity);
     window.addEventListener('keydown', trackActivity);
     window.addEventListener('touchstart', trackActivity);
     import('./services/PluginManager').then(m => m.default.initialize());
+
+    // Desktop intelligence spine — cross-store event bridge → activity learning
+    import('./services/EventBridge').then(({ EventBridge }) => {
+      const bridge = new EventBridge();
+      bridge.on('*', (ev) => {
+        import('./services/AdaptiveScheduler').then(a => a.default.recordActivity(ev.type)).catch(() => {});
+        import('./services/ContextFusionEngine').then(c => c.contextFusionEngine.recordActivity(ev.type)).catch(() => {});
+      });
+      bridge.start();
+    });
+
+    // Smart notification triage — route new notifications through the engine,
+    // surface desktop notifications only for what it decides is 'immediate'.
+    import('./services/SmartNotificationEngine').then(({ default: smartNotif }) => {
+      let lastIds = new Set(useNotificationStore.getState().notifications.map(n => n.id));
+      useNotificationStore.subscribe((state) => {
+        const currentIds = new Set(state.notifications.map(n => n.id));
+        for (const n of state.notifications) {
+          if (lastIds.has(n.id)) continue;
+          const decision = smartNotif.process({
+            id: n.id,
+            title: n.title,
+            body: n.body,
+            source: n.source,
+            timestamp: Date.now(),
+            category: (n.category as IncomingNotification['category']) || 'unknown',
+            priority: 'medium',
+          });
+          if (decision.action === 'immediate') {
+            import('./services/DesktopNotifications').then(d => d.default.notify(n.title, { body: n.body })).catch(() => {});
+          }
+        }
+        lastIds = currentIds;
+      });
+    });
+
+    // Presence-aware autonomy — pause background work while the screen is locked.
+    import('./services/PresenceService').then(({ presenceService }) => {
+      let locked = false;
+      const check = async () => {
+        try {
+          const p = await presenceService.getPresence();
+          if (!p || p.lockState === 'UNKNOWN') return;
+          if (p.lockState === 'LOCKED' && !locked) {
+            locked = true;
+            const [{ automationEngine }, { proactiveEngine }] = await Promise.all([
+              import('./services/AutomationEngine'),
+              import('./services/autonomy/ProactiveEngine'),
+            ]);
+            automationEngine.stop();
+            proactiveEngine.stop();
+            useGiaStore.getState().addNotification('🔒 Screen locked — paused background work');
+          } else if (p.lockState === 'UNLOCKED' && locked) {
+            locked = false;
+            const [{ automationEngine }, { proactiveEngine }] = await Promise.all([
+              import('./services/AutomationEngine'),
+              import('./services/autonomy/ProactiveEngine'),
+            ]);
+            automationEngine.start();
+            proactiveEngine.start();
+          }
+        } catch { /* presence polling is best-effort */ }
+      };
+      check();
+      setInterval(check, 15000);
+    });
+
+    // Rich MCP content renderers (images, video, audio, JSON, markdown, code)
+    import('./services/mcp/Renderers').then(m => { try { m.registerRichRenderers(); } catch (e) { logger.warn('[App] MCP renderers failed:', e); } });
 
     // Deep system embedding — monitor battery, network, and feed into GIA context
     servicesReady.then(({ SystemService, setSystemContext }) => {
@@ -963,6 +1045,14 @@ const App: React.FC = () => {
 
       <SourcesPanel />
       <ApiKeyInputPanel />
+      <CommandPalette
+        isOpen={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={(action) => {
+          if (action === 'task-board') setShowTaskBoard(true);
+          else if (action === 'notes-panel') setShowNotesPanel(true);
+        }}
+      />
     </div>
   );
 };

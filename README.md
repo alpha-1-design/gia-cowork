@@ -1,103 +1,83 @@
 # GIA Cowork
 
-GIA Cowork is the Linux desktop counterpart to [GIA](https://github.com/alpha-1-design/gia-app) — same brain,
-bigger canvas. Where GIA on Android runs in a proot/Alpine sandbox because
-phones don't give you a real shell, Cowork runs directly against your real
-Linux system: real terminal, real filesystem, real background daemon.
+**An autonomous AI workspace that runs on your Linux desktop.** GIA Cowork is the desktop counterpart to [GIA](https://github.com/alpha-1-design/gia-app) — same brain, bigger canvas. Where the Android app runs in a sandbox because phones don't give you a real shell, Cowork runs directly against your real system: a real terminal, a real filesystem, and a background daemon that stays alive after you close the window.
 
-Built with [Tauri](https://tauri.app) (Rust backend, React/TypeScript frontend —
-the same frontend codebase as GIA mobile, reused directly).
+Built with [Tauri 2](https://tauri.app) — a Rust backend with a React 19 / TypeScript / Vite frontend.
 
-**Version:** desktop Cowork is `0.1.0` (mobile GIA is on the `2.4.x` line).
+**Version:** 0.1.0 (mobile GIA is on the `2.4.x` line).
 
-## Status
+---
 
-What's real and verified as of this commit:
+## What it does
 
-- ✅ Frontend (chat, brain, MCP client, terminal UI, settings) — ports
-  directly from GIA mobile with no changes; TypeScript compiles clean,
-  production `vite build` succeeds.
-- ✅ Real terminal backend (`src-tauri/src/terminal.rs`) — spawns `sh -c`
-  directly on the host, no sandbox. Session tracking, kill, exit codes,
-  timeouts.
-- ✅ System tray + background daemon (close-to-tray instead of quitting).
-- ✅ Screen lock-state presence detection via systemd-logind DBus
-  (`src-tauri/src/presence.rs`).
-- ✅ **Real device detection** — `src-tauri/src/lib.rs` exposes a `system_info`
-  Rust command that reads `/proc/meminfo` and CPU core count from the OS
-  (not Chromium's capped `navigator.deviceMemory`). `DeviceCapabilities.ts`
-  shows true measured RAM/cores and only labels numbers "estimated" when
-  measurement isn't available.
-- ✅ **Local LLM, model-agnostic (no lock-in)** — `LocalModelId` is an open
-  string, not a fixed catalog. You can load *any* model:
-  - Curated Qwen2.5 set (0.5B/1.5B/3B) for one-click start.
-  - **"Load any model"** — paste a HuggingFace or Ollama id.
-  - **HuggingFace browser** (`HuggingFaceBrowser.tsx`) — save/validate your
-    HF token, search the live model hub, one-click Get → downloads with a
-    **real progress bar** (`modelHub.ts`).
-  - **Ollama browser** (`OllamaBrowser.tsx`) — point at your Ollama endpoint,
-    see installed models, search the library, **pull with streamed progress**.
-  - Load / **Unload** frees memory (`unload()`).
-- ✅ **Autonomous self-learning loop (on-device)** — `src/unimind/learningLoop.ts`.
-  Leave GIA running on a task; the local model reflects, accumulates its own
-  **trace** (memory of what it tried), and feeds past attempts back in so it
-  gets smarter across runs. Bounded by design: max iterations + stall-halt, so
-  a shaky local model can't loop forever and burn RAM. The loop core is
-  provider-agnostic (it takes a `generate` callback) — `localAdapter.ts` is
-  the only piece wired to the local model. UI: "Run loop" in the Local Models
-  settings card.
+| Capability | How |
+|---|---|
+| 💬 **Chat + reasoning** | Streaming chat with visible think → work → think reasoning, tool calls, sources, and tasks |
+| 🖥️ **Real terminal** | `src-tauri/src/terminal.rs` spawns `sh -c` directly on the host — sessions, kill, exit codes, timeouts. No proot, no sandbox |
+| 📸 **Screen control** | Capture the screen, click, drag, type, scroll — real desktop automation (`screen.rs`) |
+| 🧠 **Local LLM, model-agnostic** | Load *any* model — curated Qwen2.5 set (0.5B/1.5B/3B), or paste any HuggingFace/Ollama id with live progress bars. Load/unload to free RAM |
+| 🔁 **Autonomous learning loop** | `src/unimind/` — leave GIA running on a task; it reflects, keeps a trace of what it tried, and feeds past attempts back in. Bounded (max iterations + stall-halt) so it can't spin forever |
+| 🧩 **MCP + plugins + skills** | Model Context Protocol servers (SSE/stdio, OAuth), a plugin system, and a skills marketplace |
+| 🛠️ **~120 tools** | Terminal, filesystem, code execution, web search, email, calendar, notes, tasks, reminders, smart home, messaging, and more — registered in `src/services/tools/index.ts` |
+| 🔔 **Background daemon** | System tray + close-to-tray. GIA stays alive when the window is hidden |
 
-## Unimind (GIA mobile ↔ Cowork desktop fusion)
+## The desktop intelligence spine
 
-**Protocol spine — implemented** (`src/unimind/types.ts`):
+These are the "always-on agent" features — they were built into the codebase but never connected to the app until they were wired up here:
 
-- `UnimindEnvelope` — every event carries `actor`, `channel`, `device`,
-  `deviceId`, `seq`. `channel` is the provenance stamp (e.g. `whatsapp`,
-  `telegram`, `desktop-app`, `mobile-app`, `voice`, `face`) so a synced agent
-  always knows *which* surface a message came from.
-- `ModelRef` — open model reference (no provider lock-in).
-- `LoopConfig` / `SAFE_LOOP` — bounded autonomous-loop guardrails
-  (max 25 iterations, stall-halt, 60s stall threshold).
-- Message types: `chat`, `agent-trigger`, `action-delegation`,
-  `verify-request` / `verify-response`, `presence`.
+- **Command palette** — `Ctrl/Cmd + K` anywhere in the app: switch modules, toggle web search / extended thinking / hands-off, open the terminal, pick a project folder, export/import your brain, manage MCP servers.
+- **Right-click message menu** — copy, edit, retry, fork, continue, delete. The desktop-native way to act on a message (the mobile bottom-sheet is still there for touch).
+- **Presence-aware autonomy** — polls the real lock state via systemd-logind (`presence.rs`). When you lock the screen, background work (automation engine + proactive engine) pauses; it resumes when you're back.
+- **Smart notification triage** — every incoming notification is scored by `SmartNotificationEngine` (immediate / batched / silent) and only what matters gets a desktop notification. It learns from your dismissals.
+- **Activity learning + proactive suggestions** — `AdaptiveScheduler` learns when you're most active from real interaction events; `ContextFusionEngine` fuses time-of-day, memories, and pending goals into proactive suggestions. Ask GIA for `activity_patterns`, `proactive_suggestions`, or `notification_policy`.
+- **Rich MCP rendering** — images, GIFs, video, audio, JSON, markdown, and code from MCP servers render natively in the chat.
+- **Real WhatsApp bridge** — a Baileys sidecar (supervised from `whatsapp_bridge.rs`) gives true two-way WhatsApp: send a message, and if it stays unread past a deadline, GIA places a real WhatsApp voice call playing a TTS clip — auto-cancelled the moment the text is read. Tools: `whatsapp_bridge_start`, `whatsapp_bridge_status`, `whatsapp_bridge_stop`, `whatsapp_notify`.
 
-**Not yet built** (designed, spine ready): the P2P transport/sync engine,
-device pairing, the shared session store that stamps provenance at the
-messaging bridge, cross-device **action delegation** (desktop ↔ phone), and
-the **verification handshake** (attest "it's really me at the computer" via
-biometrics/voice/face before an agent acts). See `src/unimind/` for the spine
-to build on.
+## Architecture
 
-## What's intentionally not built yet
+```
+src-tauri/            Rust backend (Tauri 2)
+  terminal.rs         real sh -c execution, session tracking
+  screen.rs           screen capture + input control
+  presence.rs         lock-state via systemd-logind DBus
+  whatsapp_bridge.rs  supervises the WhatsApp sidecar
+  lib.rs              tray, background daemon, real /proc/meminfo system_info
 
-- Keyboard/mouse idle-time detection (X11/Wayland don't share one API for
-  this; needs its own pass).
-- Cross-device approval mesh (SMS/call escalation via Twilio, watch
-  notifications) — real feature, real ongoing cost once wired up, needs
-  your Twilio keys and an explicit go-ahead.
-- Camera-based presence and full-screen OCR — both privacy-sensitive by
-  default-on, will ship gated behind an explicit toggle, not silently on.
-- Full mouse/keyboard input control ("computer use") — bigger permission
-  surface than the above, gets its own design pass before implementation.
-- Unimind **transport/sync** — the spine is in `src/unimind/`; the live P2P
-  sync, pairing, session store, and action/verification handshakes are not
-  implemented.
-- **Playwright is not bundled.** Browser automation (`tools/browserAutomation.ts`)
-  expects an external Playwright server at `localhost:3091`; it is not a build
-  dependency.
+src/
+  modules/            9 modules: Chat, Analyst, Exam, Planner, Writer, Agents, Autonomy, Dashboard, Settings
+  services/           ~150 services: GiaBrain, ToolRegistry, MCP, LocalLLM, ProviderRegistry, …
+  services/tools/     ~120 tool definitions registered in tools/index.ts
+  unimind/            autonomous learning loop (provider-agnostic)
+  store/              Zustand stores (useGiaStore is the core)
+  components/         UI: chat, settings, overlays, command palette, message context menu
+```
 
-> Note: real model downloads and the HF/Ollama browsers need network access at
-> runtime. They were built but not exercised end-to-end in a sandbox.
+**Generation pipeline:** `useChatState → useChatGeneration → GiaBrain.generate() → provider adapter → tool loop`. GIA is provider-agnostic — bring your own OpenAI/Anthropic/Gemini/local model.
+
+## Honest status
+
+**Working and verified:** frontend + tool system, real terminal, screen control, system tray daemon, system_info hardware report, local LLM loading (HF/Ollama), the learning loop, MCP client, command palette, right-click menus, presence-aware pausing, smart notifications, WhatsApp bridge tools.
+
+**Deliberately not built yet:**
+- **Unimind transport/sync** — the protocol spine exists (`src/unimind/types.ts`); the live P2P sync, device pairing, and cross-device action delegation are not implemented.
+- **Keyboard/mouse idle-time detection** — X11/Wayland don't share one API; needs its own pass.
+- **Camera presence / full-screen OCR** — privacy-sensitive; will ship gated behind explicit toggles.
+- **Full "computer use" input control** — a bigger permission surface; gets its own design pass.
+- **Browser automation** — the `browserAutomation` tools expect an external Playwright server at `localhost:3091`; Playwright is not bundled.
 
 ## Development
 
 ```bash
-npm install
-npm run tauri dev      # requires a working Rust toolchain
+npm ci --legacy-peer-deps
+npm run tauri dev        # requires a working Rust toolchain
 ```
 
 ## Building
 
 ```bash
-npm run tauri build    # produces .deb, .AppImage, .rpm under src-tauri/target/release/bundle
+npm run tauri build      # produces .deb, .AppImage, .rpm under src-tauri/target/release/bundle
 ```
+
+## CI
+
+`ci.yml` runs typecheck (`tsc -b --noEmit`) + frontend build + `cargo check`. `release.yml` builds the Linux bundles.

@@ -11,6 +11,7 @@ import { useGiaStore } from '../store/useGiaStore';
 import MarkdownRenderer from './MarkdownRenderer';
 import ArtifactsPanel from './ArtifactsPanel';
 import MessageActionSheet, { RewriteBar } from './MessageActionSheet';
+import MessageContextMenu from './MessageContextMenu';
 import MessageFullScreen from './MessageFullScreen';
 import { ChatSkeleton } from './feedback';
 import { resolveAgentColor, resolveAgentIcon } from '../utils/agentIcons';
@@ -174,6 +175,18 @@ const MessageList: React.FC<MessageListProps> = ({
               </span>
             </div>
             <>
+              <MessageContextMenu
+                messageId={msg.id}
+                content={typeof msg.content === 'string' ? msg.content : ''}
+                isUser={msg.role === 'user'}
+                canFork={!!msg.content && !msg.thinking}
+                onCopy={onCopyMessage}
+                onEdit={msg.role === 'user' ? onEdit : undefined}
+                onRetry={msg.role === 'assistant' ? onRetry : undefined}
+                onDelete={onDeleteWithUndo}
+                onFork={onFork}
+                onContinue={msg.role === 'assistant' ? onContinue : undefined}
+              >
               <div
                 className={`p-3 sm:p-4 md:p-5 rounded-2xl relative cursor-pointer ${msg.role === 'user' ? 'bg-violet-600/10 border border-violet-500/20' : msg.error ? 'bg-rose-950/20 border border-rose-800/30' : streamingMsgId === msg.id || streamingMsgIds?.has(msg.id) ? 'streaming-message' : ''}`}
                 style={{
@@ -411,6 +424,7 @@ const MessageList: React.FC<MessageListProps> = ({
                   <TaskProgress tasks={msg.tasks} agentColor={msg.agentId ? resolveAgentColor(msg.agentIcon || 'Bot') : undefined} />
                 )}
               </div>
+              </MessageContextMenu>
               {msg.role === 'assistant' && msg.wasTruncated && (
                 <button
                   onClick={() => onContinue(msg.id)}

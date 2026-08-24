@@ -1,7 +1,9 @@
 import ToolRegistry from '../ToolRegistry';
 import type { Tool } from './types';
 
+import { advancedTools } from './advanced';
 import { autonomyTools } from './autonomy';
+import { brainCloudTools } from './brainCloud';
 import { browserAutomationTools } from './browserAutomation';
 import { buildTools } from './build';
 import { calendarTools } from './calendar';
@@ -9,8 +11,10 @@ import { cameraTools } from './camera';
 import { clipboardTools } from './clipboard';
 import { connectorTools } from './connectors';
 import { controlTools } from './controls';
+import { registerCodeTools } from './code';
 import { coreTools } from './core';
 import { createPdfTool } from './createPdf';
+import { customInstructionTools } from './customInstructions';
 import { databaseTools } from './database';
 import { deviceTools } from './device';
 import { deviceIntegrationTools } from './deviceIntegration';
@@ -23,7 +27,10 @@ import { gatewayTools } from './gateway';
 import { gatewayDaemonTools } from './gatewayDaemon';
 import { geolocationTools } from './geolocation';
 import { hapticsTools } from './haptics';
+import { identityTools } from './identity';
+import { intelligenceTools } from './intelligence';
 import { locationTools } from './location';
+import { longRunningTools } from './longRunning';
 import { mcpTools } from './mcp';
 import { mediaAccessTools } from './mediaAccess';
 import { memoryTools } from './memory';
@@ -32,12 +39,18 @@ import { networkTools } from './network';
 import { neuraTools } from './neura';
 import { noteTools } from './notes';
 import { notificationTools } from './notifications';
+import { personalEnhancedTools } from './personalEnhanced';
 import { personalTools } from './personal';
+import { pluginTools } from './plugin';
 import { powerTools } from './powerTools';
+import { providerHealthTools } from './providerHealth';
 import { ragTools } from './rag';
 import { pdfTools } from './readPdf';
+import { requestApiKeyTools } from './requestApiKey';
 import { sandboxTools } from './sandbox';
+import { scheduledTaskTools } from './scheduledTasks';
 import { securityTools } from './security';
+import { sessionTools } from './session';
 import { shareTools } from './share';
 import { skillTools } from './skills';
 import { smartHomeTools } from './smartHome';
@@ -48,10 +61,13 @@ import { telegramTools } from './telegram';
 import { terminalTools } from './terminal';
 import { webSearchTools } from './webSearch';
 import { websocketTools } from './websocket';
+import { whatsAppBridgeTools } from './whatsappBridge';
 
 export function registerAllTools(): void {
   const allToolsLists: (Tool | Tool[])[] = [
+    advancedTools,
     autonomyTools,
+    brainCloudTools,
     browserAutomationTools,
     buildTools,
     calendarTools,
@@ -61,6 +77,7 @@ export function registerAllTools(): void {
     controlTools,
     coreTools,
     createPdfTool,
+    customInstructionTools,
     databaseTools,
     deviceTools,
     deviceIntegrationTools,
@@ -73,7 +90,10 @@ export function registerAllTools(): void {
     gatewayDaemonTools,
     geolocationTools,
     hapticsTools,
+    identityTools,
+    intelligenceTools,
     locationTools,
+    longRunningTools,
     mcpTools,
     mediaAccessTools,
     memoryTools,
@@ -82,12 +102,18 @@ export function registerAllTools(): void {
     neuraTools,
     noteTools,
     notificationTools,
+    personalEnhancedTools,
     personalTools,
+    pluginTools,
     powerTools,
+    providerHealthTools,
     ragTools,
     pdfTools,
+    requestApiKeyTools,
     sandboxTools,
+    scheduledTaskTools,
     securityTools,
+    sessionTools,
     shareTools,
     skillTools,
     smartHomeTools,
@@ -98,6 +124,7 @@ export function registerAllTools(): void {
     terminalTools,
     webSearchTools,
     websocketTools,
+    whatsAppBridgeTools,
   ];
 
   for (const item of allToolsLists) {
@@ -111,4 +138,8 @@ export function registerAllTools(): void {
       ToolRegistry.register(item);
     }
   }
+
+  // code.ts exports a register function instead of an array (it registers a
+  // single sandboxed code-execution tool through CodeRunner).
+  registerCodeTools();
 }
