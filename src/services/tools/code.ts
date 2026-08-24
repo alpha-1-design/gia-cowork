@@ -47,6 +47,4 @@ const codeExecution: Tool = {
   },
 };
 
-export function registerCodeTools() {
-  ToolRegistry.register(codeExecution);
-}
+export const codeTools: Tool[] = [codeExecution];

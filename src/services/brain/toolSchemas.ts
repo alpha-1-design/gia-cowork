@@ -1,6 +1,13 @@
 import GiaTools from '../GiaTools';
 import { ProtocolType, ProtocolImpact } from '../../types/protocol';
 
+// NOTE (legacy): this hand-written schema map predates defineTool(). The
+// registry-derived schemas (GiaTools.getAllToolSchemas) win in the merge
+// below, so this map only backfills tools that lack a schema on their Tool
+// object. New tools should use defineTool() (src/services/tools/defineTool.ts)
+// so schemas live with the tool — migrate the schema-less tools over time,
+// then this map can be deleted.
+
 export const toolSchemas: Record<string, { description: string; required: string[]; properties: Record<string, { type: string; description: string; items?: { type: string } }> }> = {
   web_search: {
     description: 'Search the web for real-time information. Uses Exa/Browserless when configured; falls back to search engines.',

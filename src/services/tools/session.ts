@@ -1,9 +1,9 @@
+import { z } from 'zod';
 import { useGiaStore } from '../../store/useGiaStore';
-import type { Tool } from './types';
-import ToolRegistry from '../ToolRegistry';
+import { defineTool } from './defineTool';
 
-export const sessionTools: Tool[] = [
-  {
+export const sessionTools = [
+  defineTool({
     id: 'session_summarize',
     name: 'session_summarize',
     description: 'Generate a summary of the current session\'s conversation and save it.',
@@ -19,9 +19,9 @@ export const sessionTools: Tool[] = [
       } catch (e: unknown) {
         return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
       }
-    }
-  },
-  {
+    },
+  }),
+  defineTool({
     id: 'session_list_summaries',
     name: 'session_list_summaries',
     description: 'List all sessions with their titles, message counts, and last update times.',
@@ -39,17 +39,15 @@ export const sessionTools: Tool[] = [
       } catch (e: unknown) {
         return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
       }
-    }
-  },
-  {
+    },
+  }),
+  defineTool({
     id: 'session_get',
     name: 'session_get',
     description: 'Get details of a specific session by its ID.',
-    schema: {
-      type: 'object',
-      properties: { sessionId: { type: 'string', description: 'The session ID' } },
-      required: ['sessionId'],
-    },
+    input: z.object({
+      sessionId: z.string().min(1).describe('The session ID'),
+    }),
     execute: async ({ sessionId }) => {
       try {
         const store = useGiaStore.getState();
@@ -60,10 +58,6 @@ export const sessionTools: Tool[] = [
       } catch (e: unknown) {
         return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
       }
-    }
-  },
+    },
+  }),
 ];
-
-export function registerSessionTools() {
-  for (const tool of sessionTools) ToolRegistry.register(tool);
-}

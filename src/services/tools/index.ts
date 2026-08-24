@@ -11,7 +11,7 @@ import { cameraTools } from './camera';
 import { clipboardTools } from './clipboard';
 import { connectorTools } from './connectors';
 import { controlTools } from './controls';
-import { registerCodeTools } from './code';
+import { codeTools } from './code';
 import { coreTools } from './core';
 import { createPdfTool } from './createPdf';
 import { customInstructionTools } from './customInstructions';
@@ -75,6 +75,7 @@ export function registerAllTools(): void {
     clipboardTools,
     connectorTools,
     controlTools,
+    codeTools,
     coreTools,
     createPdfTool,
     customInstructionTools,
@@ -139,7 +140,4 @@ export function registerAllTools(): void {
     }
   }
 
-  // code.ts exports a register function instead of an array (it registers a
-  // single sandboxed code-execution tool through CodeRunner).
-  registerCodeTools();
 }

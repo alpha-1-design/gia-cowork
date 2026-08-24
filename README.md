@@ -4,7 +4,7 @@
 
 Built with [Tauri 2](https://tauri.app) — a Rust backend with a React 19 / TypeScript / Vite frontend.
 
-**Version:** 0.1.0 (mobile GIA is on the `2.4.x` line).
+**Version:** 0.2.0 (mobile GIA is on the `2.4.x` line).
 
 ---
 
@@ -53,6 +53,8 @@ src/
 ```
 
 **Generation pipeline:** `useChatState → useChatGeneration → GiaBrain.generate() → provider adapter → tool loop`. GIA is provider-agnostic — bring your own OpenAI/Anthropic/Gemini/local model.
+
+**Authoring tools:** use `defineTool()` from `src/services/tools/defineTool.ts` — one zod schema produces the model-facing JSON schema *and* runtime validation, so there's a single source of truth for a tool's arguments. Register tool modules by exporting an array from `src/services/tools/*.ts` and adding it to `registerAllTools()` in `tools/index.ts`. (The legacy hand-written schema map in `brain/toolSchemas.ts` is kept only to backfill tools not yet migrated.)
 
 ## Honest status
 

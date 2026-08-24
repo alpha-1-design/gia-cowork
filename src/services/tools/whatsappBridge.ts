@@ -1,5 +1,7 @@
-import type { Tool } from './types';
+import { z } from 'zod';
 import { whatsAppBridgeService } from '../WhatsAppBridgeService';
+import { defineTool } from './defineTool';
+import type { ToolResult } from './types';
 
 // ── WhatsApp bridge tools (GIA Cowork desktop only) ─────────────────────
 //
@@ -19,18 +21,11 @@ const bridgeUnavailable = (): ToolResult => ({
   error: 'WhatsApp bridge is only available in the GIA Cowork desktop app.',
 });
 
-interface ToolResult {
-  success: boolean;
-  content: string;
-  error?: string;
-}
-
-const whatsappBridgeStartTool: Tool = {
+const whatsappBridgeStartTool = defineTool({
   id: 'whatsapp_bridge_start',
   name: 'whatsapp_bridge_start',
   description:
     'Start the local WhatsApp bridge. On first run this shows a QR code to pair a real WhatsApp account (Baileys sidecar), enabling true two-way messaging with GIA. Use whatsapp_bridge_status to see pairing progress.',
-  schema: { type: 'object', properties: {} },
   execute: async () => {
     if (!whatsAppBridgeService.available()) return bridgeUnavailable();
     try {
@@ -42,13 +37,12 @@ const whatsappBridgeStartTool: Tool = {
       return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
     }
   },
-};
+});
 
-const whatsappBridgeStatusTool: Tool = {
+const whatsappBridgeStatusTool = defineTool({
   id: 'whatsapp_bridge_status',
   name: 'whatsapp_bridge_status',
   description: 'Check the WhatsApp bridge state: connected (with the paired number), pairing (QR pending), or stopped.',
-  schema: { type: 'object', properties: {} },
   execute: async () => {
     if (!whatsAppBridgeService.available()) return bridgeUnavailable();
     try {
@@ -61,13 +55,12 @@ const whatsappBridgeStatusTool: Tool = {
       return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
     }
   },
-};
+});
 
-const whatsappBridgeStopTool: Tool = {
+const whatsappBridgeStopTool = defineTool({
   id: 'whatsapp_bridge_stop',
   name: 'whatsapp_bridge_stop',
   description: 'Stop the local WhatsApp bridge and disconnect the paired account.',
-  schema: { type: 'object', properties: {} },
   execute: async () => {
     if (!whatsAppBridgeService.available()) return bridgeUnavailable();
     try {
@@ -77,26 +70,20 @@ const whatsappBridgeStopTool: Tool = {
       return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
     }
   },
-};
+});
 
-const whatsappNotifyTool: Tool = {
+const whatsappNotifyTool = defineTool({
   id: 'whatsapp_notify',
   name: 'whatsapp_notify',
   description:
     'Send a WhatsApp message to a phone number (country code, no "+"). Optionally escalate: if the message stays unread after escalateAfterMs, GIA places a real WhatsApp voice call playing the TTS clip at escalateAudioPath (the call is auto-cancelled once the text is read).',
-  schema: {
-    type: 'object',
-    properties: {
-      to: { type: 'string', description: 'Phone number with country code, no "+" (e.g. 233201234567)' },
-      text: { type: 'string', description: 'The message to send' },
-      escalateAfterMs: { type: 'number', description: 'Optional: escalate to a voice call if unread after this many milliseconds' },
-      escalateAudioPath: { type: 'string', description: 'Optional: path to a pre-synthesized TTS clip of the message' },
-    },
-    required: ['to', 'text'],
-  },
-  execute: async (args) => {
-    const { to, text, escalateAfterMs, escalateAudioPath } = args as { to?: string; text?: string; escalateAfterMs?: number; escalateAudioPath?: string };
-    if (!to || !text) return { success: false, content: '', error: 'Both "to" (phone, with country code) and "text" are required.' };
+  input: z.object({
+    to: z.string().min(1).describe('Phone number with country code, no "+" (e.g. 233201234567)'),
+    text: z.string().min(1).describe('The message to send'),
+    escalateAfterMs: z.number().optional().describe('Optional: escalate to a voice call if unread after this many milliseconds'),
+    escalateAudioPath: z.string().optional().describe('Optional: path to a pre-synthesized TTS clip of the message'),
+  }),
+  execute: async ({ to, text, escalateAfterMs, escalateAudioPath }) => {
     if (!whatsAppBridgeService.available()) return bridgeUnavailable();
     try {
       const res = await whatsAppBridgeService.notify({ to, text, escalateAfterMs, escalateAudioPath });
@@ -111,7 +98,7 @@ const whatsappNotifyTool: Tool = {
       return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
     }
   },
-};
+});
 
 // OpenClaw-style two-way answering: when enabled (default), incoming
 // WhatsApp messages are answered automatically through GiaBrain.
@@ -125,20 +112,15 @@ export function isWhatsAppAutoRespond(): boolean {
   return autoRespondEnabled;
 }
 
-const whatsappAutoRespondTool: Tool = {
+const whatsappAutoRespondTool = defineTool({
   id: 'whatsapp_auto_respond',
   name: 'whatsapp_auto_respond',
   description:
     'Control automatic answering of incoming WhatsApp messages. "on" (default): GIA replies to every message it receives on WhatsApp. "off": incoming messages are only surfaced as notifications, not answered.',
-  schema: {
-    type: 'object',
-    properties: {
-      action: { type: 'string', enum: ['on', 'off', 'status'], description: '"on", "off", or "status"' },
-    },
-    required: ['action'],
-  },
-  execute: async (args) => {
-    const action = String((args as { action?: string }).action || 'status').toLowerCase();
+  input: z.object({
+    action: z.enum(['on', 'off', 'status']).default('status').describe('"on", "off", or "status"'),
+  }),
+  execute: async ({ action }) => {
     if (action === 'on') {
       setWhatsAppAutoRespond(true);
       return { success: true, content: 'Auto-respond is **on** — GIA will answer incoming WhatsApp messages.' };
@@ -149,9 +131,9 @@ const whatsappAutoRespondTool: Tool = {
     }
     return { success: true, content: `Auto-respond is currently ${isWhatsAppAutoRespond() ? '**on**' : '**off**'}.` };
   },
-};
+});
 
-export const whatsAppBridgeTools: Tool[] = [
+export const whatsAppBridgeTools = [
   whatsappBridgeStartTool,
   whatsappBridgeStatusTool,
   whatsappBridgeStopTool,

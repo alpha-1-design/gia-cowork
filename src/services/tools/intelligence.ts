@@ -1,7 +1,8 @@
+import { z } from 'zod';
 import adaptiveScheduler from '../AdaptiveScheduler';
 import { contextFusionEngine } from '../ContextFusionEngine';
 import SmartNotificationEngine from '../SmartNotificationEngine';
-import type { Tool } from './types';
+import { defineTool } from './defineTool';
 
 // ── Desktop intelligence tools ──────────────────────────────────────────
 //
@@ -13,19 +14,15 @@ import type { Tool } from './types';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-const activityPatternsTool: Tool = {
+const activityPatternsTool = defineTool({
   id: 'activity_patterns',
   name: 'activity_patterns',
   description:
     'Show GIA\'s learned activity patterns: when you are most active, your top activity types, and the best time to schedule a task ("report" or "predict <activity>").',
-  schema: {
-    type: 'object',
-    properties: {
-      action: { type: 'string', description: '"report" (default) for the full pattern report, or "predict <activity>" for the optimal time slot for that activity' },
-    },
-  },
-  execute: async (args) => {
-    const action = String((args as { action?: string }).action || 'report');
+  input: z.object({
+    action: z.string().default('report').describe('"report" (default) for the full pattern report, or "predict <activity>" for the optimal time slot for that activity'),
+  }),
+  execute: async ({ action }) => {
     try {
       if (action.startsWith('predict')) {
         const activity = action.replace(/^predict\s*/i, '').trim();
@@ -55,14 +52,13 @@ const activityPatternsTool: Tool = {
       return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
     }
   },
-};
+});
 
-const proactiveSuggestionsTool: Tool = {
+const proactiveSuggestionsTool = defineTool({
   id: 'proactive_suggestions',
   name: 'proactive_suggestions',
   description:
     'Get context-aware suggestions from GIA\'s fusion engine (time of day, pending goals, memories, activity): morning prep, follow-ups, memory cleanup, end-of-day wrap-up.',
-  schema: { type: 'object', properties: {} },
   execute: async () => {
     try {
       const suggestions = await contextFusionEngine.getSuggestions(5);
@@ -73,14 +69,13 @@ const proactiveSuggestionsTool: Tool = {
       return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
     }
   },
-};
+});
 
-const notificationPolicyTool: Tool = {
+const notificationPolicyTool = defineTool({
   id: 'notification_policy',
   name: 'notification_policy',
   description:
     'Show how GIA currently triages notifications (immediate / batched / silent), per-source preferences, and smart-notification engine accuracy.',
-  schema: { type: 'object', properties: {} },
   execute: async () => {
     try {
       const stats = SmartNotificationEngine.getStats();
@@ -104,9 +99,9 @@ const notificationPolicyTool: Tool = {
       return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
     }
   },
-};
+});
 
-export const intelligenceTools: Tool[] = [
+export const intelligenceTools = [
   activityPatternsTool,
   proactiveSuggestionsTool,
   notificationPolicyTool,
