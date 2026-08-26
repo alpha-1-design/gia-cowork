@@ -10,6 +10,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import ChatModule from './modules/ChatModule';
+import BuildModule from './modules/BuildModule';
 import WriterModule from './modules/WriterModule';
 import PlannerModule from './modules/PlannerModule';
 import SettingsModule from './modules/SettingsModule';
@@ -104,6 +105,7 @@ const ModuleView: React.FC = () => {
 
   const components: Record<Module, React.ReactNode> = {
     chat:      <ErrorBoundary name="Chat"><ChatModule /></ErrorBoundary>,
+    build:     <ErrorBoundary name="Build"><BuildModule /></ErrorBoundary>,
     exam:      <Suspense fallback={<Fallback />}><ErrorBoundary name="Exam"><ExamModule /></ErrorBoundary></Suspense>,
     analyst:   <Suspense fallback={<Fallback />}><ErrorBoundary name="Analyst"><AnalystModule /></ErrorBoundary></Suspense>,
     writer:    <ErrorBoundary name="Writer"><WriterModule /></ErrorBoundary>,
@@ -375,7 +377,7 @@ const App: React.FC = () => {
     const applyTheme = (mode: string) => {
       const effective = mode === 'system' ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : mode;
       document.documentElement.setAttribute('data-theme', effective);
-      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', effective === 'light' ? '#f2f2f7' : effective === 'obsidian-aurora' ? '#000000' : '#0a0a0f');
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', effective === 'light' ? '#e8e8ef' : effective === 'obsidian-aurora' ? '#000000' : '#0a0a0f');
     };
     applyTheme(theme);
     const mq = window.matchMedia('(prefers-color-scheme: light)');
@@ -405,7 +407,8 @@ const App: React.FC = () => {
     let svc: Record<string, any> | null = null;
     const servicesReady = Promise.all([
       import('./services/SchedulerService').then(m => { m.default.start(); }),
-      import('./services/WidgetSyncService').then(m => { m.default.start(); }),
+      // Note: WidgetSyncService is intentionally NOT started here — the home-screen
+      // widget is an Android-only feature and has no place in the desktop app.
       import('./services/MCPManager').then(m => m.default),
       import('./services/autonomy/ProactiveEngine').then(m => { m.proactiveEngine.start(); return m.proactiveEngine; }),
       import('./services/IdleManager').then(m => m.default),
@@ -416,7 +419,7 @@ const App: React.FC = () => {
       import('./services/GIAForegroundService').then(m => m.default),
       import('./services/MessagingBridge').then(m => m.default),
       import('./services/BackgroundRecovery').then(m => m.backgroundRecovery),
-    ]).then(([, , MCPManager, proactiveEngine, idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, giaForegroundService, messagingBridge, backgroundRecovery]) => {
+    ]).then(([, MCPManager, proactiveEngine, idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, giaForegroundService, messagingBridge, backgroundRecovery]) => {
       svc = { idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, giaForegroundService, messagingBridge, backgroundRecovery, proactiveEngine, MCPManager };
       return svc;
     });
@@ -635,6 +638,26 @@ const App: React.FC = () => {
     window.addEventListener('online', goOnline);
     window.addEventListener('offline', goOffline);
     useGiaStore.getState().setConnectionStatus(navigator.onLine ? 'online' : 'offline');
+
+    // SmartNotification digest — deliver batched (non-urgent) notifications as
+    // a summary every 5 minutes and whenever connectivity returns.
+    const flushOnOnline = () => useNotificationStore.getState().flushDigests();
+    const digestTimer = setInterval(flushOnOnline, 5 * 60 * 1000);
+    window.addEventListener('online', flushOnOnline);
+
+    // Offline queue — when connectivity returns, replay any tool calls that
+    // were queued while offline (web lookups etc.) and log their results.
+    import('./services/OfflineQueue').then(({ attachAutoFlush }) => {
+      attachAutoFlush(async (toolId, args) => {
+        const { default: GiaTools } = await import('./services/GiaTools');
+        const tool = GiaTools.getTool(toolId);
+        if (!tool) throw new Error(`Unknown tool: ${toolId}`);
+        const res = await tool.execute(args as Record<string, unknown>);
+        if (!res?.success) throw new Error((res as { error?: string })?.error || 'Tool replay failed');
+        useGiaStore.getState().addConsoleLog({ type: 'tool', content: `[OfflineQueue] Replayed ${toolId} — ${res.content.slice(0, 300)}` });
+        return res;
+      });
+    });
 
     // Provider health check — ping the active provider to verify connectivity
     const checkProvider = async () => {
@@ -866,8 +889,10 @@ const App: React.FC = () => {
     }
     return () => {
       clearTimeout(t1); clearTimeout(t2);
+      clearInterval(digestTimer);
       window.removeEventListener('online', goOnline);
       window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', flushOnOnline);
       window.removeEventListener('mousedown', trackActivity);
       window.removeEventListener('keydown', trackActivity);
       window.removeEventListener('touchstart', trackActivity);

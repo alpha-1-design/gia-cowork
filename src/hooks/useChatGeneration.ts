@@ -830,7 +830,8 @@ onThought: (thought) => {
         signal: ctrl.signal,
         checkpointKey: streamKey,
         messageId: asstId,
-        prompt: answer, history,
+        prompt: answer + '\n\n[If you still need more information to complete the task, ask again with request_clarification — you may ask up to 5-6 questions total across rounds. Otherwise proceed and answer.]',
+        history,
         useWebSearch: state.webSearch,
         useExtendedThinking: state.extThinking,
         temperature: state.extThinking ? undefined : 0.7,
@@ -982,6 +983,7 @@ onThought: (thought) => {
           streamCancel(streamKey);
           const retryFinal = retryDisplayAccumulated || processStreamForDisplay(retryParserState.accumulated);
         state.updateMessage(state.activeSessionId!, id, retryFinal);
+        state.updateMessageSegments(state.activeSessionId!, id, retryParserState.segments);
         if (retryParserState.artifacts.length > 0) {
           state.updateMessageArtifacts(state.activeSessionId!, id, retryParserState.artifacts);
         }

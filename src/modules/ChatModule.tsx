@@ -52,7 +52,12 @@ const extractLocalhostUrl = (text: string): string | null => {
   return m ? m[0] : null;
 };
 
-const ChatModule: React.FC = () => {
+interface ChatModuleProps {
+  /** Force Build Mode on — used by the dedicated Build module wrapper. */
+  build?: boolean;
+}
+
+const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
   const {
     input, setInput, loading, streamingMsgId, streamingMsgIds, voiceEnabled,
     showHistory, setShowHistory, historySearch, setHistorySearch, attachments,
@@ -86,7 +91,8 @@ const ChatModule: React.FC = () => {
     liveFileEdit, setLiveFileEdit,
   } = useChatState();
 
-  const buildMode = useGiaStore((s) => s.buildMode);
+  const buildModeStore = useGiaStore((s) => s.buildMode);
+  const buildMode = forceBuild ?? buildModeStore;
   const setBuildMode = useGiaStore((s) => s.setBuildMode);
   const buildPreviewUrl = useGiaStore((s) => s.buildPreviewUrl);
   const setBuildPreview = useGiaStore((s) => s.setBuildPreview);
@@ -574,7 +580,8 @@ const ChatModule: React.FC = () => {
             </button>
             <div className="w-px h-4 bg-zinc-800 mx-1 shrink-0" />
             <button type="button" onClick={() => {
-              const next = !buildMode;
+              if (forceBuild) return;
+              const next = !buildModeStore;
               setBuildMode(next);
               useGiaStore.getState().updateSharedData({ currentMode: next ? 'build' : 'code' });
             }} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border transition-all tap-feedback shrink-0" style={{ background: buildMode ? '#f9731620' : 'var(--gia-surface)', border: `1px solid ${buildMode ? '#f9731640' : 'var(--gia-border)'}`, color: buildMode ? '#f97316' : 'var(--gia-muted)', fontWeight: 500 }}>

@@ -44,7 +44,7 @@ function classifyThoughtLine(line: string): { kind: 'tool_start' | 'tool_detail'
   if (/^⚡\s+Executing:/.test(line)) return { kind: 'tool_detail' };
   if (/^✅/.test(line)) return { kind: 'tool_done' };
   if (/^⚠️/.test(line)) return { kind: 'tool_failed' };
-  if (/^  ·/.test(line)) return { kind: 'tool_detail' };
+  if (/^ {2}·/.test(line)) return { kind: 'tool_detail' };
   return { kind: 'plain' };
 }
 
