@@ -16,6 +16,31 @@ struct SystemInfo {
     cpu_cores: u32,
 }
 
+/// Temporarily hide the main window so screen captures don't include GIA.
+/// Returns true if the window was hidden. The caller must invoke
+/// `show_after_capture` when done.
+#[tauri::command]
+async fn hide_for_capture(app: tauri::AppHandle) -> Result<bool, String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.hide().map_err(|e| e.to_string())?;
+        // Give the compositor a frame to redraw without the window
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+/// Restore the main window after a capture-induced hide.
+#[tauri::command]
+async fn show_after_capture(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Real hardware report from the OS (not the browser-capped deviceMemory).
 /// Reads /proc/meminfo on Linux; falls back to 0 so the caller can estimate.
 #[tauri::command]
@@ -62,6 +87,8 @@ pub fn run() {
             screen::screen_type_text,
             screen::screen_key,
             screen::screen_scroll,
+            hide_for_capture,
+            show_after_capture,
             whatsapp_bridge::whatsapp_bridge_start,
             whatsapp_bridge::whatsapp_bridge_stop,
             whatsapp_bridge::whatsapp_notify,

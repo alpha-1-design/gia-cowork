@@ -37,6 +37,7 @@ import { useProviderStore } from '../store/useProviderStore';
 import AgentSwarmDashboard from '../components/AgentSwarmDashboard';
 import { TemplateSelector } from '../components/TemplateSelector';
 import { LiveFileEditor } from '../components/LiveFileEditor';
+import VoiceMode from '../components/VoiceMode';
 
 const QUICK_STARTS = [
   { icon: GraduationCap, label: 'Exam Prep', prompt: 'Quiz me on WASSCE past questions for', color: '#a855f7', category: 'study' },
@@ -107,7 +108,7 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
     { key: 'deepSearch', label: 'DeepSearch', icon: Radar, active: deepSearch, color: '#22d3ee' },
     { key: 'extThinking', label: 'Think', icon: Brain, active: extThinking, color: '#f59e0b' },
     { key: 'handsOff', label: 'Hands-off', icon: Zap, active: handsOff, color: '#a855f7' },
-    { key: 'listen', label: 'Listen', icon: Headphones, active: voiceEnabled, color: '#ec4899' },
+    { key: 'listen', label: 'Voice Mode', icon: Headphones, active: voiceEnabled, color: '#ec4899' },
     { key: 'vision', label: 'Vision', icon: Eye, active: localVision, color: '#22c55e' },
     { key: 'translate', label: 'Translate', icon: Languages, active: localTranslate, color: '#14b8a6' },
   ];
@@ -144,6 +145,10 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
   const setShowModelSwitcher = useGiaStore((s) => s.setShowModelSwitcher);
   const [showTemplateSelector, setShowTemplateSelector] = React.useState(false);
   const [showPreviewSheet, setShowPreviewSheet] = React.useState(false);
+  const [showVoiceMode, setShowVoiceMode] = React.useState(false);
+  const toggleFullScreenMode = useGiaStore((s) => s.toggleFullScreenMode);
+  const openVoice = React.useCallback(() => { setShowVoiceMode(true); toggleFullScreenMode(); }, [toggleFullScreenMode]);
+  const closeVoice = React.useCallback(() => { setShowVoiceMode(false); if (useGiaStore.getState().fullScreenMode) toggleFullScreenMode(); }, [toggleFullScreenMode]);
 
   const { greeting, tip } = useProactiveMessage();
 
@@ -558,21 +563,7 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
             <button type="button" onClick={() => imgRef.current?.click()} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-zinc-100 transition-all shrink-0">
               <ImageIcon size={11} /> Photo
             </button>
-            <button type="button" onClick={async () => {
-              try {
-                const { Camera: CapCamera, CameraResultType } = await import('@capacitor/camera');
-                const image = await CapCamera.getPhoto({ resultType: CameraResultType.DataUrl, quality: 85, allowEditing: false, saveToGallery: false });
-                if (image.dataUrl) {
-                  const blob = await (await fetch(image.dataUrl)).blob();
-                  const file = new File([blob], `camera-${Date.now()}.${image.format || 'jpg'}`, { type: `image/${image.format || 'jpeg'}` });
-                  await addFiles([file], true);
-                }
-              } catch (e) {
-                if (e instanceof Error && e.message !== 'User cancelled photos app') {
-                  imgRef.current?.click();
-                }
-              }
-            }} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-zinc-100 transition-all shrink-0">
+            <button type="button" onClick={() => imgRef.current?.click()} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-zinc-100 transition-all shrink-0">
               <Camera size={11} /> Camera
             </button>
             <button type="button" onClick={() => setShowTemplateSelector(true)} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 text-purple-400 hover:text-purple-300 transition-all shrink-0">
@@ -624,7 +615,10 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
             open={showTools}
             onClose={() => setShowTools(false)}
             items={toolItems}
-            onToggle={(key) => toggleFeature(key as 'webSearch' | 'deepSearch' | 'extThinking' | 'handsOff' | 'listen' | 'vision' | 'translate')}
+            onToggle={(key) => {
+              if (key === 'listen') { openVoice(); return; }
+              toggleFeature(key as 'webSearch' | 'deepSearch' | 'extThinking' | 'handsOff' | 'listen' | 'vision' | 'translate');
+            }}
             footer={
               <>
                 {activeSkill && (
@@ -671,7 +665,7 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
           />
         </div>
 
-        <AmbientInput value={input} onChange={handleInputChange} onSubmit={handleSend} onStop={loading ? handleStop : undefined} isLoading={loading} onVoiceToggle={() => toggleFeature('listen')} isVoiceListening={voiceEnabled} placeholder={buildMode ? 'Describe what to build…' : webSearch ? 'Ask anything — I\'ll search the web…' : handsOff ? 'GIA has control — ask and it acts…' : 'Message GIA…'} prefix={buildMode ? <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-medium shrink-0 mr-1"><Hammer size={10} />Build</span> : undefined} />
+        <AmbientInput value={input} onChange={handleInputChange} onSubmit={handleSend} onStop={loading ? handleStop : undefined} isLoading={loading} onVoiceToggle={openVoice} isVoiceListening={voiceEnabled} placeholder={buildMode ? 'Describe what to build…' : webSearch ? 'Ask anything — I\'ll search the web…' : handsOff ? 'GIA has control — ask and it acts…' : 'Message GIA…'} prefix={buildMode ? <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-medium shrink-0 mr-1"><Hammer size={10} />Build</span> : undefined} />
       </div>
 
       <AnimatePresence>
@@ -703,6 +697,11 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
         isOpen={showTemplateSelector}
         onClose={() => setShowTemplateSelector(false)}
       />
+      <AnimatePresence>
+        {showVoiceMode && (
+          <VoiceMode onClose={closeVoice} />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

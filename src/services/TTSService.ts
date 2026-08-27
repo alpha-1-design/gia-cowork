@@ -2,6 +2,7 @@ import { logger } from '../utils/logger';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { isNativePlatform } from '../utils/helpers';
 import { speakWithModelVoice, stopModelVoice } from './ModelVoiceService';
+import localTTS from './LocalTTSService';
 
 const cleanTTS = (text: string) =>
   text
@@ -20,6 +21,7 @@ class TTSService {
 
   private enabled: boolean = localStorage.getItem('gia-tts-enabled') === 'true';
   private modelVoiceEnabled: boolean = localStorage.getItem('gia-model-voice-enabled') !== 'false';
+  private localTTSEnabled: boolean = localStorage.getItem('gia-local-tts-enabled') === 'true';
   private queue: string[] = [];
   private speaking = false;
   private onComplete: SpeakCallback | null = null;
@@ -39,6 +41,13 @@ class TTSService {
   }
 
   isModelVoiceEnabled() { return this.modelVoiceEnabled; }
+
+  setLocalTTSEnabled(v: boolean) {
+    this.localTTSEnabled = v;
+    localStorage.setItem('gia-local-tts-enabled', String(v));
+  }
+
+  isLocalTTSEnabled() { return this.localTTSEnabled; }
 
   isSpeaking() { return this.speaking; }
 
@@ -87,6 +96,10 @@ class TTSService {
     const text = this.queue.shift()!;
 
     try {
+      if (this.localTTSEnabled && localTTS.isReady) {
+        const spoken = await localTTS.speak(text);
+        if (spoken) { this.processQueue(); return; }
+      }
       if (isNative) {
         await TextToSpeech.speak({ text, lang: 'en-US', rate: 1.0, pitch: 1.0, volume: 1.0, category: 'playback' });
       } else {
@@ -141,6 +154,10 @@ class TTSService {
 
     if (this.modelVoiceEnabled) {
       const spoken = await speakWithModelVoice(cleanText);
+      if (spoken) return;
+    }
+    if (this.localTTSEnabled && localTTS.isReady) {
+      const spoken = await localTTS.speak(cleanText);
       if (spoken) return;
     }
     this.enqueue(cleanText);

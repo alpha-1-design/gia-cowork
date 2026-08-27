@@ -1,14 +1,11 @@
 import React, { useEffect, lazy, Suspense, useState, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Bell, X, Lock, Cpu, Download, AlertCircle, Wifi, WifiOff, ClipboardIcon } from 'lucide-react';
+import { Bell, X, Cpu, Download, AlertCircle, Wifi, WifiOff, ClipboardIcon } from 'lucide-react';
 import { useGiaStore, Module } from './store/useGiaStore';
 import { setStorageErrorHandler } from './store/idb-storage';
 import { useShallow } from 'zustand/react/shallow';
 import { useMemoryStore } from './store/useMemoryStore';
 import { useAutonomyStore } from './store/useAutonomyStore';
-import { LocalNotifications } from '@capacitor/local-notifications';
-import { Capacitor } from '@capacitor/core';
-import { App as CapacitorApp } from '@capacitor/app';
 import ChatModule from './modules/ChatModule';
 import BuildModule from './modules/BuildModule';
 import WriterModule from './modules/WriterModule';
@@ -23,22 +20,17 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useNotificationStore } from './store/useNotificationStore';
 import type { IncomingNotification } from './services/SmartNotificationEngine';
 import type { WhatsAppIncomingMessage } from './services/WhatsAppBridgeService';
-import BiometricService from './services/BiometricService';
 import { useProviderStore } from './store/useProviderStore';
 import { logger } from './utils/logger';
-import { useShareTarget } from './hooks/useShareTarget';
 import { useClipboardMonitor } from './hooks/useClipboardMonitor';
-import { useNativeIntents } from './hooks/useNativeIntents';
 import { useAutomationBridge } from './hooks/useAutomationBridge';
 import type { UpdateInfo } from './services/UpdateService';
-import { beginEdgeSwipe, shouldOpenFromEdgeSwipe, type EdgeSwipeState } from './utils/edgeSwipe';
 import './styles/globals.css';
 
 const EngineRoom = lazy(() => import('./components/EngineRoom'));
 const GiaConsole = lazy(() => import('./components/GiaConsole'));
 const TaskBoard = lazy(() => import('./components/TaskBoard').then(m => ({ default: m.TaskBoard })));
 const NotesPanel = lazy(() => import('./components/NotesPanel').then(m => ({ default: m.NotesPanel })));
-const RegionSelectorOverlay = lazy(() => import('./components/RegionSelectorOverlay').then(m => ({ default: m.RegionSelectorOverlay })));
 const ProfileDrawer = lazy(() => import('./components/ProfileDrawer'));
 const SetupWizard = lazy(() => import('./components/SetupWizard'));
 
@@ -131,7 +123,7 @@ const ModuleView: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  const { setModule, showTerminal, setShowTerminal, notifications, clearNotification, showConsole, consoleLogs, setShowConsole, theme, reduceMotion, addNotification, autoStartWakeWord, fullScreenMode } = useGiaStore(useShallow(s => ({
+  const { setModule, showTerminal, setShowTerminal, notifications, clearNotification, showConsole, consoleLogs, setShowConsole, theme, reduceMotion, addNotification, fullScreenMode } = useGiaStore(useShallow(s => ({
       setModule: s.setModule,
       showTerminal: s.showTerminal, setShowTerminal: s.setShowTerminal,
       notifications: s.notifications, clearNotification: s.clearNotification,
@@ -139,75 +131,8 @@ const App: React.FC = () => {
       theme: s.theme,
       reduceMotion: s.reduceMotion,
       addNotification: s.addNotification,
-      autoStartWakeWord: s.autoStartWakeWord,
       fullScreenMode: s.fullScreenMode,
     })));
-  const setShowLeftDrawer = useGiaStore((s) => s.setShowLeftDrawer);
-  const [locked, setLocked] = useState(BiometricService.isLockEnabled());
-  const edgeSwipeRef = useRef<EdgeSwipeState | null>(null);
-
-  // Left-edge swipe-to-open, mirroring the gesture in most AI apps' side
-  // menu. Detection logic lives in utils/edgeSwipe.ts so it's unit
-  // testable without needing jsdom to simulate real touch gestures.
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const t = e.touches[0];
-    if (!t) return;
-    edgeSwipeRef.current = beginEdgeSwipe(t.clientX, t.clientY);
-  }, []);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    const state = edgeSwipeRef.current;
-    if (!state) return;
-    const t = e.touches[0];
-    if (!t) return;
-    if (shouldOpenFromEdgeSwipe(state, t.clientX, t.clientY)) {
-      setShowLeftDrawer(true);
-      edgeSwipeRef.current = null;
-    }
-  }, [setShowLeftDrawer]);
-
-  const handleTouchEnd = useCallback(() => {
-    edgeSwipeRef.current = null;
-  }, []);
-
-  // Hardware Back button (Android): close top overlay → back through module
-  // history → "press again to exit" at root. A ref keeps the native listener
-  // (registered once) reading the latest React state. Must be declared before
-  // any early return (below) to satisfy the rules of hooks.
-  const backActionRef = useRef<() => void>(() => {});
-  const lastBackTsRef = useRef(0);
-  backActionRef.current = () => {
-    const st = useGiaStore.getState();
-    if (st.showModelSwitcher) { st.setShowModelSwitcher(false); return; }
-    if (st.showEngine) { st.setShowEngine(false); return; }
-    if (st.showLeftDrawer) { st.setShowLeftDrawer(false); return; }
-    if (showTerminal) { setShowTerminal(false); return; }
-    if (st.currentModule !== 'chat') { st.goBack(); return; }
-    const now = Date.now();
-    if (now - lastBackTsRef.current < 2000) { CapacitorApp.exitApp(); }
-    else { lastBackTsRef.current = now; st.addNotification('Press back again to exit'); }
-  };
-  useEffect(() => {
-    const handle = CapacitorApp.addListener('backButton', () => backActionRef.current());
-    return () => { handle.then(h => h.remove()); };
-  }, []);
-
-  // Deep link handling for Android (Capacitor appUrlOpen)
-  useEffect(() => {
-    const handle = CapacitorApp.addListener('appUrlOpen', (event: { url: string }) => {
-      const url = event.url;
-      if (url.startsWith('gia://')) {
-        const target = url.replace('gia://', '');
-        useGiaStore.getState().setPendingAction({
-          type: 'deep-link',
-          data: { url: target, raw: url },
-        });
-        useGiaStore.getState().addNotification(`🔗 Deep link received: ${target.slice(0, 40)}...`);
-        useGiaStore.getState().setModule('chat');
-      }
-    });
-    return () => { handle.then(h => h.remove()); };
-  }, []);
   const [showTaskBoard, setShowTaskBoard] = useState(false);
   const [showNotesPanel, setShowNotesPanel] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -219,145 +144,19 @@ const App: React.FC = () => {
   const [showSetup, setShowSetup] = useState(false);
   const [updateNotification, setUpdateNotification] = useState<UpdateInfo | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
-  const offsetSyncRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const showCircleSearch = useGiaStore(s => s.showCircleSearch);
-  const setShowCircleSearch = useGiaStore(s => s.setShowCircleSearch);
-  const setPendingCircleImage = useGiaStore(s => s.setPendingCircleImage);
-  const setModule_ = useGiaStore(s => s.setModule);
-
-  // Trigger screen capture when circle search is activated
-  useEffect(() => {
-    if (!showCircleSearch) return;
-    const start = async () => {
-      try {
-        const { Capacitor } = await import('@capacitor/core');
-        if (Capacitor.isNativePlatform()) {
-          const { GIAOverlay } = await import('./services/GIAOverlay');
-          await GIAOverlay.startOverlay();
-        } else {
-          const { ScreenCaptureService } = await import('./services/ScreenCaptureService');
-          const dataUrl = await ScreenCaptureService.captureScreen();
-          setCapturedImage(dataUrl);
-        }
-      } catch (e) {
-        addNotification((e as Error).message || 'Screen capture failed');
-        setShowCircleSearch(false);
-      }
-    };
-    start();
-  }, [showCircleSearch, addNotification, setShowCircleSearch]);
-
-  const handleRegionSelect = useCallback((croppedUrl: string) => {
-    setCapturedImage(null);
-    setShowCircleSearch(false);
-    setPendingCircleImage(croppedUrl);
-    setModule_('chat');
-    addNotification('Region captured! Analyzing with GIA...');
-  }, [setShowCircleSearch, setPendingCircleImage, setModule_, addNotification]);
-
-  const handleCircleCancel = useCallback(() => {
-    setCapturedImage(null);
-    setShowCircleSearch(false);
-  }, [setShowCircleSearch]);
-
-  // PWA share target
-  const { sharedContent, applySharedContent } = useShareTarget();
-
-  useEffect(() => {
-    if (sharedContent) {
-      addNotification('📩 Content shared to GIA');
-      applySharedContent();
-    }
-  }, [sharedContent, addNotification, applySharedContent]);
 
   // Clipboard monitor — shows toast when interesting content is copied
   const { copiedText, dismissCopied, pasteCopied } = useClipboardMonitor();
 
-  // Native Android intent handling (ASSIST, deep links, share target)
-  useNativeIntents();
+  // Automation bridge — connects AutomationEngine custom events to store actions
   useAutomationBridge();
 
-  // Register service worker for PWA + deep link detection
+  // Deep links are handled via URL params (above) and clipboard paste detection (below).
+  // No platform-specific listener needed on desktop — Tauri deep links arrive as
+  // navigation events that are already covered by the URL param check.
+
+  // Clipboard paste detection (desktop: paste gia:// links)
   useEffect(() => {
-    const init = async () => {
-      if ('serviceWorker' in navigator) {
-        try {
-          const registration = await navigator.serviceWorker.register('/sw.js');
-          logger.log('[SW] Registered');
-
-          // Listen for service worker messages (Telegram, share, etc.)
-          navigator.serviceWorker.addEventListener('message', (event) => {
-            const msg = event.data;
-            if (!msg?.type) return;
-
-            if (msg.type === 'gia-tg-status' && msg.lastUpdateId > 0) {
-              // Sync app's offset to SW's (happens after configure)
-              import('./services/MessagingBridge').then(m => m.default.syncOffset(Number(msg.lastUpdateId)));
-            }
-
-            if (msg.type === 'gia-tg-missed-messages' && msg.messages?.length > 0) {
-              logger.log(`[SW] Received ${msg.messages.length} missed Telegram messages`);
-              for (const incoming of msg.messages) {
-                const ctx = incoming.isGroup ? `group "${incoming.chatTitle}"` : 'DM';
-                logger.log(`[Messaging] Missed ${ctx} from ${incoming.from}: ${incoming.text.slice(0, 80)}`);
-                import('./services/MessagingBridge').then(m => m.default.handleIncomingFromSW(incoming));
-              }
-            }
-          });
-
-          // Check for missed Telegram messages cached by SW while we were away
-          (async () => {
-            try {
-              const sw = registration.active || (await navigator.serviceWorker.ready).active;
-              if (sw) sw.postMessage({ type: 'gia-tg-get-missed' });
-            } catch (e) {
-              logger.warn('[SW] Failed to request missed messages:', e);
-            }
-          })();
-        } catch (e) {
-          logger.warn('[SW] Registration failed:', e);
-        }
-      }
-
-      // Configure status bar for proper safe-area rendering
-      try {
-        const { StatusBar } = await import('@capacitor/status-bar');
-        await StatusBar.setOverlaysWebView({ overlay: false });
-        await StatusBar.setBackgroundColor({ color: '#0a0a0f' });
-      } catch { /* StatusBar plugin may not be available on web */ }
-
-      // Deep link detection — handle ?url= param
-      const params = new URLSearchParams(window.location.search);
-      const deepLink = params.get('url');
-      if (deepLink) {
-        const decoded = decodeURIComponent(deepLink);
-        const giaMatch = decoded.match(/^web\+gian:\/\/(.+)/);
-        if (giaMatch) {
-          const target = decodeURIComponent(giaMatch[1]);
-          useGiaStore.getState().setPendingAction({
-            type: 'deep-link',
-            data: { url: target, raw: decoded },
-          });
-          useGiaStore.getState().addNotification(`🔗 Deep link received: ${target.slice(0, 40)}...`);
-          useGiaStore.getState().setModule('chat');
-          window.history.replaceState(null, '', '/');
-        }
-      }
-
-      return () => document.removeEventListener('paste', handlePaste);
-    };
-    init();
-
-    // Show Setup Wizard if no provider is configured on first launch
-    const { providers } = useProviderStore.getState();
-    const hasAnyProvider = Object.values(providers).some(p => (p.enabled && p.apiKey) || (!p.enabled && p.apiKey && p.apiKey.length > 0));
-    const wizardCompleted = localStorage.getItem('gia-wizard-completed') === 'true';
-    if (!hasAnyProvider && !wizardCompleted) {
-      setShowSetup(true);
-    }
-
-    // Clipboard paste detection (synchronous — cleaned up properly)
     const handlePaste = (e: ClipboardEvent) => {
       const text = e.clipboardData?.getData('text');
       if (text && text.startsWith('gia://')) {
@@ -370,6 +169,26 @@ const App: React.FC = () => {
     };
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
+  }, []);
+
+  // URL parameter deep link detection
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const deepLink = params.get('url');
+    if (deepLink) {
+      const decoded = decodeURIComponent(deepLink);
+      const giaMatch = decoded.match(/^web\+gian:\/\/(.+)/);
+      if (giaMatch) {
+        const target = decodeURIComponent(giaMatch[1]);
+        useGiaStore.getState().setPendingAction({
+          type: 'deep-link',
+          data: { url: target, raw: decoded },
+        });
+        useGiaStore.getState().addNotification(`🔗 Deep link received: ${target.slice(0, 40)}...`);
+        useGiaStore.getState().setModule('chat');
+        window.history.replaceState(null, '', '/');
+      }
+    }
   }, []);
 
   // Theme switching
@@ -395,9 +214,6 @@ const App: React.FC = () => {
   useEffect(() => {
     // Load provider definitions dynamically
     useProviderStore.getState().loadProviders().catch(e => logger.error('[App] Failed to load providers:', e));
-    if (Capacitor.isNativePlatform()) {
-      LocalNotifications.requestPermissions().catch(() => {});
-    }
 
     // Register all tool definitions into the ToolRegistry singleton
     import('./services/tools/index').then(m => m.registerAllTools());
@@ -407,8 +223,6 @@ const App: React.FC = () => {
     let svc: Record<string, any> | null = null;
     const servicesReady = Promise.all([
       import('./services/SchedulerService').then(m => { m.default.start(); }),
-      // Note: WidgetSyncService is intentionally NOT started here — the home-screen
-      // widget is an Android-only feature and has no place in the desktop app.
       import('./services/MCPManager').then(m => m.default),
       import('./services/autonomy/ProactiveEngine').then(m => { m.proactiveEngine.start(); return m.proactiveEngine; }),
       import('./services/IdleManager').then(m => m.default),
@@ -416,11 +230,10 @@ const App: React.FC = () => {
       import('./services/GiaBrain').then(m => m.setSystemContext),
       import('./services/WakeLockService').then(m => m.default),
       import('./services/KeepaliveService').then(m => m.default),
-      import('./services/GIAForegroundService').then(m => m.default),
       import('./services/MessagingBridge').then(m => m.default),
       import('./services/BackgroundRecovery').then(m => m.backgroundRecovery),
-    ]).then(([, MCPManager, proactiveEngine, idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, giaForegroundService, messagingBridge, backgroundRecovery]) => {
-      svc = { idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, giaForegroundService, messagingBridge, backgroundRecovery, proactiveEngine, MCPManager };
+    ]).then(([, MCPManager, proactiveEngine, idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, messagingBridge, backgroundRecovery]) => {
+      svc = { idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, messagingBridge, backgroundRecovery, proactiveEngine, MCPManager };
       return svc;
     });
 
@@ -436,8 +249,6 @@ const App: React.FC = () => {
     };
     window.addEventListener('mousedown', trackActivity);
     window.addEventListener('keydown', trackActivity);
-    window.addEventListener('touchstart', trackActivity);
-    import('./services/PluginManager').then(m => m.default.initialize());
 
     // Desktop intelligence spine — cross-store event bridge → activity learning
     import('./services/EventBridge').then(({ EventBridge }) => {
@@ -505,11 +316,7 @@ const App: React.FC = () => {
       setInterval(check, 15000);
     });
 
-    // Two-way WhatsApp (OpenClaw-style) — event-driven, zero polling.
-    // The sidecar pushes every incoming message over stdout -> Rust ->
-    // `whatsapp://incoming` Tauri event the moment it lands, so this
-    // costs nothing when idle. We surface notifications, keep per-chat
-    // conversation memory, and answer bursts through GiaBrain.
+    // Two-way WhatsApp — event-driven via Tauri sidecar.
     import('./services/WhatsAppBridgeService').then(async ({ whatsAppBridgeService }) => {
       const { whatsAppSession } = await import('./services/whatsappSession');
       const { default: GiaBrain } = await import('./services/GiaBrain');
@@ -687,33 +494,9 @@ const App: React.FC = () => {
       }, 4000);
     }
 
-    // Persistent notification — shows in Android notification tray while GIA is running
-    const LONGRUNNING_NOTIF_ID = 9999;
-    const showPersistentNotification = async (messagingBridge: { isConnected: (ch: string) => boolean }) => {
-      try {
-        const { Capacitor } = await import('@capacitor/core');
-        if (!Capacitor.isNativePlatform()) return;
-        const telegramLabel = messagingBridge.isConnected('telegram') ? ' • Telegram active' : '';
-        await LocalNotifications.schedule({
-          notifications: [{
-            id: LONGRUNNING_NOTIF_ID,
-            title: 'GIA is running',
-            body: `Long-running mode${telegramLabel}`,
-            ongoing: true,
-            autoCancel: false,
-          }],
-        });
-      } catch { /* noop */ }
-    };
-    const dismissPersistentNotification = async () => {
-      try {
-        await LocalNotifications.cancel({ notifications: [{ id: LONGRUNNING_NOTIF_ID }] });
-      } catch { /* noop */ }
-    };
-
     // Long-running mode: wake lock + keepalive + idle model unload + messaging polling + fast autonomy
     const cleanupFns: (() => void)[] = [];
-    servicesReady.then(({ wakeLockService, keepaliveService, idleManager, proactiveEngine, messagingBridge, giaForegroundService }) => {
+    servicesReady.then(({ wakeLockService, keepaliveService, idleManager, proactiveEngine, messagingBridge }) => {
       const startLongRunning = async () => {
         if (!useGiaStore.getState().longRunningMode) return;
         await wakeLockService.start();
@@ -723,15 +506,11 @@ const App: React.FC = () => {
         if (messagingBridge.isConnected('telegram')) {
           messagingBridge.startPolling();
         }
-        await giaForegroundService.start(true);
-        await showPersistentNotification(messagingBridge);
       };
       const stopLongRunning = async () => {
-        await giaForegroundService.stop();
         await wakeLockService.stop();
         await keepaliveService.stop();
         idleManager.stop();
-        await dismissPersistentNotification();
       };
       const unsubUnload = idleManager.onIdleTimeout(async () => {
         if (!useGiaStore.getState().autoModelUnload) return;
@@ -751,9 +530,6 @@ const App: React.FC = () => {
       // Configure SW polling for Telegram
       if (messagingBridge.isConnected('telegram')) {
         messagingBridge.configureSWPolling();
-        offsetSyncRef.current = setInterval(() => {
-          messagingBridge.syncOffsetToSW();
-        }, 30000);
       }
 
       // Messaging bridge — process incoming Telegram messages via GiaBrain
@@ -792,101 +568,16 @@ const App: React.FC = () => {
       );
     });
 
-    // Auto-start wake word listening if enabled
-    if (autoStartWakeWord) {
-      (async () => {
-        try {
-          const { GIAWakeWord } = await import('./services/GIAWakeWord');
-          await GIAWakeWord.startListening();
-          addNotification('Wake word listening enabled');
-        } catch (e) {
-          logger.error('[App] Auto-start wake word failed:', e);
-        }
-      })();
-    }
-
-    // Native Circle to Search overlay result handler
-    let overlayHandle: Promise<{ remove: () => void }> | undefined;
-    let wakeHandle: Promise<{ remove: () => void }> | undefined;
-    (async () => {
-      try {
-        const { Capacitor } = await import('@capacitor/core');
-        if (!Capacitor.isNativePlatform()) return;
-        const { GIAOverlay } = await import('./services/GIAOverlay');
-        overlayHandle = GIAOverlay.addListener('overlayResult', (result: { cancelled?: boolean; dataUrl?: string; text?: string }) => {
-          if (result.cancelled) return;
-          if (result.dataUrl) {
-            setPendingCircleImage(result.dataUrl);
-            if (result.text) useGiaStore.getState().setPendingInput(result.text);
-            setModule('chat');
-          } else if (result.text) {
-            useGiaStore.getState().setPendingInput(result.text);
-            setModule('chat');
-          }
-        });
-      } catch (e) {
-        logger.warn('[App] Native overlay setup failed:', e);
-      }
-    })();
-
-    // Chain wake word → circle overlay + voice capture on native
-    (async () => {
-      try {
-        const { Capacitor } = await import('@capacitor/core');
-        if (!Capacitor.isNativePlatform()) return;
-        const { GIAWakeWord } = await import('./services/GIAWakeWord');
-        wakeHandle = GIAWakeWord.addListener('wakeWordDetected', async () => {
-          try {
-            const { GIAOverlay } = await import('./services/GIAOverlay');
-            await GIAOverlay.startOverlay();
-
-            setTimeout(async () => {
-              try {
-                const { SpeechRecognition } = await import('@capgo/capacitor-speech-recognition');
-                const { available } = await SpeechRecognition.available();
-                if (!available) return;
-
-                const result = await SpeechRecognition.start({
-                  language: 'en-US',
-                  partialResults: false,
-                  popup: false,
-                });
-
-                if (result?.matches?.length && result.matches[0]?.length > 0) {
-                  const transcript = result.matches[0].replace(/[^\w\s']/g, '').trim();
-                  if (transcript.length >= 2) {
-                    useGiaStore.getState().setPendingInput(transcript);
-                    useGiaStore.getState().setModule('chat');
-                    await GIAOverlay.hideOverlay();
-                  }
-                }
-              } catch (e) {
-                logger.warn('[App] Voice capture after wake word failed:', e);
-              }
-            }, 600);
-          } catch (e) {
-            logger.warn('[App] Wake word overlay chaining failed:', e);
-          }
-        });
-      } catch (e) {
-        logger.warn('[App] Wake word overlay chain setup failed:', e);
-      }
-    })();
-
     // App lifecycle — persist + recover on resume
     servicesReady.then(s => s.backgroundRecovery.recover());
-    const appStateHandle = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
-      if (!isActive) {
-        logger.log('[App] Backgrounded — state persisted');
-      } else {
+    const visibilityHandler = () => {
+      if (document.visibilityState === 'visible') {
         servicesReady.then(s => s.backgroundRecovery.recover());
-        logger.log('[App] Foreground — checking for interrupted tasks');
+        logger.log('[App] Window focused — checking for interrupted tasks');
       }
-    });
+    };
+    document.addEventListener('visibilitychange', visibilityHandler);
 
-    if (locked) {
-      handleBiometric();
-    }
     return () => {
       clearTimeout(t1); clearTimeout(t2);
       clearInterval(digestTimer);
@@ -895,21 +586,12 @@ const App: React.FC = () => {
       window.removeEventListener('online', flushOnOnline);
       window.removeEventListener('mousedown', trackActivity);
       window.removeEventListener('keydown', trackActivity);
-      window.removeEventListener('touchstart', trackActivity);
-      appStateHandle.then(h => h.remove());
-      if (overlayHandle) overlayHandle.then(h => h.remove()).catch(() => {});
-      if (wakeHandle) wakeHandle.then(h => h.remove()).catch(() => {});
+      document.removeEventListener('visibilitychange', visibilityHandler);
       if (svc) { svc.MCPManager.shutdown(); svc.SystemService.stopMonitoring(); svc.proactiveEngine.stop(); }
       for (const fn of cleanupFns) fn();
-      if (offsetSyncRef.current) clearInterval(offsetSyncRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleBiometric = async () => {
-    const ok = await BiometricService.verify();
-    if (ok) setLocked(false);
-  };
 
   useEffect(() => {
     if (notifications.length === 0) return;
@@ -918,34 +600,10 @@ const App: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [notifications, clearNotification]);
 
-  if (locked) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-6 bg-zinc-950 px-8 text-center">
-        <div className="w-20 h-20 rounded-3xl bg-violet-600/20 border border-violet-500/20 flex items-center justify-center">
-          <Lock size={32} className="text-violet-500" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-white">GIA Workspace Locked</h2>
-          <p className="text-sm text-zinc-500 mt-2">Biometric authentication is required to access your private workspace.</p>
-        </div>
-        <button 
-          onClick={handleBiometric}
-          className="gia-btn gia-btn-primary px-8 py-3 rounded-2xl font-semibold"
-        >
-          Authenticate
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div
       className="flex flex-col h-full overflow-hidden relative"
       style={{ background: 'var(--gia-bg)' }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
     >
       <Suspense fallback={null}>
         <ProfileDrawer />
@@ -1118,12 +776,6 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* ProtocolPanel (the lightning-bolt panel) removed from primary UI:
-          tool-call approvals now render inline under GIA's message instead
-          of behind a toggle. showProtocols/setShowProtocols kept in the
-          store since ProtocolsApprovalsSection doesn't depend on removing
-          them and nothing else references this mount anymore. */}
-
       {showTaskBoard && (
         <div className="fixed inset-0 z-[150] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowTaskBoard(false)}>
           <div className="relative rounded-2xl w-full max-w-4xl h-[80vh] overflow-hidden shadow-2xl" style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border)' }} onClick={(e) => e.stopPropagation()}>
@@ -1167,16 +819,6 @@ const App: React.FC = () => {
           >
             <SetupWizard onClose={() => setShowSetup(false)} onComplete={() => setShowSetup(false)} />
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showCircleSearch && capturedImage && (
-          <RegionSelectorOverlay
-            imageSrc={capturedImage}
-            onSelect={handleRegionSelect}
-            onCancel={handleCircleCancel}
-          />
         )}
       </AnimatePresence>
 

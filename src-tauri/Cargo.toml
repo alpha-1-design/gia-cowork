@@ -28,4 +28,5 @@ base64 = "0.22"
 screenshots = "0.8.10"
 enigo = "0.6.1"
 tauri-plugin-deep-link = "2.4.9"
+tokio = { version = "1", features = ["time"] }
 

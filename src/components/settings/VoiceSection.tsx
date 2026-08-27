@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Headphones, Radio, Mic, MicOff, Activity, Play, Square, AlertTriangle, Download } from 'lucide-react';
+import { Headphones, Radio, Mic, MicOff, Activity, Play, Square, AlertTriangle, Download, Volume2 } from 'lucide-react';
 import { useGiaStore } from '../../store/useGiaStore';
 import TTSService from '../../services/TTSService';
 import WhisperService from '../../services/WhisperService';
+import localTTS from '../../services/LocalTTSService';
 import { LANGUAGES } from '../../config/constants';
 import { Switch } from '../ui/Switch';
 
@@ -36,6 +37,10 @@ export const VoiceSection: React.FC = () => {
   const [useWhisper, setUseWhisper] = useState(() => localStorage.getItem('gia-use-whisper') === 'true');
   const [whisperStatus, setWhisperStatus] = useState(WhisperService.status);
   const [whisperLoading, setWhisperLoading] = useState(false);
+
+  const [localTTSEnabled, setLocalTTSEnabled] = useState(() => TTSService.isLocalTTSEnabled());
+  const [localTTSStatus, setLocalTTSStatus] = useState(localTTS.status);
+  const [localTTSLoading, setLocalTTSLoading] = useState(false);
 
   // ── Diagnostics state ──────────────────────────────────────────────
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus>({
@@ -279,6 +284,59 @@ export const VoiceSection: React.FC = () => {
         label="Model Voice"
         description="Use the model's own voice (OpenAI / Gemini native speech) instead of the device voice. Auto-falls back to device TTS when unavailable."
         accentColor="#a855f7"
+      />
+
+      <div className="border-t" style={{ borderColor: 'var(--gia-border)', margin: '4px 0' }} />
+
+      <div className="flex items-center gap-2">
+        <Volume2 size={14} style={{ color: '#06b6d4' }} />
+        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--gia-muted)' }}>
+          On-Device TTS
+        </span>
+      </div>
+      <p className="text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>
+        Uses SpeechT5 ONNX model for on-device text-to-speech. GIA speaks locally with zero API calls. Downloads once (~300MB), works fully offline.
+      </p>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={async () => {
+            if (localTTSLoading) return;
+            setLocalTTSLoading(true);
+            try {
+              if (localTTS.isReady) {
+                await localTTS.unload();
+                setLocalTTSStatus('unloaded');
+              } else {
+                await localTTS.loadModel();
+                setLocalTTSStatus('ready');
+              }
+            } catch {
+              setLocalTTSStatus('error');
+            } finally {
+              setLocalTTSLoading(false);
+            }
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-medium transition-colors"
+          style={{
+            background: localTTSStatus === 'ready' ? 'rgba(239,68,68,0.15)' : localTTS.status === 'loading' ? 'var(--gia-bg-2)' : '#06b6d4',
+            color: localTTSStatus === 'ready' ? '#ef4444' : localTTSLoading ? 'var(--gia-muted)' : 'white',
+          }}
+        >
+          {localTTSLoading ? 'Downloading…' : localTTSStatus === 'ready' ? 'Unload Model' : 'Download SpeechT5'}
+        </button>
+        <span className="text-[9px]" style={{ color: localTTSStatus === 'ready' ? '#06b6d4' : localTTSStatus === 'error' ? '#ef4444' : 'var(--gia-muted-2)' }}>
+          {localTTSStatus === 'ready' ? '✓ Loaded' : localTTSStatus === 'error' ? 'Error' : localTTSStatus === 'loading' ? 'Downloading ~300MB…' : 'Not loaded'}
+        </span>
+      </div>
+
+      <Switch
+        checked={localTTSEnabled}
+        onChange={v => { setLocalTTSEnabled(v); TTSService.setLocalTTSEnabled(v); }}
+        icon={<Volume2 size={11} />}
+        label="Use On-Device TTS"
+        description="When enabled, GIA uses the local SpeechT5 model for speech. Falls back to device/model voice when unloaded."
+        accentColor="#06b6d4"
       />
 
       <div className="border-t" style={{ borderColor: 'var(--gia-border)', margin: '4px 0' }} />

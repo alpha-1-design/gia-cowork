@@ -336,6 +336,8 @@ interface GiaState {
   hapticFeedback: boolean;
   fullScreenMode: boolean;
   toggleFullScreenMode: () => void;
+  showVoiceMode: boolean;
+  setShowVoiceMode: (v: boolean) => void;
   thinkingPhase: ThinkingPhase;
   liveThoughts: Record<string, string>;
   liveSegments: Record<string, MessageSegment[]>;
@@ -613,6 +615,9 @@ export const useGiaStore = create<GiaState>()(
       longRunningMode: (() => { try { return localStorage.getItem('gia-long-running') === 'true'; } catch { return false; } })(),
       autoModelUnload: (() => { try { return localStorage.getItem('gia-auto-model-unload') !== 'false'; } catch { return true; } })(),
       fullScreenMode: false,
+      showVoiceMode: false,
+
+      setShowVoiceMode: (v) => set({ showVoiceMode: v }),
 
       setBuildMode: (v) => set((s) => ({ buildMode: v, buildSessionId: v ? s.activeSessionId : s.buildSessionId })),
       setBuildPreview: (url) => set({ buildPreviewUrl: url }),

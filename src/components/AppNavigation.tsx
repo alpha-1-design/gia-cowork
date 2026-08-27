@@ -35,7 +35,7 @@ const AppNavigation: React.FC<AppNavigationProps> = () => {
   return (
     <header className="flex items-center justify-between px-4 py-2 shrink-0 relative z-[100] h-14 overflow-visible">
       <div className="flex items-center gap-2 min-w-0">
-        <h1 className="text-lg font-bold tracking-tight leading-none shrink-0" style={{ color: 'var(--gia-text)' }}>GIA</h1>
+        <h1 className="text-lg font-bold tracking-tight leading-none shrink-0 cursor-pointer select-none tap-feedback" style={{ color: 'var(--gia-text)' }} onClick={() => setShowLeftDrawer(true)} title="Open sidebar">GIA</h1>
         {currentModule !== 'chat' && (
           <button
             onClick={() => setShowLeftDrawer(true)}

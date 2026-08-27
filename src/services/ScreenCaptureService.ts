@@ -36,6 +36,15 @@ export class ScreenCaptureService {
       throw new Error('Screen capture not supported in this browser');
     }
 
+    // Hide the GIA window before capture so she doesn't appear in her own screenshot.
+    // This is critical for use cases like interviews where GIA is helping the user
+    // and should not be visible in screen shares or recordings.
+    let wasHidden = false;
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      wasHidden = await invoke<boolean>('hide_for_capture');
+    } catch { /* not in Tauri — skip hiding */ }
+
     let stream: MediaStream | null = null;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
@@ -47,6 +56,9 @@ export class ScreenCaptureService {
       const video = document.createElement('video');
       video.srcObject = stream;
       await video.play();
+
+      // Brief delay to ensure the window is fully hidden before frame capture
+      if (wasHidden) await new Promise(r => setTimeout(r, 200));
 
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth || 1280;
@@ -68,6 +80,14 @@ export class ScreenCaptureService {
       }
       logger.error('[ScreenCapture] Failed:', e);
       throw e;
+    } finally {
+      // Always restore the window, even if capture failed
+      if (wasHidden) {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core');
+          await invoke('show_after_capture');
+        } catch { /* best-effort restore */ }
+      }
     }
   }
 }

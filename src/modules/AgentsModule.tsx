@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, X, Trash2, Upload, FileText,
   ChevronLeft, Send, Loader2, Settings2,
-  Code2, Cpu, Image,
+  Code2, Cpu, Image, Zap,
   AlertTriangle, RefreshCw, Search, Globe, Sparkles,
   ArrowUpDown, MessageSquare, Check, Filter,
   type LucideIcon,
@@ -17,11 +17,13 @@ import { genId } from '../utils/id';
 import { resolveAgentIcon } from '../utils/agentIcons';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 import OrbAvatar from '../components/OrbAvatar';
+import AgentDispatchBoard from '../components/AgentDispatchBoard';
+import { useAgentTaskStore } from '../store/useAgentTaskStore';
 
 // ── Max messages per agent chat session stored in IDB ──────────────────────
 const MAX_MESSAGES_PER_SESSION = 100;
 
-type ViewState = 'list' | 'chat';
+type ViewState = 'list' | 'chat' | 'dispatch';
 type SortOption = 'newest' | 'alphabetical' | 'tools' | 'files';
 
 const AGENT_ICONS: { name: string; color: string }[] = [
@@ -184,6 +186,7 @@ const AgentsModule: React.FC = () => {
     agents: s.agents || [],
     removeAgent: s.removeAgent,
   })));
+  const runningTaskCount = useAgentTaskStore(s => s.runningIds.length);
 
   const [view, setView] = useState<ViewState>('list');
   const [chatAgentId, setChatAgentId] = useState<string | null>(null);
@@ -213,10 +216,29 @@ const AgentsModule: React.FC = () => {
           <AgentListView
             agents={safeAgents}
             onOpenChat={openChat}
+            onOpenDispatch={() => setView('dispatch')}
             onCreateNew={() => setShowCreate(true)}
             onEdit={(id) => setEditAgentId(id)}
             onDelete={removeAgent}
           />
+        )}
+        {view === 'dispatch' && (
+          <AgentErrorBoundary onReset={() => setView('list')}>
+            <div className="flex flex-col h-full">
+              <div className="flex items-center px-3 py-1.5 shrink-0" style={{ borderBottom: '1px solid var(--gia-border)' }}>
+                <button
+                  onClick={() => setView('list')}
+                  className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg"
+                  style={{ color: 'var(--gia-muted)' }}
+                >
+                  ← Back
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <AgentDispatchBoard />
+              </div>
+            </div>
+          </AgentErrorBoundary>
         )}
         {view === 'chat' && agent && (
           <AgentErrorBoundary onReset={() => setView('list')}>
@@ -252,10 +274,11 @@ const AgentsModule: React.FC = () => {
 const AgentListView: React.FC<{
   agents: CustomAgent[];
   onOpenChat: (id: string) => void;
+  onOpenDispatch: () => void;
   onCreateNew: () => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-}> = ({ agents, onOpenChat, onCreateNew, onEdit, onDelete }) => {
+}> = ({ agents, onOpenChat, onOpenDispatch, onCreateNew, onEdit, onDelete }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
@@ -314,13 +337,23 @@ const AgentListView: React.FC<{
             {agents.length} {agents.length === 1 ? 'custom agent' : 'custom agents'} · {totalToolsCount} tools · {totalFilesCount} files
           </p>
         </div>
-        <button
-          onClick={onCreateNew}
-          className="w-9 h-9 rounded-xl flex items-center justify-center tap-feedback transition-transform hover:scale-105"
-          style={{ background: 'var(--gia-accent)', color: 'white', boxShadow: '0 4px 14px rgba(168,85,247,0.35)' }}
-        >
-          <Plus size={18} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onOpenDispatch}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-semibold tap-feedback transition-all"
+            style={{ background: 'rgba(52,211,153,0.1)', color: '#34d399', border: '1px solid rgba(52,211,153,0.2)' }}
+          >
+            <Zap size={12} />
+            Dispatch
+          </button>
+          <button
+            onClick={onCreateNew}
+            className="w-9 h-9 rounded-xl flex items-center justify-center tap-feedback transition-transform hover:scale-105"
+            style={{ background: 'var(--gia-accent)', color: 'white', boxShadow: '0 4px 14px rgba(168,85,247,0.35)' }}
+          >
+            <Plus size={18} />
+          </button>
+        </div>
       </div>
 
       {agents.length > 0 && (
