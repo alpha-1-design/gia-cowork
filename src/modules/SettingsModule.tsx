@@ -41,7 +41,7 @@ const CATEGORIES: { id: SettingsPage; icon: React.ReactNode; label: string; desc
   { id: 'knowledge', icon: <Brain size={20} />, label: 'Knowledge Base', desc: 'Upload & index documents for semantic search & RAG', sections: 'Document management', color: '#10b981' },
   { id: 'system', icon: <Battery size={20} />, label: 'System & Performance', desc: 'Security, code execution, voice, power & reliability', sections: '7 sections', color: '#34d399' },
   { id: 'local-ai', icon: <Cpu size={20} />, label: 'Local AI', desc: 'On-device LLM models & vision recognition', sections: '2 sections', color: '#22c55e' },
-  { id: 'app-extensions', icon: <Puzzle size={20} />, label: 'App & Extensions', desc: 'Plugins, install APK, code history & developer settings', sections: '5 sections', color: '#a855f7' },
+  { id: 'app-extensions', icon: <Puzzle size={20} />, label: 'App & Extensions', desc: 'Plugins, extensions, code history & developer settings', sections: '5 sections', color: '#a855f7' },
   { id: 'skills-marketplace', icon: <Sparkles size={20} />, label: 'Skills Marketplace', desc: 'Install, create, and manage GIA skills', sections: 'Marketplace', color: '#f59e0b' },
   { id: 'unimind', icon: <Smartphone size={20} />, label: 'Unimind', desc: 'Pair your phone — presence, remote actions, lock & unlock across devices', sections: 'Cross-device', color: '#8b5cf6' },
   { id: 'dashboard', icon: <Activity size={20} />, label: 'Dashboard', desc: 'Performance analytics, tool usage, error tracking & insights', sections: '6 sections', color: '#3b82f6' },
@@ -328,7 +328,7 @@ const SettingsModule: React.FC = () => {
         <div className="flex-1">
           <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Terminal</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>
-            Manual command shell · chat with GIA · packages & root environment
+            Real host shell · run commands on this machine
           </p>
         </div>
         <ChevronRight size={14} style={{ color: 'var(--gia-muted)' }} />
@@ -518,7 +518,7 @@ const SettingsModule: React.FC = () => {
 
       {/* Version */}
       <p className="text-center text-[10px] pb-4 pt-2" style={{ color: 'var(--gia-muted-2)' }}>
-        GIA v2.4.0.0 · Built by Samuel Mensah · Alpha-1 Studio, Ghana
+        GIA Cowork v0.1.0 · Built by Samuel Mensah · Alpha-1 Studio, Ghana
       </p>
 
       <ConfirmDialog

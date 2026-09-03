@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useGiaStore } from '../store/useGiaStore';
 import { templateLearning } from '../services/TemplateLearning';
-import { X, Clock, Target, RotateCw, GraduationCap, BookOpen, Code, Calendar, Bug, GitBranch, FileCode, Zap } from 'lucide-react';
+import { X, Clock, Target, RotateCw, GraduationCap, BookOpen, Code, Calendar, Bug, GitBranch, FileCode, FileSearch, Hammer, Zap } from 'lucide-react';
 
 interface RecommendedTemplate {
   id: string;
@@ -26,6 +26,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?:
   'zap': Zap, 'clock': Clock, 'target': Target, 'rotate-cw': RotateCw,
   'graduation-cap': GraduationCap, 'book-open': BookOpen, 'code': Code, 'link': Code,
   'calendar': Calendar, 'bug': Bug, 'git-branch': GitBranch, 'file-code': FileCode, 'sparkles': Zap,
+  'file-search': FileSearch, 'hammer': Hammer,
 };
 function getIcon(name: string) { return ICON_MAP[name] || Zap; }
 

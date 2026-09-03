@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, type PanInfo } from 'motion/react';
 import { shouldDismissFromDrag } from './dragDismiss';
 
@@ -26,6 +26,22 @@ interface BottomSheetProps {
 // threshold is unit testable without needing jsdom to simulate real
 // framer-motion drag physics (which it can't do reliably).
 
+// Desktop builds should not look like a phone: on md+ screens this renders
+// as a centered modal dialog (no grabber, no drag-to-dismiss) instead of a
+// bottom sheet. Narrow viewports keep the phone behavior.
+function useIsNarrow(): boolean {
+  const [narrow, setNarrow] = useState(
+    () => typeof window === 'undefined' || window.innerWidth < 768,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const onChange = () => setNarrow(!mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
 export const BottomSheet: React.FC<BottomSheetProps> = ({
   open,
   onClose,
@@ -34,6 +50,8 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   className = '',
   zIndex = 120,
 }) => {
+  const narrow = useIsNarrow();
+
   const handleDragEnd = (_e: unknown, info: PanInfo) => {
     if (shouldDismissFromDrag(info)) {
       onClose();
@@ -53,25 +71,26 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
             onClick={onClose}
           />
           <motion.div
-            className={`fixed inset-x-0 bottom-0 rounded-t-3xl overflow-hidden flex flex-col ${className}`}
+            className={`fixed inset-x-0 bottom-0 rounded-t-3xl overflow-hidden flex flex-col md:inset-0 md:m-auto md:max-w-lg md:rounded-2xl md:border ${className}`}
             style={{
               zIndex: zIndex + 1,
               background: 'var(--gia-surface)',
               borderTop: '1px solid var(--gia-border)',
               maxHeight,
             }}
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
+            initial={{ y: narrow ? '100%' : 0, opacity: narrow ? 1 : 0, scale: narrow ? 1 : 0.96 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: narrow ? '100%' : 0, opacity: narrow ? 1 : 0, scale: narrow ? 1 : 0.96 }}
             transition={{ type: 'spring', stiffness: 320, damping: 34 }}
-            drag="y"
+            drag={narrow ? 'y' : false}
             dragDirectionLock
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.5 }}
             onDragEnd={handleDragEnd}
           >
-            {/* Grabber handle — the visual affordance that this is draggable */}
-            <div className="flex justify-center pt-2 pb-1 shrink-0 cursor-grab active:cursor-grabbing">
+            {/* Grabber handle — the visual affordance that this is draggable.
+                Desktop dialogs don't need it. */}
+            <div className="flex justify-center pt-2 pb-1 shrink-0 cursor-grab active:cursor-grabbing md:hidden">
               <div className="w-9 h-1 rounded-full" style={{ background: 'var(--gia-border)' }} />
             </div>
             {children}

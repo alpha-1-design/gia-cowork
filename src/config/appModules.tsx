@@ -1,10 +1,12 @@
-import { MessageCircle, GraduationCap, BarChart2, PenLine, ListTodo, Settings, Bot, Target, Hammer } from 'lucide-react';
+import { MessageCircle, BarChart2, PenLine, ListTodo, Settings, Bot, Target, Hammer } from 'lucide-react';
 import type { Module } from '../store/useGiaStore';
 
+// GIA Cowork is a desktop workspace: the Exam prep module (WASSCE/BECE/JAMB)
+// was carried over from the Android app but doesn't belong in the desktop
+// module rail. It stays out of MODULES so it appears nowhere in the UI.
 export const MODULES: { id: Module; label: string; icon: React.ReactNode; color: string }[] = [
   { id: 'chat',     label: 'Chat',     icon: <MessageCircle size={18} />, color: 'var(--mod-chat)' },
   { id: 'build',    label: 'Build',    icon: <Hammer size={18} />,        color: 'var(--mod-build)' },
-  { id: 'exam',     label: 'Exam',     icon: <GraduationCap size={18} />, color: 'var(--mod-exam)' },
   { id: 'analyst',  label: 'Analyst',  icon: <BarChart2 size={18} />,    color: 'var(--mod-analyst)' },
   { id: 'writer',   label: 'Writer',   icon: <PenLine size={18} />,      color: 'var(--mod-writer)' },
   { id: 'planner',  label: 'Planner',  icon: <ListTodo size={18} />,     color: 'var(--mod-planner)' },

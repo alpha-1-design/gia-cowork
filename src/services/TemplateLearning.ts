@@ -180,11 +180,11 @@ class TemplateLearningManager {
 
   getGlobalTemplates(): Template[] {
     return [
-      { id: 'exam-prep', icon: 'graduation-cap', label: 'Exam Prep', prompt: 'Quiz me on WASSCE past questions for', color: '#a855f7', tags: ['study', 'test', 'revision'], frequency: 0, difficulty: 'intermediate' },
-      { id: 'bece-prep', icon: 'book-open', label: 'BECE Prep', prompt: 'Help me study for BECE — topic:', color: '#3b82f6', tags: ['study', 'test', 'exam'], frequency: 0, difficulty: 'beginner' },
+      { id: 'analyze-file', icon: 'file-search', label: 'Analyze a File', prompt: 'Attach a file — summarize or analyze it:', color: '#f59e0b', tags: ['work', 'files', 'analysis'], frequency: 0, difficulty: 'beginner' },
+      { id: 'build-app', icon: 'hammer', label: 'Build an App', prompt: 'Build a web app that…', color: '#f97316', tags: ['build', 'web', 'app'], frequency: 0, difficulty: 'intermediate' },
       { id: 'code-help', icon: 'code', label: 'Code Help', prompt: 'Explain and fix this code:', color: '#ec4899', tags: ['debug', 'code', 'fix'], frequency: 0, difficulty: 'intermediate' },
       { id: 'summarize-url', icon: 'link', label: 'Summarize URL', prompt: 'Summarize this URL: https://', color: '#10b981', tags: ['web', 'research', 'content'], frequency: 0, difficulty: 'beginner' },
-      { id: 'plan-week', icon: 'calendar', label: 'Plan My Week', prompt: 'Help me plan my study week. My exams are:', color: '#f59e0b', tags: ['productivity', 'planning', 'schedule'], frequency: 0, difficulty: 'intermediate' },
+      { id: 'plan-project', icon: 'calendar', label: 'Plan a Project', prompt: 'Help me plan a project — goal:', color: '#3b82f6', tags: ['productivity', 'planning', 'project'], frequency: 0, difficulty: 'intermediate' },
       { id: 'code-debug', icon: 'bug', label: 'Code Debug', prompt: 'Debug this code and explain the issues:', color: '#ef4444', tags: ['debug', 'code', 'fix'], frequency: 0, difficulty: 'intermediate' },
       { id: 'refactor-code', icon: 'git-branch', label: 'Refactor Code', prompt: 'Refactor this code for better performance:', color: '#f97316', tags: ['performance', 'optimization', 'code'], frequency: 0, difficulty: 'advanced' },
       { id: 'ts-quickstart', icon: 'file-code', label: 'TypeScript Quick Start', prompt: 'Create a TypeScript file with interfaces for:', color: '#0ea5e9', tags: ['typescript', 'types', 'interfaces'], frequency: 0, difficulty: 'beginner' },

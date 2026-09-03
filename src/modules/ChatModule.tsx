@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Bot, Plus, History, Trash2,
   Paperclip, X, Download, Globe, Image as ImageIcon, Camera, Terminal,
-  Brain, ChevronDown, Sparkles, GraduationCap, Code2,
+  Brain, ChevronDown, Sparkles, Code2,
   BookOpen, Zap, Undo2, Search, Headphones, GitBranch,
   Eye, Loader2, Upload, LayoutTemplate, Languages, Hammer, RotateCcw, Archive, Radar, SlidersHorizontal, Wrench,
   Maximize2, ChevronRight, Settings as SettingsIcon,
@@ -40,11 +40,11 @@ import { LiveFileEditor } from '../components/LiveFileEditor';
 import VoiceMode from '../components/VoiceMode';
 
 const QUICK_STARTS = [
-  { icon: GraduationCap, label: 'Exam Prep', prompt: 'Quiz me on WASSCE past questions for', color: '#a855f7', category: 'study' },
-  { icon: BookOpen, label: 'BECE Prep', prompt: 'Help me study for BECE — topic:', color: '#3b82f6', category: 'study' },
   { icon: Code2, label: 'Code Help', prompt: 'Explain and fix this code:', color: '#ec4899', category: 'code' },
+  { icon: Paperclip, label: 'Analyze a File', prompt: 'Attach a file — summarize or analyze it:', color: '#f59e0b', category: 'work' },
   { icon: Sparkles, label: 'Summarize URL', prompt: 'Summarize this URL: https://', color: '#10b981', category: 'tools' },
-  { icon: Zap, label: 'Plan My Week', prompt: 'Help me plan my study week. My exams are:', color: '#f59e0b', category: 'productivity' },
+  { icon: Hammer, label: 'Build an App', prompt: 'Build a web app that…', color: '#f97316', category: 'build' },
+  { icon: Zap, label: 'Plan a Project', prompt: 'Help me plan a project — goal:', color: '#3b82f6', category: 'productivity' },
 ];
 
 const LOCALHOST_RE = /https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|(10\.\d{1,3}\.\d{1,3}\.\d{1,3})|(192\.168\.\d{1,3}\.\d{1,3})|(172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}))(:\d+)?(\/[^\s<]*)?/i;

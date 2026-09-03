@@ -1,7 +1,7 @@
 import { App as CapacitorApp } from '@capacitor/app';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { GIAUpdate } from './GIAUpdate';
-import { isTauri } from '../platform';
+import { isTauri, isCapacitorNative } from '../platform';
 import { logger } from '../utils/logger';
 
 // Desktop-first OTA. GIA Cowork is a Linux desktop (Tauri) app but reuses the
@@ -69,6 +69,12 @@ class UpdateService {
     if (cached) return cached;
     if (this.checking) return null;
     this.checking = true;
+
+    // Plain-web sessions (e.g. a browser preview of the desktop app) have no
+    // app store or release to update — checking would surface the *mobile*
+    // repo's release ("GIA Android v2.4.x") as a confusing desktop toast.
+    // Only check inside the Tauri shell or a real Capacitor app.
+    if (!isTauri() && !isCapacitorNative()) return null;
 
     try {
       const currentVersion = await getCurrentVersion();

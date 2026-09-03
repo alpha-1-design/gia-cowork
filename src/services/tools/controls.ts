@@ -4,17 +4,17 @@ import type { Tool } from './types';
 export const controlTools: Tool[] = [
   {
     id: 'switch_module', name: 'switch_module',
-    description: 'Switch the active GIA module (chat, build, exam, analyst, writer, planner, settings).',
+    description: 'Switch the active GIA module (chat, build, analyst, writer, planner, settings).',
     schema: {
       type: 'object',
       properties: {
-        module: { type: 'string', description: 'Module to switch to', enum: ['chat', 'build', 'exam', 'analyst', 'writer', 'planner', 'settings'] }
+        module: { type: 'string', description: 'Module to switch to', enum: ['chat', 'build', 'analyst', 'writer', 'planner', 'settings'] }
       },
       required: ['module']
     },
     execute: async ({ module }) => {
       const moduleSchema = z.object({
-        module: z.enum(['chat', 'build', 'exam', 'analyst', 'writer', 'planner', 'settings'])
+        module: z.enum(['chat', 'build', 'analyst', 'writer', 'planner', 'settings'])
       });
       const validationResult = moduleSchema.safeParse({ module });
       if (!validationResult.success) {

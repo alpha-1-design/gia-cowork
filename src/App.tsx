@@ -15,6 +15,9 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ApiKeyInputPanel from './components/ApiKeyInputPanel';
 import { SourcesPanel } from './components/SourcesPanel';
 import AppNavigation from './components/AppNavigation';
+import AppSidebar from './components/AppSidebar';
+import MenuBar from './components/MenuBar';
+import TerminalPanel from './components/TerminalPanel';
 import CommandPalette from './components/CommandPalette';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useNotificationStore } from './store/useNotificationStore';
@@ -141,7 +144,14 @@ const App: React.FC = () => {
   useKeyboardShortcuts([
     { key: 'k', ctrl: true, handler: () => setPaletteOpen(o => !o), preventDefault: true },
   ]);
-  const [showSetup, setShowSetup] = useState(false);
+  // First run: show the SetupWizard until the user completes or skips it
+  // (SetupWizard writes 'gia-wizard-completed' to localStorage on close).
+  const [showSetup, setShowSetup] = useState(() => {
+    try { return localStorage.getItem('gia-wizard-completed') !== 'true'; } catch { return true; }
+  });
+  // Real host-shell terminal (Ctrl+K → Terminal) — separate from Engine
+  // Room, which is the provider-management console.
+  const [showTerminalPanel, setShowTerminalPanel] = useState(false);
   const [updateNotification, setUpdateNotification] = useState<UpdateInfo | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
 
@@ -648,13 +658,30 @@ const App: React.FC = () => {
         </AnimatePresence>
       </div>
 
-{/* Header */}
-       {!fullScreenMode && <AppNavigation />}
+{/* Desktop menu bar */}
+      {!fullScreenMode && (
+        <MenuBar
+          onOpenPalette={() => setPaletteOpen(true)}
+          onOpenTerminal={() => setShowTerminalPanel(true)}
+          onOpenEngineRoom={() => setShowTerminal(true)}
+          onOpenTaskBoard={() => setShowTaskBoard(true)}
+          onOpenNotes={() => setShowNotesPanel(true)}
+        />
+      )}
 
-       {/* Module content */}
-       <main className="flex-1 overflow-hidden relative z-10">
-        <ModuleView />
-      </main>
+      {/* Desktop shell: module rail + (header + module content) */}
+      <div className="flex flex-1 min-h-0">
+        {!fullScreenMode && <AppSidebar />}
+        <div className="flex flex-col flex-1 min-w-0">
+          {/* Header */}
+          {!fullScreenMode && <AppNavigation />}
+
+          {/* Module content */}
+          <main className="flex-1 overflow-hidden relative z-10">
+            <ModuleView />
+          </main>
+        </div>
+      </div>
 
       {/* Clipboard toast */}
       <AnimatePresence>
@@ -751,7 +778,23 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Engine Room overlay */}
+      {/* Real host-shell terminal (Ctrl+K) */}
+      <AnimatePresence>
+        {showTerminalPanel && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[150]"
+          >
+            <TerminalPanel onClose={() => setShowTerminalPanel(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Engine Room overlay — above the app header (z-[100]) so its Back
+          button is clickable; the old z-50 sat under the header's z-[100]. */}
       <AnimatePresence>
         {showTerminal && (
           <motion.div
@@ -759,7 +802,7 @@ const App: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50"
+            className="fixed inset-0 z-[150]"
           >
             <EngineRoom />
           </motion.div>
@@ -830,6 +873,7 @@ const App: React.FC = () => {
         onNavigate={(action) => {
           if (action === 'task-board') setShowTaskBoard(true);
           else if (action === 'notes-panel') setShowNotesPanel(true);
+          else if (action === 'terminal-panel') setShowTerminalPanel(true);
         }}
       />
     </div>

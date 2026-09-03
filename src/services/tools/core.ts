@@ -37,7 +37,7 @@ const environmentInfo: Tool = {
           model: v.model, enabled: v.enabled, apiKeySet: !!v.apiKey,
         })),
         tools: giaTools.getAllTools().map(t => ({ id: t.id, name: t.name, description: t.description })),
-        modules: ['chat', 'exam', 'analyst', 'writer', 'planner', 'settings'],
+        modules: ['chat', 'build', 'analyst', 'writer', 'planner', 'agents', 'autonomy', 'settings'],
         codeRuntimes: runtimes.map(r => ({ language: r.language, version: r.version })).slice(0, 20),
         uiCapabilities: {
           rendersMarkdown: true, syntaxHighlighting: true, codeExecution: true,
@@ -54,7 +54,7 @@ const environmentInfo: Tool = {
           background: 'Started as a novice in tech/programming, fell in love with it in 2025',
           philosophy: 'Freedom and privacy — people should get privacy AND power',
           inspiration: 'GIA is heavily Claude-inspired',
-          mission: 'Built GIA for the African space — an all-round personal assistant for exams, planning, tasks, and beyond',
+          mission: 'Built GIA for the African space — an all-round personal co-worker and assistant for work, planning, tasks, and beyond',
           projects: ['GIA (Generative Interface Agent)', 'Nexus', 'LifeFlow', 'alpha1studio', 'alpha1design', 'privacy-toolkit', 'rehoboth-kitchen-app', 'rhema-fashion', 'vibez-fashion', 'sam-atlas', 'universal-toolbox', 'Termux-Live-', 'Sentinal-pro', 'Core-x', 'FamilyGameNight', 'chatbot', 'BLACKBOX', 'LiquidGlass-PRO-Launcher', 'knowledge-synthesis-engine', 'alpha-analytics', 'alpha1-status-api', 'alpha1-status-frontend', 'My-portfolio-'],
           github: 'https://github.com/alpha-1-design',
           monetization: 'Not focused on money — if people are impressed and choose to support, he\'s grateful',

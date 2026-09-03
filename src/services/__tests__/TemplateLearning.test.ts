@@ -12,17 +12,19 @@ describe('TemplateLearning.getAllTemplates', () => {
     // the picker open empty for anyone who hadn't used it yet.
     const templates = templateLearning.getAllTemplates();
     expect(templates.length).toBeGreaterThan(5);
-    expect(templates.some(t => t.id === 'exam-prep')).toBe(true);
+    expect(templates.some(t => t.id === 'code-help')).toBe(true);
+    expect(templates.some(t => t.id === 'analyze-file')).toBe(true);
+    expect(templates.some(t => t.id === 'build-app')).toBe(true);
     expect(templates.every(t => (t.frequency ?? 0) === 0)).toBe(true);
   });
 
   it('merges in real usage counts for templates that have been used', () => {
-    templateLearning.recordTemplateUse('exam-prep', {});
-    templateLearning.recordTemplateUse('exam-prep', {});
+    templateLearning.recordTemplateUse('analyze-file', {});
+    templateLearning.recordTemplateUse('analyze-file', {});
 
     const templates = templateLearning.getAllTemplates();
-    const examPrep = templates.find(t => t.id === 'exam-prep');
-    expect(examPrep?.frequency).toBe(2);
+    const analyzeFile = templates.find(t => t.id === 'analyze-file');
+    expect(analyzeFile?.frequency).toBe(2);
 
     // Unrelated templates are untouched and still present.
     const codeHelp = templates.find(t => t.id === 'code-help');

@@ -15,7 +15,8 @@ describe('TemplateSelector', () => {
 
   it('shows templates on a fresh account instead of an empty screen', () => {
     const { container } = render(<TemplateSelector isOpen={true} onClose={() => {}} />);
-    expect(container.textContent).toContain('Exam Prep');
+    expect(container.textContent).toContain('Code Help');
+    expect(container.textContent).toContain('Build an App');
     expect(container.textContent).not.toContain('No templates yet');
   });
 
@@ -29,8 +30,8 @@ describe('TemplateSelector', () => {
     expect(container.textContent).toContain('Not used yet');
 
     // Select a template, which records real usage...
-    const examCard = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Exam Prep'));
-    fireEvent.click(examCard!);
+    const card = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Code Help'));
+    fireEvent.click(card!);
 
     // ...reopen and it should now reflect that real usage.
     rerender(<TemplateSelector isOpen={false} onClose={() => {}} />);
@@ -41,10 +42,10 @@ describe('TemplateSelector', () => {
   it('drops the selected template prompt into the composer and closes', () => {
     let closed = false;
     const { container } = render(<TemplateSelector isOpen={true} onClose={() => { closed = true; }} />);
-    const examCard = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Exam Prep'));
-    fireEvent.click(examCard!);
+    const card = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Build an App'));
+    fireEvent.click(card!);
 
     expect(closed).toBe(true);
-    expect(useGiaStore.getState().pendingInput).toContain('WASSCE');
+    expect(useGiaStore.getState().pendingInput).toContain('Build a web app');
   });
 });
