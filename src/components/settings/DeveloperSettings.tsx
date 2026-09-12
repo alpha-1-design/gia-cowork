@@ -16,6 +16,7 @@ const FEATURE_FLAG_LABELS: Record<string, { label: string; description: string }
   screenAgent:         { label: 'Screen Agent', description: 'Reads and analyzes on-screen content.' },
   cloudSync:           { label: 'Cloud Sync', description: 'Syncs your brain across devices via configured sync.' },
   crossDeviceMesh:     { label: 'Cross-Device Mesh', description: 'Local-network peer discovery between your devices.' },
+jarvisEyes:          { label: 'Jarvis Eyes (screen orb)', description: 'Floating screen-awareness orb: on-device vision sees the desktop and feeds GIA short observations. Local-only — nothing leaves the machine.' },
   skillsSDK:           { label: 'Skills SDK', description: 'Enables installable skill packages and lifecycle hooks.' },
   notificationListener: { label: 'Notification Listener', description: 'Captures notifications from other apps for triage.' },
   offlineSTT:          { label: 'Offline Speech-to-Text', description: 'On-device voice transcription without the cloud.' },

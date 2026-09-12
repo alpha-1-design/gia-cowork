@@ -7,6 +7,7 @@ import {
   BookOpen, Zap, Undo2, Search, Headphones, GitBranch,
   Eye, Loader2, Upload, LayoutTemplate, Languages, Hammer, RotateCcw, Archive, Radar, SlidersHorizontal, Wrench,
   Maximize2, ChevronRight, Settings as SettingsIcon,
+  PlugZap, Plug, KeyRound, MessagesSquare,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useGiaStore } from '../store/useGiaStore';
@@ -38,6 +39,8 @@ import AgentSwarmDashboard from '../components/AgentSwarmDashboard';
 import { TemplateSelector } from '../components/TemplateSelector';
 import { LiveFileEditor } from '../components/LiveFileEditor';
 import VoiceMode from '../components/VoiceMode';
+import CameraCaptureModal from '../components/CameraCaptureModal';
+import { isNativePlatform } from '../utils/helpers';
 
 const QUICK_STARTS = [
   { icon: Code2, label: 'Code Help', prompt: 'Explain and fix this code:', color: '#ec4899', category: 'code' },
@@ -144,11 +147,21 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
   const [showToolsCatalog, setShowToolsCatalog] = React.useState(false);
   const setShowModelSwitcher = useGiaStore((s) => s.setShowModelSwitcher);
   const [showTemplateSelector, setShowTemplateSelector] = React.useState(false);
+  const [showCamera, setShowCamera] = React.useState(false);
   const [showPreviewSheet, setShowPreviewSheet] = React.useState(false);
   const [showVoiceMode, setShowVoiceMode] = React.useState(false);
   const toggleFullScreenMode = useGiaStore((s) => s.toggleFullScreenMode);
   const openVoice = React.useCallback(() => { setShowVoiceMode(true); toggleFullScreenMode(); }, [toggleFullScreenMode]);
   const closeVoice = React.useCallback(() => { setShowVoiceMode(false); if (useGiaStore.getState().fullScreenMode) toggleFullScreenMode(); }, [toggleFullScreenMode]);
+
+  const handleCameraCapture = React.useCallback((dataUrl: string, name: string) => {
+    const [head, b64] = dataUrl.split(',');
+    const mime = head.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+    const bin = atob(b64);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    addFiles([new File([buf], name, { type: mime })], true);
+  }, [addFiles]);
 
   const { greeting, tip } = useProactiveMessage();
 
@@ -319,51 +332,53 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
           </div>
         )}
         {messages.length === 0 && !buildMode && (
-          <div className="flex flex-col items-center justify-center h-full gap-4 text-center pt-12 sm:pt-16 pb-24 sm:pb-40 animate-fade-in">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.2), rgba(124,58,237,0.1))', border: '1px solid rgba(168,85,247,0.2)' }}>
-              <GiaIcon size={30} animate={false} color="#a855f7" />
-            </div>
-            <div>
-              <p className="text-base font-semibold" style={{ color: 'var(--gia-text)' }}>{userProfile.name ? `Hey ${userProfile.name}` : greeting.emoji + ' ' + greeting.text}</p>
-              <p className="text-xs mt-1 max-w-[240px] leading-relaxed" style={{ color: 'var(--gia-muted)' }}>{providerConnected ? 'Your personal AI workspace. Ask anything, attach files, or pick a quick start below.' : 'No AI provider connected. Use the on-device local LLM or connect a provider in Settings.'}</p>
-              {!messages.length && (
-                <p className="text-[10px] mt-2 animate-fade-in" style={{ color: 'var(--gia-muted-2)' }}>
-                  {tip.emoji} {tip.text}
+<div className="relative flex flex-col items-center justify-center h-full gap-4 text-center pt-12 sm:pt-16 pb-24 sm:pb-40 animate-fade-in px-6 overflow-hidden">
+              {/* Ambient aurora — a soft breathing glow behind the AI core,
+                  matching the Obsidian Aurora theme (Lumen-style: the gradient
+                  belongs to the avatar, the primary action, and active states). */}
+              <div aria-hidden className="absolute left-1/2 top-[16%] -translate-x-1/2 w-64 h-64 rounded-full blur-3xl pointer-events-none"
+                style={{ background: 'radial-gradient(circle at 30% 30%, rgba(6,182,212,0.28), rgba(139,92,246,0.24) 45%, rgba(236,72,153,0.16) 100%)' }} />
+              <div className="relative">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, rgba(6,182,212,0.18), rgba(139,92,246,0.16), rgba(236,72,153,0.14))', border: '1px solid rgba(139,92,246,0.28)', boxShadow: '0 0 26px rgba(139,92,246,0.18), inset 0 0 18px rgba(6,182,212,0.08)' }}>
+                  <GiaIcon size={30} animate={false} color="#8b5cf6" />
+                </div>
+              </div>
+              <div className="relative space-y-1.5">
+                <p className="text-lg font-semibold" style={{ color: 'var(--gia-text)' }}>
+                  {userProfile.name ? `Hey ${userProfile.name}` : greeting.emoji + ' ' + greeting.text}
+                  {!providerConnected && " — I'm ready when you are."}
                 </p>
-            )}
-          </div>
+                <p className="text-xs max-w-[280px] leading-relaxed" style={{ color: 'var(--gia-muted)' }}>
+                  {providerConnected
+                    ? 'Your personal AI workspace. Ask anything, attach files, or pick a quick start below.'
+                    : 'Connect a provider to unlock the full workspace — or use the free on-device local AI right now.'}
+                </p>
+              </div>
             {!providerConnected && (
             <div className="grid grid-cols-1 gap-2 w-full max-w-xs mt-1">
-              <button onClick={() => { useProviderStore.getState().setProviderKey('local-llm', ''); }} className="flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all tap-feedback bg-violet-900/30 border border-violet-500/20 hover:border-violet-400/40">
-                <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(168,85,247,0.2)' }}><Zap size={14} style={{ color: '#a855f7' }} /></div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold" style={{ color: 'var(--gia-text)' }}>Use Local AI (Free)</p>
-                  <p className="text-[10px] truncate" style={{ color: 'var(--gia-muted-2)' }}>GIA works offline with on-device intelligence</p>
-                </div>
+              <button onClick={() => setShowModelSwitcher(true)}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold transition-all tap-feedback hover:opacity-90"
+                style={{ background: 'var(--aurora-gradient)', color: '#0b0b10', boxShadow: '0 0 24px rgba(139,92,246,0.35)' }}>
+                <PlugZap size={15} /> Connect an AI Provider
               </button>
-              <button onClick={() => setShowModelSwitcher(true)} className="flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all tap-feedback bg-zinc-800/50 border border-zinc-700/50 hover:border-zinc-600/50">
-                <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(113,113,122,0.2)' }}><Bot size={14} style={{ color: '#a1a1aa' }} /></div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold" style={{ color: 'var(--gia-text)' }}>Connect AI Provider</p>
-                  <p className="text-[10px] truncate" style={{ color: 'var(--gia-muted-2)' }}>OpenRouter, Anthropic, Gemini, or any API</p>
-                </div>
+              <button onClick={() => { useProviderStore.getState().setProviderKey('local-llm', ''); }}
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[10px] transition-all tap-feedback hover:border-violet-400/40"
+                style={{ border: '1px dashed rgba(139,92,246,0.35)', color: 'var(--gia-muted)' }}>
+                <Zap size={12} color="#a855f7" /> Try Local AI — works offline, no keys
               </button>
-              {QUICK_STARTS.slice(0, 1).map((qs) => (
-                <motion.button
-                  key={qs.label}
-                  onClick={() => setInput(qs.prompt)}
-                  whileHover={{ scale: 1.02, borderColor: `${qs.color}60` }}
-                  whileTap={{ scale: 0.97 }}
-                  className="flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all tap-feedback"
-                  style={{ background: `linear-gradient(135deg, ${qs.color}08, ${qs.color}02)`, border: `1px solid ${qs.color}20`, backdropFilter: 'blur(8px)', boxShadow: `0 0 12px ${qs.color}08` }}
-                >
-                  <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${qs.color}20`, border: `1px solid ${qs.color}30`, backdropFilter: 'blur(4px)' }}><qs.icon size={14} style={{ color: qs.color }} /></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold" style={{ color: 'var(--gia-text)' }}>{qs.label}</p>
-                    <p className="text-[10px] truncate" style={{ color: qs.color }}>{qs.prompt}</p>
-                  </div>
-                </motion.button>
-              ))}
+              <div className="flex items-center justify-center gap-2 text-[9px] mt-0.5" style={{ color: 'var(--gia-muted-2)' }}>
+                <span className="flex items-center gap-1"><Plug size={10} color="#06b6d4" />Provider</span>
+                <span className="opacity-40">→</span>
+                <span className="flex items-center gap-1"><KeyRound size={10} color="#8b5cf6" />Your key</span>
+                <span className="opacity-40">→</span>
+                <span className="flex items-center gap-1"><MessagesSquare size={10} color="#ec4899" />Chat</span>
+              </div>
+              {!messages.length && (
+                <p className="text-[10px] mt-0.5 animate-fade-in truncate" style={{ color: 'var(--gia-muted-2)' }}>
+                  {tip.emoji} {tip.text}
+                </p>
+              )}
             </div>
             )}
             {providerConnected && (
@@ -393,13 +408,6 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
         )}
 
         <div className="w-full px-1.5 space-y-2 sm:space-y-3">
-        {!providerConnected && !loading && (
-          <div onClick={() => setShowModelSwitcher(true)} className="px-4 py-3 mx-4 rounded-2xl text-center cursor-pointer transition-opacity hover:opacity-80" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
-            <p className="text-xs font-medium" style={{ color: '#f59e0b' }}>⚡ No AI provider configured</p>
-            <p className="text-[10px] mt-0.5" style={{ color: 'var(--gia-muted-2)' }}>Tap to connect a provider — OpenRouter, Anthropic, Gemini & more</p>
-          </div>
-        )}
-
         {activeSession && activeSession.currentBranchId && (
           <div className="mb-2">
             <SummaryBanner sessionId={activeSession.id} branchId={activeSession.currentBranchId} />
@@ -455,7 +463,14 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
         )}
         {createPortal(<EngineSheet open={showEngine} onClose={() => setShowEngine(false)} />, document.body)}
         {createPortal(<ModelSwitcherSheet open={showModelSwitcher} onClose={() => setShowModelSwitcher(false)} onOpenEngine={() => setShowEngine(true)} />, document.body)}
-        {createPortal(<ToolsCatalogSheet open={showToolsCatalog} onClose={() => setShowToolsCatalog(false)} />, document.body)}
+        {createPortal(<ToolsCatalogSheet
+          open={showToolsCatalog}
+          onClose={() => setShowToolsCatalog(false)}
+          onUse={(id, description) => {
+            setShowToolsCatalog(false);
+            setInput(`Use the ${id} tool${description ? ` (${description.split('.')[0].trim().toLowerCase()})` : ''} to `);
+          }}
+        />, document.body)}
 
         <AnimatePresence>
           {liveFileEdit && (
@@ -557,19 +572,19 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
 
           <div className="flex-1 relative overflow-hidden">
             <div className="overflow-x-auto flex items-center gap-1.5 py-1 [&::-webkit-scrollbar]:hidden">
-            <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-zinc-100 transition-all shrink-0">
+            <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl transition-all tap-feedback shrink-0" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-muted)' }}>
               <Paperclip size={11} /> File
             </button>
-            <button type="button" onClick={() => imgRef.current?.click()} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-zinc-100 transition-all shrink-0">
+            <button type="button" onClick={() => imgRef.current?.click()} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl transition-all tap-feedback shrink-0" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-muted)' }}>
               <ImageIcon size={11} /> Photo
             </button>
-            <button type="button" onClick={() => imgRef.current?.click()} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-zinc-100 transition-all shrink-0">
+            <button type="button" onClick={() => { if (isNativePlatform()) imgRef.current?.click(); else setShowCamera(true); }} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl transition-all tap-feedback shrink-0" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-muted)' }}>
               <Camera size={11} /> Camera
             </button>
-            <button type="button" onClick={() => setShowTemplateSelector(true)} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 text-purple-400 hover:text-purple-300 transition-all shrink-0">
+            <button type="button" onClick={() => setShowTemplateSelector(true)} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl transition-all tap-feedback shrink-0" style={{ background: 'rgba(168,85,247,0.14)', border: '1px solid rgba(168,85,247,0.32)', color: '#c084fc' }}>
               <LayoutTemplate size={11} /> Templates
             </button>
-            <div className="w-px h-4 bg-zinc-800 mx-1 shrink-0" />
+            <div className="w-px h-4 mx-1 shrink-0" style={{ background: 'var(--gia-border)' }} />
             <button type="button" onClick={() => {
               if (forceBuild) return;
               const next = !buildModeStore;
@@ -696,6 +711,11 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
       <TemplateSelector
         isOpen={showTemplateSelector}
         onClose={() => setShowTemplateSelector(false)}
+      />
+      <CameraCaptureModal
+        open={showCamera}
+        onClose={() => setShowCamera(false)}
+        onCapture={(dataUrl, name) => { setShowCamera(false); handleCameraCapture(dataUrl, name); }}
       />
       <AnimatePresence>
         {showVoiceMode && (

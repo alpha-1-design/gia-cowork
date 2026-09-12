@@ -8,13 +8,40 @@
 
 import { isTauri } from '../platform';
 
+export interface CaptureScreenOptions {
+  /**
+   * Ambient (always-on jarvis-eyes) capture: skip hiding GIA's own window
+   * before the screenshot and showing it again afterwards. One-shot captures
+   * hide/show so the desktop isn't photoshopped over GIA itself, but doing
+   * that on a repeating timer makes the whole UI flash. Ambient capture may
+   * include GIA in the shot — acceptable for eye candy; the analysis still
+   * describes the actual desktop.
+   */
+  ambient?: boolean;
+}
+
 /**
  * Capture the current screen and return a PNG data URL, or null if capture is
  * unavailable or the user cancels. Fully wrapped so a missing/denied API never
  * crashes the app.
  */
-export async function captureScreenDesktop(): Promise<string | null> {
+export async function captureScreenDesktop(opts: CaptureScreenOptions = {}): Promise<string | null> {
   if (isTauri()) {
+    let hidden = false;
+    if (!opts.ambient) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        // Hide GIA's own window first so captures show the desktop, not a
+        // screenshot of GIA screenshotting itself.
+        try {
+          hidden = await invoke<boolean>('hide_for_capture');
+        } catch {
+          // Not fatal — capture may still be useful.
+        }
+      } catch {
+        // Native window control unavailable — keep going.
+      }
+    }
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const res = await invoke<{ dataUrl: string; width: number; height: number }>(
@@ -23,6 +50,15 @@ export async function captureScreenDesktop(): Promise<string | null> {
       if (res?.dataUrl) return res.dataUrl;
     } catch {
       // Native capture unavailable (e.g. no display server) — fall back.
+    } finally {
+      if (hidden && !opts.ambient) {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core');
+          await invoke('show_after_capture');
+        } catch {
+          // Nothing we can do if the window can't be restored.
+        }
+      }
     }
   }
   return webCapture();

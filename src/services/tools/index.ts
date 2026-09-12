@@ -8,6 +8,7 @@ import { browserAutomationTools } from './browserAutomation';
 import { buildTools } from './build';
 import { calendarTools } from './calendar';
 import { cameraTools } from './camera';
+import { capabilityTools } from './capabilities';
 import { clipboardTools } from './clipboard';
 import { connectorTools } from './connectors';
 import { controlTools } from './controls';
@@ -29,6 +30,7 @@ import { geolocationTools } from './geolocation';
 import { hapticsTools } from './haptics';
 import { identityTools } from './identity';
 import { intelligenceTools } from './intelligence';
+import { jarvisTools } from './jarvis';
 import { locationTools } from './location';
 import { longRunningTools } from './longRunning';
 import { mcpTools } from './mcp';
@@ -74,6 +76,7 @@ export function registerAllTools(): void {
     buildTools,
     calendarTools,
     cameraTools,
+    capabilityTools,
     clipboardTools,
     connectorTools,
     controlTools,
@@ -95,6 +98,7 @@ export function registerAllTools(): void {
     hapticsTools,
     identityTools,
     intelligenceTools,
+    jarvisTools,
     locationTools,
     longRunningTools,
     mcpTools,

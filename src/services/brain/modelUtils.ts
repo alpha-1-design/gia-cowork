@@ -2,6 +2,7 @@ import { useProviderStore, ProviderType, ModelOption } from '../../store/useProv
 import { useGiaStore } from '../../store/useGiaStore';
 import { getProviderCapabilities } from '../providers/capabilities';
 import { providerRegistry } from '../ProviderRegistry';
+import visionService from '../VisionService';
 
 import type { BrainRequest } from '../providers/types';
 
@@ -60,7 +61,6 @@ export async function buildMessages(req: BrainRequest): Promise<{ role: string; 
       const parts: string[] = [];
       for (const img of req.images) {
         try {
-          const { default: visionService } = await import('../VisionService');
           const analysis = await visionService.analyze(img.data);
           const imgParts: string[] = [];
           if (analysis.caption?.description) imgParts.push(`Caption: ${analysis.caption.description}`);

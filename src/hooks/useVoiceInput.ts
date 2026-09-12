@@ -163,7 +163,7 @@ export function useVoiceInput(
       if (setInput) setInput(text);
     },
     keepListening: voiceSettings.keepListening,
-    autoStopAfter: 120000,
+    autoStopAfter: 0,
     confidenceThreshold: 0.3,
     language: voiceSettings.voiceLanguage,
     nativeWakeWord: voiceSettings.nativeWakeWord,

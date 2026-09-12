@@ -32,6 +32,7 @@ class SandboxService {
    *  same on-device Alpine/proot sandbox the terminal tool uses — covers the
    *  same core need (running a shell command) without any companion process. */
   private usingNativeFallback = false;
+  private packageManager: string | null = null;
 
   setBaseUrl(url: string) { this.baseUrl = url.replace(/\/+$/, ''); }
   getBaseUrl() { return this.baseUrl; }
@@ -97,10 +98,30 @@ class SandboxService {
   async install(packages: string | string[]): Promise<SandboxResult> {
     const pkgList = Array.isArray(packages) ? packages : [packages];
     if (this.usingNativeFallback) {
-      return this.exec(`apk add --no-cache ${pkgList.join(' ')}`);
+      // GIA Desktop runs the native fallback against the real host shell, so
+      // never hardcode `apk` — pick whatever package manager the OS has.
+      const pm = await this.detectPackageManager();
+      const cmd =
+        pm === 'apk'
+          ? `apk add --no-cache ${pkgList.join(' ')}`
+          : pm === 'pacman'
+            ? `pacman -Sy --noconfirm --needed ${pkgList.join(' ')}`
+            : `${pm} install -y ${pkgList.join(' ')}`;
+      return this.exec(cmd);
     }
     const data = await this.postJSON('/install', { packages: pkgList }) as SandboxResult;
     return data;
+  }
+
+  private async detectPackageManager(): Promise<string> {
+    if (this.packageManager) return this.packageManager;
+    const probe = await this.exec(
+      'for pm in apk apt-get dnf yum pacman; do command -v "$pm" >/dev/null 2>&1 && echo "$pm" && break; done',
+      { timeout: 10000 },
+    );
+    const name = probe.stdout.trim().split('\n')[0] || 'apk';
+    this.packageManager = name;
+    return name;
   }
 
   async clone(repo: string, dest?: string): Promise<SandboxResult> {

@@ -2,6 +2,8 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { GIAUpdate } from './GIAUpdate';
 import { isTauri, isCapacitorNative } from '../platform';
+import DesktopHostFS from './DesktopHostFS';
+import terminalService from './TerminalService';
 import { logger } from '../utils/logger';
 
 // Desktop-first OTA. GIA Cowork is a Linux desktop (Tauri) app but reuses the
@@ -56,6 +58,7 @@ class UpdateService {
   private checking = false;
   private cachedUpdate: UpdateInfo | null = null;
   private cacheTime = 0;
+  private downloadedPath: string | null = null;
 
   getCachedUpdate(): UpdateInfo | null {
     if (this.cachedUpdate && Date.now() - this.cacheTime < CACHE_TTL) {
@@ -141,10 +144,8 @@ class UpdateService {
     url: string,
     onProgress?: (p: DownloadProgress) => void
   ): Promise<void> {
-    // Desktop updates ship as .deb/.AppImage/.rpm — not something we sideload
-    // in-app. The UI should link the user to downloadUrl / releaseUrl instead.
     if (isTauri()) {
-      logger.log('[UpdateService] Desktop update handled via package manager / release page.');
+      await this.downloadDesktopUpdate(url, onProgress);
       return;
     }
     return new Promise((resolve, reject) => {
@@ -188,14 +189,7 @@ class UpdateService {
 
   async installUpdate(): Promise<void> {
     if (isTauri()) {
-      // Desktop: open the release page so the user can grab the package.
-      const url = this.cachedUpdate?.releaseUrl;
-      try {
-        const { openUrl } = await import('@tauri-apps/plugin-opener');
-        if (url) await openUrl(url);
-      } catch {
-        if (url && typeof window !== 'undefined') window.open(url, '_blank');
-      }
+      await this.installDesktopUpdate();
       return;
     }
     try {
@@ -203,6 +197,190 @@ class UpdateService {
     } catch (e) {
       logger.error('[UpdateService] Install failed:', e);
       throw e;
+    }
+  }
+
+  // ── Desktop (Tauri) update pipeline ─────────────────────────────────────
+  // Real in-app updater: stream the release artifact to disk with live byte
+  // progress, then apply it (AppImage relaunch / deb+rpm via polkit) and
+  // restart. This replaces the old "open the release page and leave" flow.
+
+  private async downloadDesktopUpdate(
+    url: string,
+    onProgress?: (p: DownloadProgress) => void,
+  ): Promise<void> {
+    // If the release has no desktop package yet, downloadUrl is the release
+    // page itself — open that instead of "downloading" an HTML page.
+    if (!/(\.deb|\.rpm|\.appimage|\.tar\.gz|\.zip)(\?|$)/i.test(url)) {
+      await this.openReleasePage();
+      return;
+    }
+    const fileName = decodeURIComponent(url.split('?')[0].split('/').pop() || 'gia-cowork-update');
+    const targetPath = `~/Downloads/${fileName}`;
+    this.downloadedPath = null;
+    await this.downloadToHost(url, targetPath, this.cachedUpdate?.size || 0, onProgress);
+    this.downloadedPath = targetPath;
+    logger.log(`[UpdateService] Desktop update downloaded to ${targetPath}`);
+  }
+
+  private async downloadToHost(
+    url: string,
+    targetPath: string,
+    expectedTotal: number,
+    onProgress?: (p: DownloadProgress) => void,
+  ): Promise<void> {
+    const res = await fetch(url, { signal: AbortSignal.timeout(30 * 60 * 1000) });
+    if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`);
+    if (!res.body) throw new Error('Download failed: no response body');
+
+    const total = Number(res.headers.get('content-length')) || expectedTotal || 0;
+    const reader = res.body.getReader();
+    let received = 0;
+    let queued: Uint8Array[] = [];
+    let queuedLen = 0;
+    let firstWrite = true;
+
+    const flush = async () => {
+      if (queuedLen === 0) return;
+      const merged = new Uint8Array(queuedLen);
+      let off = 0;
+      for (const c of queued) {
+        merged.set(c, off);
+        off += c.length;
+      }
+      queued = [];
+      queuedLen = 0;
+      await DesktopHostFS.appendBytes(targetPath, uint8ToBase64(merged), !firstWrite);
+      firstWrite = false;
+    };
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      queued.push(value);
+      queuedLen += value.length;
+      received += value.length;
+      if (queuedLen >= 4 * 1024 * 1024) await flush();
+      onProgress?.({
+        loaded: received,
+        total,
+        percent: total ? Math.min(100, Math.round((received / total) * 100)) : 0,
+      });
+    }
+    await flush();
+    if (total > 0 && received !== total) {
+      throw new Error(`Download incomplete: ${received}/${total} bytes`);
+    }
+  }
+
+  private async installDesktopUpdate(): Promise<void> {
+    const path = this.downloadedPath || '';
+    this.downloadedPath = null;
+    if (!path) {
+      await this.openReleasePage();
+      return;
+    }
+    const lower = path.toLowerCase();
+    try {
+      if (lower.endsWith('.appimage')) {
+        await terminalService.exec(
+          `chmod +x ${shQuote(path)} && setsid nohup ${shQuote(path)} >/dev/null 2>&1 &`,
+          undefined,
+          undefined,
+          60000,
+        );
+        await delay(1500);
+        await exitDesktopApp();
+        return;
+      }
+      if (lower.endsWith('.deb')) {
+        const installed = await terminalService.exec(
+          `pkexec dpkg -i ${shQuote(path)}`,
+          undefined,
+          undefined,
+          600000,
+        );
+        if (installed.exitCode !== 0) {
+          throw new Error(`dpkg install failed (exit ${installed.exitCode})`);
+        }
+        await relaunchInstalledBinary();
+        await delay(1500);
+        await exitDesktopApp();
+        return;
+      }
+      if (lower.endsWith('.rpm')) {
+        const installed = await terminalService.exec(
+          `pkexec rpm -Uvh ${shQuote(path)}`,
+          undefined,
+          undefined,
+          600000,
+        );
+        if (installed.exitCode !== 0) {
+          throw new Error(`rpm install failed (exit ${installed.exitCode})`);
+        }
+        await relaunchInstalledBinary();
+        await delay(1500);
+        await exitDesktopApp();
+        return;
+      }
+      // .tar.gz / .zip: reveal the archive and let the user unpack it.
+      await terminalService.exec('xdg-open "$HOME/Downloads"', undefined, undefined, 30000);
+    } catch (e) {
+      throw new Error(`Update install failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  private async openReleasePage(): Promise<void> {
+    const url = this.cachedUpdate?.releaseUrl;
+    if (!url) return;
+    try {
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(url);
+    } catch {
+      if (typeof window !== 'undefined') window.open(url, '_blank');
+    }
+  }
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function shQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function relaunchInstalledBinary(): Promise<void> {
+  try {
+    await terminalService.exec(
+      'rel="$(command -v gia-cowork 2>/dev/null)"; [ -n "$rel" ] && { setsid nohup "$rel" >/dev/null 2>&1 & }; true',
+      undefined,
+      undefined,
+      30000,
+    );
+  } catch {
+    // Ignore — the user can reopen GIA from the app menu after it quits.
+  }
+}
+
+async function exitDesktopApp(): Promise<void> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('app_exit');
+  } catch {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().close();
+    } catch {
+      // ignore
     }
   }
 }

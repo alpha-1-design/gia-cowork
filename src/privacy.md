@@ -19,3 +19,6 @@ When you use GIA with a cloud AI provider, your prompts are sent to the third-pa
 
 ## Desktop Permissions
 GIA Cowork may run shell commands, read or write files you explicitly open, capture your screen, or control the mouse and keyboard — but only when a feature you invoked requires it (e.g. GIA acting as your co-worker with your approval). Every tool call that touches your system is surfaced for approval unless you enable Hands-Off mode.
+
+## Screen Awareness (Jarvis Eyes) — Optional
+The floating "Jarvis eyes" orb is **off by default** and only starts working when you explicitly enable it (Settings → Developer → Jarvis Eyes, or tap the orb). While enabled it captures the screen at a slow ambient cadence and analyzes each capture using the vision pipeline. When your local on-device vision models are loaded, analysis happens **entirely locally** — screenshots are used transiently and are never uploaded, stored, or sent to any provider. If the local models are not loaded, GIA falls back to the vision capability of the AI provider you have active in chat (e.g. GPT-4o, Gemini, Claude), meaning the screen capture is sent to that provider in the same way your chat messages are. Only a short distilled text description enters the brain's context. Screen-watching automatically pauses while your screen is locked.

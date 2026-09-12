@@ -4,6 +4,7 @@
  */
 
 import { logger } from '../utils/logger';
+import { isTauri } from '../platform';
 
 export interface SystemInfo {
   platform: string;
@@ -37,7 +38,7 @@ export interface SystemInfo {
   isMobile: boolean;
   isDesktop: boolean;
   isNativeApp: boolean;
-  container: 'browser' | 'capacitor' | 'pwa';
+  container: 'browser' | 'capacitor' | 'pwa' | 'tauri';
 }
 
 class SystemService {
@@ -63,6 +64,7 @@ class SystemService {
     const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches ||
       (window.navigator as { standalone?: boolean })?.standalone === true;
 
+    const isTauriEnv = isTauri();
     const platform = this._getPlatform();
     const info: SystemInfo = {
       platform: navigator.platform || 'unknown',
@@ -89,11 +91,26 @@ class SystemService {
         rtt: null,
       },
       os: platform,
-      isMobile: /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent),
-      isDesktop: !/Android|iPhone|iPad|iPod|webOS|Mobile/i.test(navigator.userAgent),
-      isNativeApp: isCapacitor,
-      container: isCapacitor ? 'capacitor' : isStandalone ? 'pwa' : 'browser',
+      // A Tauri webview is a desktop app, not a webpage: report it as native.
+      isMobile: /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) && !isTauriEnv,
+      isDesktop: isTauriEnv || !/Android|iPhone|iPad|iPod|webOS|Mobile/i.test(navigator.userAgent),
+      isNativeApp: isCapacitor || isTauriEnv,
+      container: isTauriEnv ? 'tauri' : isCapacitor ? 'capacitor' : isStandalone ? 'pwa' : 'browser',
     };
+
+    // On the Tauri desktop shell the OS exposes real hardware numbers via the
+    // Rust `system_info` command (reads /proc/meminfo) — better than the
+    // browser-capped deviceMemory. Also report the actual host OS.
+    if (isTauriEnv) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const sys = await invoke<{ total_ram_gb: number; cpu_cores: number }>('system_info');
+        if (typeof sys === 'object' && sys !== null) {
+          if (sys.cpu_cores > 0) info.hardware.cpuCores = sys.cpu_cores;
+          if (sys.total_ram_gb > 0) info.hardware.memoryGB = sys.total_ram_gb;
+        }
+      } catch (e) { logger.error('[SystemService] system_info invoke failed:', e); }
+    }
 
     const nav = navigator as unknown as {
       deviceMemory?: number;

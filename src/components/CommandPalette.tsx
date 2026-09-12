@@ -5,6 +5,7 @@ import {
   MessageCircle, PenLine, BarChart3, ClipboardList, Wifi, StickyNote, Hammer
 } from 'lucide-react';
 import { useGiaStore, type Module } from '../store/useGiaStore';
+import { exportBrainToFile, importBrainFromFile } from '../services/BrainExport';
 
 interface Action {
   id: string;
@@ -55,7 +56,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
     { id: 'terminal', label: 'Open Terminal', description: 'Run real commands in the host shell', icon: <Terminal {...iconStyle} />, category: 'System', execute: () => { void onNavigate?.('terminal-panel'); onClose(); } },
     { id: 'engine-room', label: 'Open Engine Room', description: 'Manage AI providers, models & network', icon: <Wrench {...iconStyle} />, category: 'System', execute: () => { useGiaStore.getState().setShowTerminal(true); onClose(); } },
     { id: 'pick-folder', label: 'Pick Project Folder', description: 'Select a local folder for file access', icon: <FolderOpen {...iconStyle} />, category: 'Files', execute: () => { import('../services/DesktopFS').then(m => m.default.pickDirectory().then(r => { if (r) useGiaStore.getState().addNotification(`Project folder: ${r.name}`); })); onClose(); } },
-    { id: 'export-brain', label: 'Export Brain', description: 'Download GIA memories as JSON', icon: <Download {...iconStyle} />, category: 'Files', execute: () => { import('../services/BrainExport').then(m => { m.exportBrainToFile(); useGiaStore.getState().addNotification('Brain exported'); }).catch(() => useGiaStore.getState().addNotification('Export failed')); onClose(); } },
+    { id: 'export-brain', label: 'Export Brain', description: 'Download GIA memories as JSON', icon: <Download {...iconStyle} />, category: 'Files', execute: () => { try { exportBrainToFile(); useGiaStore.getState().addNotification('Brain exported'); } catch { useGiaStore.getState().addNotification('Export failed'); } onClose(); } },
     { id: 'import-brain', label: 'Import Brain', description: 'Restore GIA from a brain export file', icon: <Upload {...iconStyle} />, category: 'Files', execute: () => {
       const input = document.createElement('input');
       input.type = 'file';
@@ -63,8 +64,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
       input.onchange = () => {
         const file = input.files?.[0];
         if (!file) return;
-        import('../services/BrainExport').then((m) => m.importBrainFromFile(file).then((r) => useGiaStore.getState().addNotification(r.message)).catch(() => useGiaStore.getState().addNotification('Import failed')))
-          .catch(() => useGiaStore.getState().addNotification('Import failed'));
+        importBrainFromFile(file).then((r) => useGiaStore.getState().addNotification(r.message)).catch(() => useGiaStore.getState().addNotification('Import failed'));
       };
       input.click();
       onClose();

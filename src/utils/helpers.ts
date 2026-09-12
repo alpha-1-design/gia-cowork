@@ -1,4 +1,5 @@
 import { logger } from './logger';
+import { isTauri } from '../platform';
 
 export function extractJSON<T = unknown>(text: string): T {
   const cleaned = text
@@ -164,8 +165,11 @@ export const isNativePlatform = (): boolean => {
   return typeof cap.isNativePlatform === 'function' ? cap.isNativePlatform() : true;
 };
 
+/** True when GIA has real OS capabilities: the Tauri desktop shell OR a Capacitor native app. */
+export const isHostPlatform = (): boolean => isNativePlatform() || isTauri();
+
 const platformFeatures = {
-  filesystem: { supported: isNativePlatform(), label: 'File system access', webFallback: 'Download only — files saved as downloads' },
+  filesystem: { supported: isHostPlatform(), label: 'File system access', webFallback: 'Download only — files saved as downloads' },
   biometrics: { supported: isNativePlatform(), label: 'Biometric authentication', webFallback: 'Not available in browser' },
   voice: { supported: isNativePlatform() || 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window, label: 'Voice recognition', webFallback: 'Browser speech recognition available' },
   tts: { supported: isNativePlatform() || 'speechSynthesis' in window, label: 'Text-to-speech', webFallback: 'Browser TTS available' },

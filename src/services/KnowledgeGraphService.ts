@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger';
 import { useKnowledgeGraphStore } from '../store/useKnowledgeGraphStore';
 import type { EntityType, RelationType, Entity, Mention } from '../types/knowledge';
+import brain from './GiaBrain';
 
 interface ExtractionResult {
   entities: Array<{
@@ -186,7 +187,6 @@ export class KnowledgeGraphService {
 
     try {
       this.extractionInProgress = true;
-      const brain = (await import('./GiaBrain')).default;
 
       const response = await brain.generate({
         systemPrompt: `Extract entities and relationships from the text. Return ONLY valid JSON:

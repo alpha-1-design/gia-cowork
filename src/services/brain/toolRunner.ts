@@ -11,6 +11,7 @@ import { extractToolCalls, hasTruncatedToolCall, ToolCall } from '../../utils/js
 import AnalyticsService from '../AnalyticsService';
 import AnalyticsTracker from '../AnalyticsTracker';
 import { toolRateLimiter, globalToolLimiter } from '../ToolRateLimiter';
+import { jarvisOrbService } from '../JarvisOrbService';
 
 import type { BrainRequest } from '../providers/types';
 
@@ -60,6 +61,16 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'calendar_list_events', 'calendar_status',
   'messaging_status',
   'bible_verse', 'daily_devotion',
+]);
+
+// Tools that visibly change the desktop — while these run, the Jarvis orb flips
+// to "acting" and takes a fresh look afterwards to verify the result landed.
+const DESKTOP_ACT_TOOLS = new Set([
+  'terminal_run', 'sandbox_exec', 'sandbox_install', 'build_project',
+  'filesystem_write', 'file_write', 'zip_project',
+  'db_query', 'browser_navigate', 'browser_click', 'browser_type',
+  'ssh_connect', 'ssh_run', 'system_lock', 'system_unlock',
+  'clipboard_write', 'install_skill', 'filegen_write', 'documents_write',
 ]);
 
 function getIndependentGroups(toolCalls: ToolCall[]): ToolCall[][] {
@@ -207,6 +218,9 @@ async function executeSingleTool(
     }
   }
 
+  // Jarvis eyes: visually desktop-changing tools flip the orb to "acting" and
+  // trigger a verification look once the action completes.
+  const jarvisAct = DESKTOP_ACT_TOOLS.has(toolCall.id);
   const execStartTime = performance.now();
   let result: ToolResult;
   let toolAttempts = 0;
@@ -237,27 +251,32 @@ async function executeSingleTool(
     },
   };
 
-  while (true) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    try {
-      result = await tool.execute(toolCall.args, toolContext);
-    } catch (e: unknown) {
-      result = { success: false, content: '', error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-    // Don't retry permanent failures: validation errors, auth errors, "not found", parse errors
-    const errorMsg = result!.error || '';
-    const isPermanent = /validation|auth|not found|permission|invalid|parse|syntax/i.test(errorMsg);
-    if (result.success || isPermanent || toolAttempts >= maxToolAttempts - 1) break;
-    toolAttempts++;
-    const backoff = Math.min(1000 * Math.pow(2, toolAttempts), 8000);
-    onThought?.(`⚠️ ${tool.name} attempt ${toolAttempts} failed — retrying in ${backoff}ms...`);
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(resolve, backoff);
-      if (signal) {
-        const onAbort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
-        signal.addEventListener('abort', onAbort, { once: true });
+  if (jarvisAct) jarvisOrbService.setActing(true);
+  try {
+    while (true) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      try {
+        result = await tool.execute(toolCall.args, toolContext);
+      } catch (e: unknown) {
+        result = { success: false, content: '', error: e instanceof Error ? e.message : 'Unknown error' };
       }
-    });
+      // Don't retry permanent failures: validation errors, auth errors, "not found", parse errors
+      const errorMsg = result!.error || '';
+      const isPermanent = /validation|auth|not found|permission|invalid|parse|syntax/i.test(errorMsg);
+      if (result.success || isPermanent || toolAttempts >= maxToolAttempts - 1) break;
+      toolAttempts++;
+      const backoff = Math.min(1000 * Math.pow(2, toolAttempts), 8000);
+      onThought?.(`⚠️ ${tool.name} attempt ${toolAttempts} failed — retrying in ${backoff}ms...`);
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, backoff);
+        if (signal) {
+          const onAbort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
+      });
+    }
+  } finally {
+    if (jarvisAct) jarvisOrbService.setActing(false);
   }
   useGiaStore.getState().setCurrentTool(null);
   AnalyticsService.trackTool(toolCall.id, result!.success);

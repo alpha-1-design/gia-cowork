@@ -1,5 +1,6 @@
 import type { PluginListenerHandle } from '@capacitor/core';
 import type { GIAOverlayPlugin } from './GIAOverlay';
+import { isTauri } from '../platform';
 
 type OverlayHandler = (result: { dataUrl?: string; text?: string; cancelled?: boolean }) => void;
 type ListenerMap = Map<string, Array<OverlayHandler>>;
@@ -8,9 +9,14 @@ export class GIAOverlayWeb implements GIAOverlayPlugin {
   private listeners: ListenerMap = new Map();
 
   // On desktop the floating overlay is a native Tauri window (needs a Rust
-  // command). On plain web it is unsupported, so we degrade gracefully instead
-  // of throwing. Circle-to-search itself still works via screen capture.
+  // command), and on plain web it is unsupported. We degrade gracefully
+  // instead of throwing — but log honestly so a desktop build never looks
+  // like it "works" when it isn't showing anything. Circle-to-search itself
+  // still works via screen capture.
   async startOverlay(): Promise<void> {
+    if (isTauri()) {
+      console.warn('[GIAOverlay] Floating overlay requires an Android build — circle-to-search still works via screen capture.');
+    }
     return;
   }
 

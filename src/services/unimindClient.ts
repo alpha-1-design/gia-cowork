@@ -1,7 +1,7 @@
 /**
  * UnimindClient (desktop) — GIA Cowork's end of the cross-device spine.
  *
- * Connects to the shared Unimind relay (relay/index.js) and speaks the
+ * Connects to the shared Unimind relay and speaks the
  * UnimindMessage protocol (src/unimind/types.ts) with the phone:
  *
  *  - presence: the desktop announces active/away/offline, and tracks the
@@ -32,9 +32,15 @@ import {
 import toolRegistry from './ToolRegistry';
 import { logger } from '../utils/logger';
 import { isDesktopIdle, isFollowLockEnabled } from './tools/systemControl';
+import { isTauri } from '../platform';
 
 const LS_RELAY_URL = 'gia:unimind:relayUrl';
 const LS_UNIMIND_ID = 'gia:unimind:unimindId';
+/**
+ * The desktop app carries an embedded relay (auto-started by Tauri on boot),
+ * so a fresh native install works out of the box with this default.
+ */
+const EMBEDDED_RELAY_URL = 'ws://127.0.0.1:8787/unimind';
 
 const PRESENCE_INTERVAL = 30_000;
 const ACTION_TIMEOUT = 60_000;
@@ -103,6 +109,12 @@ export class UnimindClient {
       if (!this.deviceId) {
         this.deviceId = `desktop-${genId()}`;
         localStorage.setItem('gia:unimind:deviceId', this.deviceId);
+      }
+      // Fresh native installs get the embedded relay automatically — the
+      // Tauri app runs it on boot, so pairing works out of the box.
+      if (!this.relayUrl && isTauri()) {
+        this.relayUrl = EMBEDDED_RELAY_URL;
+        localStorage.setItem(LS_RELAY_URL, this.relayUrl);
       }
     } catch { /* non-browser env — identity will be regenerated */ }
   }

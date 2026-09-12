@@ -27,6 +27,7 @@ export class GIAFeatureFlags {
     ['skillsSDK', true],
     ['notificationListener', false],
     ['offlineSTT', false],
+    ['jarvisEyes', false],
   ]);
 
   private static STORAGE_KEY = 'gia-feature-flags';
@@ -54,6 +55,11 @@ export class GIAFeatureFlags {
       localStorage.setItem(GIAFeatureFlags.STORAGE_KEY, JSON.stringify(Object.fromEntries(this.features)));
     } catch { /* noop */ }
     logger.info(`[FeatureFlags] ${feature}: ${enabled ? 'enabled' : 'disabled'}`);
+    // Notify any listener (e.g. the Jarvis orb driver) so background services
+    // react to the toggle without polling localStorage.
+    try {
+      window.dispatchEvent(new CustomEvent('gia:feature-flags:changed', { detail: { feature, enabled } }));
+    } catch { /* non-DOM environment */ }
   }
 
   toggle(feature: string): boolean {

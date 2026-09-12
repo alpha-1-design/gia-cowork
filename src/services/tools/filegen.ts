@@ -3,7 +3,7 @@ import type { Tool } from './types';
 
 async function ensureSandbox() {
   const ok = await SandboxService.ensureAvailable();
-  if (!ok) throw new Error('No sandbox available — neither the remote sandbox server (node server/sandbox-server.cjs) nor the on-device Alpine terminal could be reached.');
+  if (!ok) throw new Error('No execution environment available — start the sandbox server (node server/sandbox-server.cjs) or use the on-device/desktop terminal.');
 }
 
 /** Markdown line describing how to get a generated file, honest about

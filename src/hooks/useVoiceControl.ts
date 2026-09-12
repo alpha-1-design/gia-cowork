@@ -119,6 +119,11 @@ export function useVoiceControl(config: VoiceControlConfig = {}) {
   const listenOnceCountRef = useRef(0);
   const partialListenerRef = useRef<{ remove: () => void } | null>(null);
   const stateListenerRef = useRef<{ remove: () => void } | null>(null);
+  const browserRecLiveRef = useRef(false);
+  const awaitingQueryRef = useRef(false);
+  const queryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restartBrowserRef = useRef<() => void>(() => {});
+  const scheduleBrowserRestartRef = useRef<(delay?: number) => void>(() => {});
 
   useEffect(() => {
     wakeWordRegexRef.current = new RegExp(`\\b${escapeRegex(wakeWord)}\\b`, 'i');
@@ -143,6 +148,10 @@ export function useVoiceControl(config: VoiceControlConfig = {}) {
     restartCountRef.current = 0;
     listenOnceCountRef.current = 0;
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+
+    awaitingQueryRef.current = false;
+    if (queryTimeoutRef.current) { clearTimeout(queryTimeoutRef.current); queryTimeoutRef.current = null; }
+    browserRecLiveRef.current = false;
 
     if (nativeListenerRef.current) {
       try { nativeListenerRef.current.remove(); } catch { /* ignore */ }
@@ -169,7 +178,7 @@ export function useVoiceControl(config: VoiceControlConfig = {}) {
       if (isCapacitor) {
         await SpeechRecognition.stop();
       } else if (srRef.current) {
-        srRef.current.stop();
+        try { srRef.current.abort(); } catch { try { srRef.current.stop(); } catch { /* ignore */ } }
         srRef.current.onresult = null;
         srRef.current.onerror = null;
         srRef.current.onend = null;
@@ -266,8 +275,24 @@ export function useVoiceControl(config: VoiceControlConfig = {}) {
     const hasWakeWord = wakeWordRegexRef.current.test(text);
     if (hasWakeWord) {
       onWakeWordRef.current?.(text);
-      captureQueryAfterWake();
-      if (!keepListeningRef.current) stopListening();
+      lastResultRef.current = Date.now();
+      if (isCapacitor) {
+        captureQueryAfterWake();
+        if (!keepListeningRef.current) stopListening();
+      } else {
+        // The persistent browser recognizer is already streaming — the wake word's
+        // final result is immediately followed by the user's query in the SAME
+        // session, so we don't grab the mic again. Just wait for the next final
+        // result (or a ceiling so the mic isn't held forever when nobody speaks).
+        awaitingQueryRef.current = true;
+        setIsHearing(true);
+        if (queryTimeoutRef.current) clearTimeout(queryTimeoutRef.current);
+        queryTimeoutRef.current = setTimeout(() => {
+          awaitingQueryRef.current = false;
+          setIsHearing(false);
+          if (activeRef.current && !keepListeningRef.current) stopListening();
+        }, 8000);
+      }
       return;
     }
 
@@ -284,53 +309,104 @@ export function useVoiceControl(config: VoiceControlConfig = {}) {
     }
 
     onTranscriptRef.current?.(cleaned);
-  }, [stopListening, captureQueryAfterWake]);
+  }, [stopListening, captureQueryAfterWake, isCapacitor]);
 
+  const commitBrowserUtterance = useCallback((text: string) => {
+    if (!activeRef.current) return;
+    const cleaned = text.replace(/[^\w\s']/g, '').trim();
+    if (!cleaned) return;
+    // Right after a wake word, the next final result is the actual request —
+    // deliver it as the transcription, then wind down if we're not in
+    // keep-listening mode.
+    if (awaitingQueryRef.current && !wakeWordRegexRef.current.test(cleaned)) {
+      awaitingQueryRef.current = false;
+      if (queryTimeoutRef.current) { clearTimeout(queryTimeoutRef.current); queryTimeoutRef.current = null; }
+      setIsHearing(false);
+      onTranscriptRef.current?.(cleaned);
+      if (!keepListeningRef.current && activeRef.current) {
+        setTimeout(() => stopListening(), 400);
+      }
+      return;
+    }
+    processTranscript(cleaned);
+  }, [processTranscript, stopListening]);
+
+  // ONE microphone grab: a single long-lived continuous recognizer is created
+  // and kept alive until stopListening(). Chrome ends recognizers on its own
+  // (silence timeouts), so onend just re-arms the SAME instance after a
+  // 120ms nudge — fast enough that the OS mic indicator never visibly drops,
+  // instead of the old loop that re-acquired the mic every 1.5–3s.
   const restartBrowserRecognition = useCallback(() => {
-    if (!activeRef.current || isCapacitor || listeningLoopRef.current) return;
-    if (restartCountRef.current > 8) { stopListening(); return; }
-    restartCountRef.current++;
-    try {
-      const SR = SpeechRecognitionAPI.SpeechRecognition || SpeechRecognitionAPI.webkitSpeechRecognition;
-      if (!SR) return;
-      const sr = new SR();
-      sr.continuous = true;
-      sr.interimResults = true;
-      sr.lang = langRef.current;
-      sr.onresult = (event: SpeechRecognitionEvent) => {
-        if (!activeRef.current) return;
-        restartCountRef.current = 0;
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          const text = result[0].transcript;
-          const confidence = result[0].confidence;
-          setIsHearing(true);
-          if (result.isFinal) {
-            setIsHearing(false);
-            processTranscript(text, confidence);
-          }
-        }
-      };
-      sr.onerror = (event) => {
-        if (!activeRef.current) return;
-        const err = event as { error?: string };
-        if (err?.error === 'no-speech' || err?.error === 'aborted') {
-          timeoutRef.current = setTimeout(restartBrowserRecognition, 300);
+    if (!activeRef.current || isCapacitor) return;
+    if (srRef.current && browserRecLiveRef.current) return;
+    const SR = SpeechRecognitionAPI.SpeechRecognition || SpeechRecognitionAPI.webkitSpeechRecognition;
+    if (!SR) { setIsHearing(false); return; }
+    const sr = new SR();
+    sr.continuous = true;
+    sr.interimResults = true;
+    sr.lang = langRef.current;
+
+    sr.onresult = (event: SpeechRecognitionEvent) => {
+      if (!activeRef.current) return;
+      restartCountRef.current = 0;
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        const t = res[0]?.transcript ?? '';
+        if (res.isFinal) {
+          const cleaned = t.replace(/[^\w\s']/g, '').trim();
+          if (cleaned) commitBrowserUtterance(cleaned);
         } else {
-          stopListening();
+          interim += (interim ? ' ' : '') + t;
         }
-      };
-      sr.onend = () => {
-        setIsHearing(false);
-        if (activeRef.current) {
-          const delay = Math.min(500 * Math.pow(2, restartCountRef.current), 30000);
-          timeoutRef.current = setTimeout(restartBrowserRecognition, delay);
-        }
-      };
+      }
+      if (interim && activeRef.current) {
+        setIsHearing(true);
+        onInterimRef.current?.(interim);
+      }
+    };
+
+    sr.onerror = (event) => {
+      if (!activeRef.current) return;
+      const err = (event as { error?: string })?.error;
+      if (err === 'not-allowed' || err === 'service-not-allowed') { stopListening(); return; }
+      // Transient (no-speech / aborted / network) — re-arm fast, but throttle
+      // if something is genuinely erroring so we don't spin the mic hot.
+      restartCountRef.current++;
+      if (restartCountRef.current > 10) {
+        setTimeout(() => scheduleBrowserRestartRef.current(300), 2000);
+      } else {
+        scheduleBrowserRestartRef.current(150);
+      }
+    };
+
+    sr.onend = () => {
+      if (!activeRef.current) return;
+      browserRecLiveRef.current = false;
+      setIsHearing(false);
+      scheduleBrowserRestartRef.current(120);
+    };
+
+    browserRecLiveRef.current = true;
+    try {
       sr.start();
       srRef.current = sr;
-    } catch { if (activeRef.current) stopListening(); }
-  }, [isCapacitor, processTranscript, stopListening]);
+    } catch {
+      browserRecLiveRef.current = false;
+      scheduleBrowserRestartRef.current(150);
+    }
+  }, [isCapacitor, commitBrowserUtterance, stopListening]);
+
+  const scheduleBrowserRestart = useCallback((delay = 150) => {
+    if (!activeRef.current) return;
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+    timeoutRef.current = setTimeout(() => {
+      if (activeRef.current) restartBrowserRef.current();
+    }, delay);
+  }, []);
+
+  restartBrowserRef.current = restartBrowserRecognition;
+  scheduleBrowserRestartRef.current = scheduleBrowserRestart;
 
   const listenOnce = useCallback(async () => {
     if (!activeRef.current || listeningLoopRef.current) return;
@@ -534,6 +610,17 @@ export function useVoiceControl(config: VoiceControlConfig = {}) {
   useEffect(() => {
     return () => { activeRef.current = false; stopListening(); };
   }, [stopListening]);
+
+  // Jarvis eyes: calling GIA by voice (wake word / push-to-talk) lights the
+  // floating orb up to "listening" so there's a visible "she heard you" cue.
+  // Lazy-loaded to avoid pulling the vision graph into test modules.
+  useEffect(() => {
+    let cancelled = false;
+    import('../services/JarvisOrbService').then(({ jarvisOrbService }) => {
+      if (!cancelled) jarvisOrbService.setListening(isListening || isHearing);
+    });
+    return () => { cancelled = true; };
+  }, [isListening, isHearing]);
 
   return { isListening, isHearing, startListening, stopListening, requestPermissions } as const;
 }

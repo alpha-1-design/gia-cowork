@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger';
 import SandboxService from '../SandboxService';
+import { isTauri } from '../../platform';
 import type { Tool, ToolResult } from './types';
 
 interface DBConnection {
@@ -39,11 +40,16 @@ async function ensureDBClient(dbType: string): Promise<void> {
   const pkg = pkgs[dbType];
   if (!pkg) throw new Error(`Unsupported database type: ${dbType}`);
   const client = dbType === 'postgresql' ? 'psql' : dbType === 'mysql' ? 'mysql' : 'sqlite3';
-  // Use the already-installed client; install it via apk if missing (works in
-  // the native proot terminal on Android and the sandbox on desktop).
+  // Use the already-installed client; install it only in the on-device proot
+  // terminal (Android), where apk add is the real package manager. On the
+  // desktop the host OS owns its packages, so just tell the user how to
+  // install the client instead of running apk against the host shell.
   try {
     const present = await execViaSandbox(`command -v ${client} >/dev/null 2>&1 && echo yes`);
     if (present.trim() === 'yes') return;
+    if (isTauri()) {
+      throw new Error(`the ${client} client is not installed — install it with your host package manager (e.g. sudo apt-get install postgresql-client / mysql-client / sqlite3)`);
+    }
     const install = await execViaSandbox(`apk add --no-cache ${pkg} 2>&1`);
     const nowPresent = await execViaSandbox(`command -v ${client} >/dev/null 2>&1 && echo yes`);
     if (nowPresent.trim() !== 'yes') {

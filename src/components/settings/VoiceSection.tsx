@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Headphones, Radio, Mic, MicOff, Activity, Play, Square, AlertTriangle, Download, Volume2 } from 'lucide-react';
+import { Headphones, Radio, Mic, MicOff, Activity, Play, Square, AlertTriangle, Download, Volume2, Sparkles } from 'lucide-react';
 import { useGiaStore } from '../../store/useGiaStore';
 import TTSService from '../../services/TTSService';
 import WhisperService from '../../services/WhisperService';
 import localTTS from '../../services/LocalTTSService';
+import kokoroTTS, { KOKORO_VOICES } from '../../services/KokoroService';
 import { LANGUAGES } from '../../config/constants';
 import { Switch } from '../ui/Switch';
 
@@ -41,6 +42,11 @@ export const VoiceSection: React.FC = () => {
   const [localTTSEnabled, setLocalTTSEnabled] = useState(() => TTSService.isLocalTTSEnabled());
   const [localTTSStatus, setLocalTTSStatus] = useState(localTTS.status);
   const [localTTSLoading, setLocalTTSLoading] = useState(false);
+
+  const [kokoroEnabled, setKokoroEnabled] = useState(() => TTSService.isKokoroEnabled());
+  const [kokoroStatus, setKokoroStatus] = useState(kokoroTTS.status);
+  const [kokoroLoading, setKokoroLoading] = useState(false);
+  const [kokoroVoice, setKokoroVoice] = useState(() => kokoroTTS.voice);
 
   // ── Diagnostics state ──────────────────────────────────────────────
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus>({
@@ -337,6 +343,80 @@ export const VoiceSection: React.FC = () => {
         label="Use On-Device TTS"
         description="When enabled, GIA uses the local SpeechT5 model for speech. Falls back to device/model voice when unloaded."
         accentColor="#06b6d4"
+      />
+
+      <div className="border-t" style={{ borderColor: 'var(--gia-border)', margin: '4px 0' }} />
+
+      <div className="flex items-center gap-2">
+        <Sparkles size={14} style={{ color: '#ec4899' }} />
+        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--gia-muted)' }}>
+          Kokoro TTS
+        </span>
+      </div>
+      <p className="text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>
+        Kokoro-82M — the free, near-ElevenLabs voice. Runs 100% in-browser via transformers.js. Downloads once (~86MB q8), 24kHz output, quiet when offline.
+      </p>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={async () => {
+            if (kokoroLoading) return;
+            setKokoroLoading(true);
+            try {
+              if (kokoroTTS.isReady) {
+                await kokoroTTS.unload();
+                setKokoroStatus('unloaded');
+              } else {
+                await kokoroTTS.loadModel();
+                setKokoroStatus('ready');
+              }
+            } catch {
+              setKokoroStatus('error');
+            } finally {
+              setKokoroLoading(false);
+            }
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-medium transition-colors"
+          style={{
+            background: kokoroStatus === 'ready' ? 'rgba(239,68,68,0.15)' : kokoroStatus === 'loading' ? 'var(--gia-bg-2)' : '#ec4899',
+            color: kokoroStatus === 'ready' ? '#ef4444' : kokoroLoading ? 'var(--gia-muted)' : 'white',
+          }}
+        >
+          {kokoroLoading ? 'Downloading…' : kokoroStatus === 'ready' ? 'Unload Kokoro' : 'Download Kokoro'}
+        </button>
+        <span className="text-[9px]" style={{ color: kokoroStatus === 'ready' ? '#ec4899' : kokoroStatus === 'error' ? '#ef4444' : 'var(--gia-muted-2)' }}>
+          {kokoroStatus === 'ready' ? `✓ Loaded (${kokoroTTS.device})` : kokoroStatus === 'error' ? 'Error' : kokoroStatus === 'loading' ? 'Downloading ~86MB…' : 'Not loaded'}
+        </span>
+      </div>
+
+      <div>
+        <label className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--gia-muted)', display: 'block', marginBottom: '4px' }}>
+          Voice
+        </label>
+        <select
+          className="gia-input"
+          value={kokoroVoice}
+          onChange={e => { setKokoroVoice(e.target.value); kokoroTTS.setVoice(e.target.value); }}
+          style={{ fontSize: '12px', width: '100%' }}
+        >
+          {KOKORO_VOICES.map(v => (
+            <option key={v.id} value={v.id}>{v.label}</option>
+          ))}
+        </select>
+        <p className="text-[9px] mt-1" style={{ color: 'var(--gia-muted-2)' }}>
+          {kokoroTTS.hasWebGPU()
+            ? 'Runs on WebGPU when available, falls back to WASM automatically.'
+            : 'This browser has no WebGPU — Kokoro will run on the WASM backend.'}
+        </p>
+      </div>
+
+      <Switch
+        checked={kokoroEnabled}
+        onChange={v => { setKokoroEnabled(v); TTSService.setKokoroEnabled(v); }}
+        icon={<Sparkles size={11} />}
+        label="Use Kokoro Voice"
+        description="When enabled, GIA speaks with Kokoro (preferred over SpeechT5). Falls back to device/model voice when unloaded."
+        accentColor="#ec4899"
       />
 
       <div className="border-t" style={{ borderColor: 'var(--gia-border)', margin: '4px 0' }} />

@@ -1,10 +1,14 @@
 import terminalService from '../TerminalService';
+import { isTauri } from '../../platform';
 import type { Tool } from './types';
+
+const desktopShell = isTauri();
+const shellLabel = desktopShell ? 'a background host terminal' : 'your proot+Alpine terminal';
 
 const gatewayDaemonStart: Tool = {
   id: 'gateway_daemon_start',
   name: 'gateway_daemon_start',
-  description: 'Start the GIA gateway daemon in the proot terminal. This enables 24/7 message listening on Telegram and other platforms.',
+  description: 'Start the GIA gateway daemon in a background terminal (host shell on desktop / proot sandbox on Android). This enables 24/7 message listening on Telegram and other platforms.',
   schema: {
     type: 'object',
     properties: {
@@ -15,7 +19,7 @@ const gatewayDaemonStart: Tool = {
     try {
       const status = await terminalService.getStatus();
       if (!status.running) {
-        return { success: false, content: '', error: 'Proot terminal is not running. Start it first.' };
+        return { success: false, content: '', error: desktopShell ? 'Terminal is not available. Open the Terminal once to warm it up, then retry.' : 'Proot terminal is not running. Start it first.' };
       }
       const bg = args?.background !== false;
       const cmd = 'cd ~/gia-app/daemon && node index.js' + (bg ? ' > /dev/null 2>&1 &' : '');
@@ -23,7 +27,7 @@ const gatewayDaemonStart: Tool = {
       if (result.exitCode === 0) {
         return {
           success: true,
-          content: '## Gateway Daemon Started\n\nThe GIA gateway daemon is now running 24/7 in your proot+Alpine terminal.\n\nIt listens for messages on Telegram and routes them through GIA.\n\n**Manage it:**\n- Status: `ps aux | grep node`\n- Stop: `kill $(pgrep -f "gia-app/daemon")`\n- Logs: `cat ~/.gia/gateway-daemon.log`',
+          content: `## Gateway Daemon Started\n\nThe GIA gateway daemon is now running 24/7 in ${shellLabel}.\n\nIt listens for messages on Telegram and routes them through GIA.\n\n**Manage it:**\n- Status: \`ps aux | grep node\`\n- Stop: \`kill $(pgrep -f "gia-app/daemon")\`\n- Logs: \`cat ~/.gia/gateway-daemon.log\``,
         };
       }
       return { success: false, content: '', error: result.output || 'Failed to start daemon' };

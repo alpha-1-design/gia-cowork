@@ -1,11 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Smartphone, Plug, PlugZap, RefreshCw, Lock, Unlock, Users, Link2 } from 'lucide-react';
+import { ArrowLeft, Smartphone, Plug, PlugZap, RefreshCw, Lock, Unlock, Users, Link2, Copy, Server, Check } from 'lucide-react';
 import { unimindClient } from '../../services/unimindClient';
 import { isFollowLockEnabled, setFollowLockEnabled, isRemoteUnlockEnabled, setRemoteUnlockEnabled } from '../../services/tools/systemControl';
 import type { UnimindStatus } from '../../services/unimindClient';
+import { isTauri } from '../../platform';
 
 interface Props {
   onBack: () => void;
+}
+
+interface RelayInfo {
+  running: boolean;
+  port: number;
+  ws_url: string;
+  lan_url: string | null;
+  secret_required: boolean;
 }
 
 export const UnimindPage: React.FC<Props> = ({ onBack }) => {
@@ -14,8 +23,32 @@ export const UnimindPage: React.FC<Props> = ({ onBack }) => {
   const [followLock, setFollowLock] = useState(() => isFollowLockEnabled());
   const [remoteUnlock, setRemoteUnlock] = useState(() => isRemoteUnlockEnabled());
   const [busy, setBusy] = useState(false);
+  const [relayInfo, setRelayInfo] = useState<RelayInfo | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const refresh = useCallback(() => setStatus(unimindClient.getStatus()), []);
+
+  const refreshRelay = useCallback(() => {
+    if (!isTauri()) return;
+    import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke<RelayInfo>('unimind_relay_status'))
+      .then(setRelayInfo)
+      .catch(() => setRelayInfo(null));
+  }, []);
+
+  const copyLan = async () => {
+    const url = relayInfo?.lan_url ?? relayInfo?.ws_url ?? '';
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { /* clipboard unavailable */ }
+  };
+
+  useEffect(() => {
+    refreshRelay();
+  }, [refreshRelay]);
 
   useEffect(() => {
     const timer = setInterval(refresh, 2000);
@@ -103,6 +136,41 @@ export const UnimindPage: React.FC<Props> = ({ onBack }) => {
           Set the <strong>same relay URL + same pairing id</strong> on the phone (GIA → Settings → Unimind) and they find each other.
         </p>
       </div>
+
+      {/* Embedded relay (desktop only) */}
+      {isTauri() && (
+        <div style={cardStyle}>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Server size={12} style={{ color: relayInfo?.running ? '#34d399' : '#f87171' }} />
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--gia-muted)' }}>Embedded relay</span>
+            <span className="ml-auto text-[10px]" style={{ color: relayInfo?.running ? '#34d399' : '#f87171' }}>
+              {relayInfo?.running ? '● running' : '○ not running'}
+            </span>
+          </div>
+          <p className="text-[10px] leading-relaxed" style={{ color: 'var(--gia-muted-2)' }}>
+            GIA starts a built-in relay on this machine, so no separate server is needed.
+          </p>
+          {relayInfo?.running && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              <div className="text-[10px] flex items-center gap-1">
+                <span style={{ color: 'var(--gia-muted-2)' }}>On the phone, use:</span>
+                <button onClick={() => void copyLan()} className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: copied ? '#34d399' : '#a78bfa', cursor: 'pointer' }}>
+                  <code>{relayInfo.lan_url ?? relayInfo.ws_url}</code>
+                  {copied ? <Check size={10} /> : <Copy size={10} />}
+                </button>
+              </div>
+              {relayInfo.secret_required && (
+                <p className="text-[10px]" style={{ color: '#fbbf24' }}>Shared secret required (UNIMIND_RELAY_SECRET set).</p>
+              )}
+            </div>
+          )}
+          {!relayInfo?.running && (
+            <p className="text-[10px] mt-1" style={{ color: 'var(--gia-muted-2)' }}>
+              Relay failed to start (port {relayInfo?.port ?? 8787} in use?) — pairing is unavailable.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Peers */}
       <div style={cardStyle}>

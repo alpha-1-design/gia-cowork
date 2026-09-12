@@ -80,7 +80,7 @@ const SettingsModule: React.FC = () => {
   useEffect(() => { return () => { if (dangerTimerRef.current) clearTimeout(dangerTimerRef.current); }; }, []);
 
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [updateState, setUpdateState] = useState<'idle' | 'downloading' | 'ready' | 'error'>('idle');
+  const [updateState, setUpdateState] = useState<'idle' | 'downloading' | 'installing' | 'ready' | 'error'>('idle');
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateError, setUpdateError] = useState('');
 
@@ -108,7 +108,9 @@ const SettingsModule: React.FC = () => {
 
   const handleInstall = async () => {
     try {
+      setUpdateState('installing');
       await updateService.installUpdate();
+      setUpdateState('ready');
     } catch (e) {
       setUpdateState('error');
       setUpdateError((e as Error).message);
@@ -212,12 +214,16 @@ const SettingsModule: React.FC = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>
-                {updateState === 'ready' ? 'Download Complete' :
+                {updateState === 'installing' ? 'Installing…' :
+                 updateState === 'ready' ? 'Download Complete' :
                  updateState === 'error' ? 'Download Failed' :
                  `Update Available: v${updateInfo.version}`}
               </p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>
-                {updateState === 'ready' ? (
+                {updateState === 'installing' ? (
+                  <>Applying update — GIA will restart automatically</>
+                ) :
+                 updateState === 'ready' ? (
                   <>Tap Install to upgrade now · {formatSize(updateInfo.size)}</>
                 ) :
                  updateState === 'error' ? updateError :
@@ -236,11 +242,13 @@ const SettingsModule: React.FC = () => {
                 </div>
                 <span className="text-[10px] font-medium shrink-0" style={{ color: '#34d399' }}>{downloadProgress}%</span>
               </div>
+            ) : updateState === 'installing' ? (
+              <span className="text-[10px] font-medium whitespace-nowrap" style={{ color: '#34d399' }}>Installing…</span>
             ) : updateState === 'ready' ? (
               <button onClick={handleInstall}
                 className="px-3 py-1.5 rounded-lg text-[10px] font-semibold whitespace-nowrap"
                 style={{ background: 'rgba(52,211,153,0.15)', color: '#34d399' }}>
-                Install
+                {updateInfo.platform === 'desktop' ? 'Install & Restart' : 'Install'}
               </button>
             ) : updateState === 'error' ? (
               <button onClick={handleDownload}
@@ -507,7 +515,7 @@ const SettingsModule: React.FC = () => {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Mical</p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>Alpine Sandbox build environment, live security scan, ports, firewall & threat intelligence</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>Build environment (host shell on desktop / Alpine sandbox on Android), live security scan, ports, firewall & threat intelligence</p>
             <span className="text-[9px] mt-1 inline-block px-1.5 py-0.5 rounded font-medium" style={{ background: '#34d39915', color: '#34d399' }}>
               Scan · Sandbox · Firewall · Threat
             </span>

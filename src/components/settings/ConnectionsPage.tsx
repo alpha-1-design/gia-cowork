@@ -6,6 +6,7 @@ import { SocialSection } from './SocialSection';
 import { GatewaySection } from './GatewaySection';
 import { BrowserSection } from './BrowserSection';
 import { SearchSection } from './SearchSection';
+import { WhatsAppBridgeSection } from './WhatsAppBridgeSection';
 
 export const ConnectionsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => (
   <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--gia-bg)', padding: '20px 16px', gap: '16px' }}>
@@ -32,6 +33,7 @@ export const ConnectionsPage: React.FC<{ onBack: () => void }> = ({ onBack }) =>
     </div>
     <ConnectorsSection />
     <SocialSection />
+    <WhatsAppBridgeSection />
     <GatewaySection />
 
     <div className="flex items-center gap-2 px-1 mt-2">

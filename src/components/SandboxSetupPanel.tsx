@@ -12,6 +12,7 @@ import {
   ChevronDown, ChevronRight, Zap, Settings, Box,
 } from 'lucide-react';
 import { useSandboxSetup } from '../hooks/useSandboxSetup';
+import { isTauri } from '../platform';
 
 type Tab = 'system' | 'packages' | 'workspace' | 'mcp';
 
@@ -201,8 +202,21 @@ export default function SandboxSetupPanel() {
     return installedPkgs.some(p => p.startsWith(name + ' ') || p === name);
   }, [installedPkgs]);
 
-  // Not native
+  // Not native (web or the Tauri desktop shell)
   if (!isNative) {
+    if (isTauri()) {
+      return (
+        <div className="p-6 text-center">
+          <Terminal className="w-12 h-12 mx-auto mb-3 opacity-40" />
+          <h3 className="text-lg font-semibold mb-2">Terminal</h3>
+          <p className="text-sm opacity-60">
+            GIA Cowork runs a real host terminal on desktop — open the
+            Terminal (or press Ctrl+K) to use the host shell directly.
+            The sandbox/rootfs package manager below is Android-only.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="p-6 text-center">
         <Terminal className="w-12 h-12 mx-auto mb-3 opacity-40" />

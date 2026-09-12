@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
 import { pickFallback, countConnectedProviders, pickFallbackModel } from '../ResilientRelay';
 import { useProviderStore } from '../../../store/useProviderStore';
 import { providerRegistry } from '../../ProviderRegistry';
@@ -9,10 +9,20 @@ function baseConfig(overrides: Partial<{ apiKey: string; model: string; enabled:
 
 describe('ResilientRelay — model routing', () => {
   beforeAll(async () => {
+    // Unit tests must never touch the network. providerRegistry.init() tries
+    // to enrich its fallback model list via a remote fetch (opencode.ai behind
+    // the CorsProxy chain); under happy-dom that fetch can hang past Vitest's
+    // 10s hook timeout — the "hook timed out" flake. Rejecting instantly sends
+    // init() down its fallback-only path, deterministically and fast.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network stubbed for unit tests')));
     // providerRegistry populates its static/fallback model list lazily via
     // init() (normally called once at app startup) rather than in its
     // constructor — without this, getModels() returns [] for everyone.
     await providerRegistry.init();
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
   });
 
   beforeEach(() => {

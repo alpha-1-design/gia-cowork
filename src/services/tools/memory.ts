@@ -1,5 +1,6 @@
 import { useGiaStore } from '../../store/useGiaStore';
 import { providerRegistry } from '../ProviderRegistry';
+import { exportBrainToFile } from '../BrainExport';
 import type { Tool } from './types';
 import type { MemoryCategory, MemoryTier } from '../../store/useMemoryStore';
 export const memoryTools: Tool[] = [
@@ -99,7 +100,6 @@ export const memoryTools: Tool[] = [
     description: 'Export all GIA memories, identity, and skills as a downloadable JSON file.',
     execute: async () => {
       try {
-        const { exportBrainToFile } = await import('../BrainExport');
         exportBrainToFile();
         useGiaStore.getState().addNotification('Brain export downloaded');
         return { success: true, content: 'Brain data exported — check your downloads for gia-brain-*.json' };

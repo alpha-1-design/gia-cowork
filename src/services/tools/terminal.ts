@@ -17,8 +17,8 @@ function formatZodError(issues: z.ZodIssue[]): string {
 
 /**
  * Prepare the shell command for the target language.
- * Uses $HOME instead of /tmp because Alpine proot on Android
- * may not have a writable /tmp — $HOME is always safe.
+ * Uses $HOME instead of /tmp because Alpine proot on Android may not have a
+ * writable /tmp — $HOME is always safe (on desktop it's the real host $HOME).
  */
 function buildShellCommand(command: string, language: string): string {
   switch (language) {
@@ -69,7 +69,7 @@ function normalizeArgs(raw: unknown): Record<string, unknown> {
 const terminalRun: Tool = {
   id: 'terminal_run',
   name: 'terminal_run',
-  description: 'Execute shell commands in GIA\'s proot+Alpine terminal environment. Supports Python, JavaScript, shell scripts, and any command available in Alpine Linux. Results are shown to the user as terminal output.',
+  description: 'Execute shell commands — a real host shell on GIA Desktop, a proot+Alpine sandbox on Android. Supports Python, JavaScript, shell scripts, and any command available on the running platform.',
   schema: {
     type: 'object',
     properties: {
@@ -79,7 +79,7 @@ const terminalRun: Tool = {
         enum: ['sh', 'python', 'js', 'cpp'],
         description: 'Language/execution mode. Use "python" for Python scripts, "js" for Node.js, "cpp" for compiled C++, "sh" (default) for shell/bash commands.',
       },
-      workdir: { type: 'string', description: 'Optional working directory inside the proot environment' },
+      workdir: { type: 'string', description: 'Optional working directory (host path on desktop, proot path on Android)' },
       timeout: { type: 'number', description: 'Timeout in milliseconds (default: 30000, max: 300000)' },
     },
     required: ['command'],
@@ -225,6 +225,7 @@ _Exit code: ${result.exitCode}_`,
         detail,
         '',
         'To fix:',
+        '• On desktop: run the real GIA Cowork desktop app (Tauri) so terminal_run hits the host shell.',
         '• On Android: ensure the GIATerminal native plugin is installed and the proot Alpine environment is set up.',
         '• For code execution: configure a Piston endpoint in Settings → Code Execution.',
         '• JavaScript runs in-browser automatically.',
@@ -236,7 +237,7 @@ _Exit code: ${result.exitCode}_`,
 const terminalStatus: Tool = {
   id: 'terminal_status',
   name: 'terminal_status',
-  description: 'Check if the proot+Alpine terminal is running and get session statistics.',
+  description: 'Check if the terminal backend is running (host shell on desktop / proot+Alpine on Android) and get session statistics.',
   execute: async () => {
     try {
       const status = await terminalService.getStatus();

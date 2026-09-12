@@ -14,6 +14,9 @@ import SandboxService from '../../services/SandboxService';
 import SandboxEnvService, { type SandboxStatus } from '../../services/SandboxEnvService';
 import { SubPageHeader } from './SubPageHeader';
 import ConfirmDialog from '../ConfirmDialog';
+import { isTauri } from '../../platform';
+
+const isDesktop = isTauri();
 
 interface ScanResult {
   severity: 'ok' | 'warning' | 'critical';
@@ -317,7 +320,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* Alpine Sandbox Connection Banner */}
+      {/* Sandbox Connection Banner */}
       {sandboxOk === true && (
         <div className="px-3.5 py-3 rounded-xl text-xs flex items-center justify-between"
           style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
@@ -325,12 +328,14 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <div>
               <p className="font-semibold flex items-center gap-1.5" style={{ color: '#34d399' }}>
-                <CheckCircle2 size={13} /> Alpine Sandbox Connected & Operational
+                <CheckCircle2 size={13} /> {isDesktop ? 'Build Environment Connected & Operational' : 'Alpine Sandbox Connected & Operational'}
               </p>
               <p className="text-[10px] mt-0.5" style={{ color: 'var(--gia-muted)' }}>
-                {SandboxService.isUsingNativeFallback()
-                  ? 'Active on native on-device terminal (proot + Alpine Linux)'
-                  : 'Active on Sandbox Server (port 3081) — proot chroot ready'}
+                {isDesktop
+                  ? 'Build environment active on the host shell (GIA Desktop)'
+                  : SandboxService.isUsingNativeFallback()
+                    ? 'Active on native on-device terminal (proot + Alpine Linux)'
+                    : 'Active on Sandbox Server (port 3081) — proot chroot ready'}
               </p>
             </div>
           </div>
@@ -351,7 +356,9 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </button>
           </div>
           <p style={{ color: 'var(--gia-muted)' }}>
-            Connecting to Alpine Linux Sandbox execution environment...
+            {isDesktop
+              ? 'Checking host shell build environment...'
+              : 'Connecting to Alpine Linux Sandbox execution environment...'}
           </p>
         </div>
       )}
@@ -397,7 +404,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       <div className="flex items-center gap-2 px-1 mt-1">
         <Terminal size={14} style={{ color: '#34d399' }} />
         <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--gia-muted)' }}>
-          Alpine Sandbox & Build Environment
+          {isDesktop ? 'Terminal & Build Environment (host shell)' : 'Alpine Sandbox & Build Environment'}
         </span>
         {sandboxStatus && (
           <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full font-medium"
@@ -492,8 +499,10 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
       <ConfirmDialog
         open={confirmSandboxReset}
-        title="Reset Alpine Sandbox Environment?"
-        message="This removes installed build packages (node, npm, git, gcc, python3). The base rootfs remains intact."
+        title={isDesktop ? 'Reset Build Environment?' : 'Reset Alpine Sandbox Environment?'}
+        message={isDesktop
+          ? 'This removes installed build packages (node, npm, git, gcc, python3).'
+          : 'This removes installed build packages (node, npm, git, gcc, python3). The base rootfs remains intact.'}
         confirmLabel="Reset Environment"
         danger
         onConfirm={async () => {

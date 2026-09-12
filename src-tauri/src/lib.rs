@@ -1,7 +1,9 @@
 mod terminal;
 mod presence;
+mod desktop_fs;
 mod whatsapp_bridge;
 mod screen;
+mod unimind_relay;
 
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem};
@@ -41,6 +43,14 @@ async fn show_after_capture(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Quit the whole process (including the tray daemon). The window close
+/// handler only hides to tray, so the updater cannot use window.close() to
+/// fully exit after applying a release.
+#[tauri::command]
+fn app_exit(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 /// Real hardware report from the OS (not the browser-capped deviceMemory).
 /// Reads /proc/meminfo on Linux; falls back to 0 so the caller can estimate.
 #[tauri::command]
@@ -63,6 +73,29 @@ fn system_info() -> SystemInfo {
     SystemInfo { total_ram_gb, cpu_cores }
 }
 
+/// Status of the embedded Unimind relay (auto-started on boot). Used by the
+/// frontend so the phone-pairing page can show the exact ws:// URLs to use.
+#[derive(serde::Serialize)]
+struct UnimindRelayInfo {
+    running: bool,
+    port: u16,
+    ws_url: String,
+    lan_url: Option<String>,
+    secret_required: bool,
+}
+
+#[tauri::command]
+fn unimind_relay_status() -> UnimindRelayInfo {
+    let port = unimind_relay::relay_port();
+    UnimindRelayInfo {
+        running: unimind_relay::relay_running(),
+        port,
+        ws_url: format!("ws://127.0.0.1:{port}/unimind"),
+        lan_url: unimind_relay::local_lan_ip().map(|ip| format!("ws://{ip}:{port}/unimind")),
+        secret_required: !std::env::var("UNIMIND_RELAY_SECRET").unwrap_or_default().is_empty(),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -77,6 +110,10 @@ pub fn run() {
             terminal::terminal_get_fs_info,
             terminal::terminal_get_status,
             terminal::terminal_reinstall_rootfs,
+            desktop_fs::fs_read,
+            desktop_fs::fs_write,
+            desktop_fs::fs_write_bytes,
+            desktop_fs::fs_list,
             presence::get_presence,
             screen::screen_capture,
             screen::screen_capture_area,
@@ -95,7 +132,9 @@ pub fn run() {
             whatsapp_bridge::whatsapp_status,
             whatsapp_bridge::whatsapp_messages,
             whatsapp_bridge::whatsapp_contacts,
+            app_exit,
             system_info,
+            unimind_relay_status,
         ])
         .setup(|app| {
             // System tray so GIA Cowork can run as a background daemon,
@@ -133,6 +172,16 @@ pub fn run() {
                         let _ = window_clone.hide();
                         api.prevent_close();
                     }
+                });
+            }
+
+            // Embedded Unimind relay: run the cross-device wire for the whole
+            // process lifetime with no Node.js dependency. Only on desktop —
+            // the phone side does not run a relay. It dies with the process.
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                let _ = tauri::async_runtime::spawn(async move {
+                    unimind_relay::run_relay().await;
                 });
             }
 

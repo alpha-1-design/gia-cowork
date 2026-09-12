@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, RotateCcw, Scan, Sparkles } from 'lucide-react';
 import { VisionAnalysisPanel } from './VisionAnalysisPanel';
 import type { ComprehensiveVisionAnalysis } from '../services/VisionService';
+import visionService from '../services/VisionService';
 
 interface Point { x: number; y: number }
 
@@ -525,12 +526,10 @@ export const RegionSelectorOverlay: React.FC<RegionSelectorOverlayProps> = ({ im
     // Run local vision analysis on the selected region
     setVisionLoading(true);
     setVisionAnalysis(null);
-    import('../services/VisionService').then(({ default: vs }) => {
-      vs.analyze(resultUrl).then(analysis => {
+    visionService.analyze(resultUrl).then(analysis => {
         setVisionAnalysis(analysis);
         setVisionLoading(false);
       }).catch(() => setVisionLoading(false));
-    }).catch(() => setVisionLoading(false));
   }, [dims, imgW, imgH]);
 
   const handleUse = useCallback(() => {
@@ -629,9 +628,7 @@ export const RegionSelectorOverlay: React.FC<RegionSelectorOverlayProps> = ({ im
                       onRetry={() => {
                         setVisionLoading(true);
                         setVisionAnalysis(null);
-                        import('../services/VisionService').then(({ default: vs }) => {
-                          vs.analyze(previewUrl).then(a => { setVisionAnalysis(a); setVisionLoading(false); }).catch(() => setVisionLoading(false));
-                        }).catch(() => setVisionLoading(false));
+                        visionService.analyze(previewUrl).then(a => { setVisionAnalysis(a); setVisionLoading(false); }).catch(() => setVisionLoading(false));
                       }}
                     />
                   </div>

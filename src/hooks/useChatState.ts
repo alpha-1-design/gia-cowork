@@ -15,6 +15,7 @@ import { processSlashCommand } from '../services/SlashCommands';
 import AnalyticsService from '../services/AnalyticsService';
 import { AudioRecorder } from '../services/audioRecorder';
 import WhisperService from '../services/WhisperService';
+import MCPManager from '../services/MCPManager';
 
 export function useChatState() {
   // Lazy-init from whatever session was active last time this hook mounted, so a
@@ -307,11 +308,9 @@ export function useChatState() {
       const url = (action.data?.url as string) || '';
       // Handle MCP OAuth callback
       if (url.startsWith('gia://mcp-oauth-callback')) {
-        import('../services/MCPManager').then(({ default: MCPManager }) => {
-          MCPManager.handleOAuthCallback(url).catch((e) => {
-            console.error('[Chat] MCP OAuth callback failed:', e);
-            useGiaStore.getState().addNotification('❌ MCP OAuth failed');
-          });
+        MCPManager.handleOAuthCallback(url).catch((e) => {
+          console.error('[Chat] MCP OAuth callback failed:', e);
+          useGiaStore.getState().addNotification('❌ MCP OAuth failed');
         });
         useGiaStore.getState().setPendingAction(null);
       } else {

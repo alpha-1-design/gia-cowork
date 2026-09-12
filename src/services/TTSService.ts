@@ -3,6 +3,7 @@ import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { isNativePlatform } from '../utils/helpers';
 import { speakWithModelVoice, stopModelVoice } from './ModelVoiceService';
 import localTTS from './LocalTTSService';
+import kokoroTTS from './KokoroService';
 
 const cleanTTS = (text: string) =>
   text
@@ -22,6 +23,7 @@ class TTSService {
   private enabled: boolean = localStorage.getItem('gia-tts-enabled') === 'true';
   private modelVoiceEnabled: boolean = localStorage.getItem('gia-model-voice-enabled') !== 'false';
   private localTTSEnabled: boolean = localStorage.getItem('gia-local-tts-enabled') === 'true';
+  private kokoroEnabled: boolean = localStorage.getItem('gia-kokoro-enabled') === 'true';
   private queue: string[] = [];
   private speaking = false;
   private onComplete: SpeakCallback | null = null;
@@ -48,6 +50,13 @@ class TTSService {
   }
 
   isLocalTTSEnabled() { return this.localTTSEnabled; }
+
+  setKokoroEnabled(v: boolean) {
+    this.kokoroEnabled = v;
+    localStorage.setItem('gia-kokoro-enabled', String(v));
+  }
+
+  isKokoroEnabled() { return this.kokoroEnabled; }
 
   isSpeaking() { return this.speaking; }
 
@@ -96,6 +105,10 @@ class TTSService {
     const text = this.queue.shift()!;
 
     try {
+      if (this.kokoroEnabled && kokoroTTS.isReady) {
+        const spoken = await kokoroTTS.speak(text);
+        if (spoken) { this.processQueue(); return; }
+      }
       if (this.localTTSEnabled && localTTS.isReady) {
         const spoken = await localTTS.speak(text);
         if (spoken) { this.processQueue(); return; }
@@ -156,6 +169,10 @@ class TTSService {
       const spoken = await speakWithModelVoice(cleanText);
       if (spoken) return;
     }
+    if (this.kokoroEnabled && kokoroTTS.isReady) {
+      const spoken = await kokoroTTS.speak(cleanText);
+      if (spoken) return;
+    }
     if (this.localTTSEnabled && localTTS.isReady) {
       const spoken = await localTTS.speak(cleanText);
       if (spoken) return;
@@ -169,6 +186,7 @@ class TTSService {
     this.queue = [];
     this.speaking = false;
     stopModelVoice();
+    kokoroTTS.stop();
     if (isNative) {
       try { await TextToSpeech.stop(); } catch (e) { logger.error('[TTSService] Failed to stop TTS:', e); }
     } else {

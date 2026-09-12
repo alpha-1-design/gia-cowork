@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Download, Upload } from 'lucide-react';
 import { useGiaStore } from '../../store/useGiaStore';
-import { exportBrainToFile, importBrainFromFile, loadCloudConfig, saveCloudConfig, CloudConfig } from '../../services/BrainExport';
+import { exportBrainToFile, importBrainFromFile, exportBrainToCloud, loadCloudConfig, saveCloudConfig, CloudConfig } from '../../services/BrainExport';
 import { SubPageHeader } from './SubPageHeader';
 
 export const BrainExportSubPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -38,7 +38,6 @@ export const BrainExportSubPage: React.FC<{ onBack: () => void }> = ({ onBack })
     if (!cloudConfig.url) return;
     setUploadStatus('Uploading...');
     try {
-      const { exportBrainToCloud } = await import('../../services/BrainExport');
       const msg = await exportBrainToCloud(cloudConfig);
       setUploadStatus(msg);
       useGiaStore.getState().addNotification('Brain uploaded to cloud');

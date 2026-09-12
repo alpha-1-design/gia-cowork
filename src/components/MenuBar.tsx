@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGiaStore } from '../store/useGiaStore';
+import { exportBrainToFile, importBrainFromFile } from '../services/BrainExport';
 
 interface MenuBarProps {
   onOpenPalette: () => void;
@@ -51,8 +52,8 @@ const MenuBar: React.FC<MenuBarProps> = ({ onOpenPalette, onOpenTerminal, onOpen
       items: [
         { label: 'New Chat', shortcut: 'Ctrl+N', action: () => { store().createSession(); setOpenMenu(null); } },
         { label: 'Clear Current Chat', action: () => { const s = store(); if (s.activeSessionId) { s.clearSession(s.activeSessionId); s.addNotification('Session cleared'); } setOpenMenu(null); } },
-        { label: 'Export Brain', action: () => { import('../services/BrainExport').then(m => { m.exportBrainToFile(); store().addNotification('Brain exported'); }).catch(() => store().addNotification('Export failed')); setOpenMenu(null); } },
-        { label: 'Import Brain', action: () => { setOpenMenu(null); const input = document.createElement('input'); input.type = 'file'; input.accept = 'application/json,.json'; input.onchange = () => { const file = input.files?.[0]; if (!file) return; import('../services/BrainExport').then(m => m.importBrainFromFile(file).then(r => store().addNotification(r.message)).catch(() => store().addNotification('Import failed'))).catch(() => store().addNotification('Import failed')); }; input.click(); } },
+        { label: 'Export Brain', action: () => { try { exportBrainToFile(); store().addNotification('Brain exported'); } catch { store().addNotification('Export failed'); } setOpenMenu(null); } },
+        { label: 'Import Brain', action: () => { setOpenMenu(null); const input = document.createElement('input'); input.type = 'file'; input.accept = 'application/json,.json'; input.onchange = () => { const file = input.files?.[0]; if (!file) return; importBrainFromFile(file).then(r => store().addNotification(r.message)).catch(() => store().addNotification('Import failed')); }; input.click(); } },
       ],
     },
     {

@@ -1,11 +1,18 @@
 import SandboxService from '../SandboxService';
-import terminalService from '../TerminalService';
+import CapabilityService from '../CapabilityService';
+import CapabilityPolicyService from '../CapabilityPolicyService';
+import { isTauri } from '../../platform';
 import type { Tool } from './types';
+
+const desktop = isTauri();
+const shellName = desktop ? 'GIA Desktop host shell' : 'Alpine Linux sandbox';
 
 const sandboxExec: Tool = {
   id: 'sandbox_exec',
   name: 'sandbox_exec',
-  description: 'Execute any command in GIA\'s built-in Alpine Linux sandbox. Root access inside the sandbox. Supports all Alpine/APK packages. Use for running scripts, compiling code, testing commands, or any Linux task.',
+  description: desktop
+    ? 'Execute any command on the real GIA Desktop host shell — a normal Linux terminal on this computer. Use for running scripts, compiling code, testing commands, or any Linux task. (Equivalent to terminal_run, kept for compatibility.)'
+    : 'Execute any command in GIA\'s built-in Alpine Linux sandbox. Root access inside the sandbox. Supports all Alpine/APK packages. Use for running scripts, compiling code, testing commands, or any Linux task.',
   schema: {
     type: 'object',
     properties: {
@@ -27,7 +34,7 @@ const sandboxExec: Tool = {
       return {
         success: false,
         content: '',
-        error: 'No sandbox available — neither the remote sandbox server (node server/sandbox-server.cjs) nor the on-device Alpine terminal could be reached.',
+        error: 'No execution environment available — start the sandbox server (node server/sandbox-server.cjs) or use the desktop/on-device terminal.',
       };
     }
 
@@ -47,45 +54,55 @@ const sandboxExec: Tool = {
 const sandboxInstall: Tool = {
   id: 'sandbox_install',
   name: 'sandbox_install',
-  description: 'Install Alpine Linux (APK) packages in the sandbox. Packages persist across sessions.',
+  description: desktop
+    ? 'Install packages on the host OS with the detected system package manager (apt-get / dnf / yum / pacman — auto-detected, never guess). MANDATORY: call capabilities_scan first to confirm the package is not already installed, then present the user a choice (reuse existing / install / alternative) and wait for their decision — never install unrequested software.'
+    : 'Install Alpine Linux (APK) packages in the sandbox. Packages persist across sessions. MANDATORY: call capabilities_scan first to confirm the package is not already available, then present the user a choice and wait for their decision — never install unrequested software.',
   schema: {
     type: 'object',
     properties: {
       packages: {
         type: 'string',
-        description: 'Package name(s) to install (space-separated, e.g. "python3 nodejs gcc git curl ffmpeg")',
+        description: desktop
+          ? 'Package name(s) to install with the host package manager (space-separated, e.g. "python3 nodejs gcc git curl ffmpeg")'
+          : 'Package name(s) to install (space-separated, e.g. "python3 nodejs gcc git curl ffmpeg")',
       },
     },
     required: ['packages'],
   },
   execute: async (args) => {
-    const packages = String(args.packages || '');
-    if (!packages) return { success: false, content: '', error: 'packages is required' };
+    const raw = String(args.packages || '');
+    const packages = raw.split(/\s+/).filter(Boolean);
+    if (packages.length === 0) return { success: false, content: '', error: 'packages is required' };
 
-    // Prefer the on-device native proot terminal (so installs work in-app on mobile)
-    if (terminalService.isAvailable()) {
-      try {
-        const result = await terminalService.exec(`apk add ${packages}`, undefined, undefined, 300000);
-        if (result.exitCode !== 0) {
-          return { success: false, content: result.output, error: `Exit code ${result.exitCode}` };
-        }
-        return { success: true, content: `Installed: ${packages}\n${result.output}` };
-      } catch (e) {
-        return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
-      }
+    const denied = packages.filter(p => CapabilityPolicyService.decision(p) === 'deny');
+    if (denied.length > 0) {
+      return {
+        success: false,
+        content: '',
+        error: `Installs are blocked by policy (deny): ${denied.join(', ')}. Do not install these — explain to the user that they are policy-blocked and offer alternatives or ask if they want the policy changed.`,
+      };
     }
+
+    const autoApproved = packages.every(p => CapabilityPolicyService.decision(p) === 'allow');
 
     const available = await SandboxService.ensureAvailable();
     if (!available) {
-      return { success: false, content: '', error: 'Alpine sandbox is not available. Start the sandbox server first.' };
+      return { success: false, content: '', error: `${shellName} is not available. Start the sandbox server first.` };
     }
 
     try {
-      const result = await SandboxService.install(packages.split(/\s+/).filter(Boolean));
+      const result = await SandboxService.install(packages);
       if (result.exitCode !== 0) {
         return { success: false, content: result.stdout, error: result.stderr || `Exit code ${result.exitCode}` };
       }
-      return { success: true, content: `Installed: ${packages}\n${result.stdout}` };
+      CapabilityService.invalidate();
+      CapabilityService.rescanAndBroadcast()
+        // eslint-disable-next-line no-console
+        .catch((e) => { console.warn('[sandbox_install] rescan after install failed:', e); });
+      const note = autoApproved
+        ? ' (auto-approved by policy — no user prompt needed)'
+        : ' (install was confirmed with the user before running)';
+      return { success: true, content: `Installed: ${packages.join(' ')}${note}\n${result.stdout}` };
     } catch (e) {
       return { success: false, content: '', error: e instanceof Error ? e.message : String(e) };
     }
@@ -111,7 +128,7 @@ const sandboxClone: Tool = {
 
     const available = await SandboxService.ensureAvailable();
     if (!available) {
-      return { success: false, content: '', error: 'Alpine sandbox is not available.' };
+      return { success: false, content: '', error: `${shellName} is not available.` };
     }
 
     try {
@@ -152,7 +169,7 @@ const sandboxFS: Tool = {
 
     const available = await SandboxService.ensureAvailable();
     if (!available) {
-      return { success: false, content: '', error: 'Alpine sandbox is not available.' };
+      return { success: false, content: '', error: `${shellName} is not available.` };
     }
 
     try {

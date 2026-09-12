@@ -1,4 +1,5 @@
 import { logger } from '../../utils/logger';
+import { isTauri } from '../../platform';
 import type { Tool, ToolResult } from './types';
 
 interface SSHConnection {
@@ -100,6 +101,9 @@ const sshTools: Tool[] = [
         try {
           output = await execViaSandbox(cmd);
         } catch {
+          if (isTauri()) {
+            return { success: false, content: '', error: 'Cannot run ssh — install the openssh-client/sshpass package with your host package manager (e.g. sudo apt-get install openssh-client sshpass).' };
+          }
           const install = await execViaSandbox('apk add --no-cache openssh-client sshpass 2>&1');
           if (!install.includes('OK')) {
             return { success: false, content: '', error: 'Cannot install ssh client in sandbox. Ensure sandbox is running.' };

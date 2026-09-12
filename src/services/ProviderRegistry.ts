@@ -230,7 +230,15 @@ class ProviderRegistry {
   private async fetchRemote(): Promise<void> {
     const configUrl = 'https://opencode.ai/api/providers';
     try {
-      const res = await corsProxy.fetch(configUrl, { signal: AbortSignal.timeout(8000) });
+      // Hard-bounded: a hanging CorsProxy chain (dead proxy hosts that ignore
+      // the abort signal) must never stall startup past this timer.
+      const src = corsProxy.fetch(configUrl, { signal: AbortSignal.timeout(8000) });
+      const res = await Promise.race([
+        src,
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Remote config fetch timed out')), 8000);
+        }),
+      ]);
       if (!res.ok) return;
       const data: {
         providers?: ProviderDef[];

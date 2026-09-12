@@ -2,6 +2,7 @@ import { logger } from '../utils/logger';
 import { CapacitorHttp } from '@capacitor/core';
 import { isNativePlatform } from '../utils/helpers';
 import { Directory, Filesystem } from '@capacitor/filesystem';
+import brain from './GiaBrain';
 
 export interface CodeRunRequest {
   language: string;
@@ -251,7 +252,6 @@ class CodeRunner {
 
   async autoFix(code: string, language: string, error: string): Promise<string | null> {
     try {
-      const { default: brain } = await import('./GiaBrain');
       const res = await brain.generate({
         prompt: `Fix this ${language} code error:\n\n${code}\n\nError:\n${error}\n\nReturn ONLY the fixed code, no explanations.`,
         temperature: 0.2,

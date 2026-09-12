@@ -13,6 +13,7 @@ import PlannerModule from './modules/PlannerModule';
 import SettingsModule from './modules/SettingsModule';
 import ErrorBoundary from './components/ErrorBoundary';
 import ApiKeyInputPanel from './components/ApiKeyInputPanel';
+import JarvisOrb from './components/JarvisOrb';
 import { SourcesPanel } from './components/SourcesPanel';
 import AppNavigation from './components/AppNavigation';
 import AppSidebar from './components/AppSidebar';
@@ -23,6 +24,20 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useNotificationStore } from './store/useNotificationStore';
 import type { IncomingNotification } from './services/SmartNotificationEngine';
 import type { WhatsAppIncomingMessage } from './services/WhatsAppBridgeService';
+import messagingBridge from './services/MessagingBridge';
+import { giaCoreServices, featureFlags } from './services/GIACoreServices';
+import { jarvisOrbService } from './services/JarvisOrbService';
+import smartNotificationEngine from './services/SmartNotificationEngine';
+import { whatsAppBridgeService } from './services/WhatsAppBridgeService';
+import { whatsAppSession } from './services/whatsappSession';
+import { unimindClient } from './services/unimindClient';
+import { updateService } from './services/UpdateService';
+import MCPManager from './services/MCPManager';
+import GiaBrain, { setSystemContext } from './services/GiaBrain';
+import { automationEngine } from './services/AutomationEngine';
+import localLLMService from './services/LocalLLMService';
+import whisperService from './services/WhisperService';
+import CapabilityService from './services/CapabilityService';
 import { useProviderStore } from './store/useProviderStore';
 import { logger } from './utils/logger';
 import { useClipboardMonitor } from './hooks/useClipboardMonitor';
@@ -36,6 +51,7 @@ const TaskBoard = lazy(() => import('./components/TaskBoard').then(m => ({ defau
 const NotesPanel = lazy(() => import('./components/NotesPanel').then(m => ({ default: m.NotesPanel })));
 const ProfileDrawer = lazy(() => import('./components/ProfileDrawer'));
 const SetupWizard = lazy(() => import('./components/SetupWizard'));
+const DesktopIntro = lazy(() => import('./components/DesktopIntro'));
 
 // Surface persistence failures (e.g. storage quota exceeded) to the user
 // instead of failing silently and losing data. Throttled so a persistent
@@ -149,6 +165,21 @@ const App: React.FC = () => {
   const [showSetup, setShowSetup] = useState(() => {
     try { return localStorage.getItem('gia-wizard-completed') !== 'true'; } catch { return true; }
   });
+  // After the wizard, show the one-time GIA Desktop intro before chat UI.
+  // ('gia-desktop-intro-seen' persists that it was shown.)
+  const [showIntro, setShowIntro] = useState(false);
+  const closeSetup = useCallback(() => {
+    setShowSetup(false);
+    try {
+      if (localStorage.getItem('gia-desktop-intro-seen') !== 'true') setShowIntro(true);
+    } catch {
+      setShowIntro(true);
+    }
+  }, []);
+  const closeIntro = useCallback(() => {
+    setShowIntro(false);
+    try { localStorage.setItem('gia-desktop-intro-seen', 'true'); } catch { /* noop */ }
+  }, []);
   // Real host-shell terminal (Ctrl+K → Terminal) — separate from Engine
   // Room, which is the provider-management console.
   const [showTerminalPanel, setShowTerminalPanel] = useState(false);
@@ -233,21 +264,21 @@ const App: React.FC = () => {
     let svc: Record<string, any> | null = null;
     const servicesReady = Promise.all([
       import('./services/SchedulerService').then(m => { m.default.start(); }),
-      import('./services/MCPManager').then(m => m.default),
+      Promise.resolve(MCPManager),
       import('./services/autonomy/ProactiveEngine').then(m => { m.proactiveEngine.start(); return m.proactiveEngine; }),
       import('./services/IdleManager').then(m => m.default),
       import('./services/SystemService').then(m => m.default),
-      import('./services/GiaBrain').then(m => m.setSystemContext),
+      Promise.resolve(setSystemContext),
       import('./services/WakeLockService').then(m => m.default),
       import('./services/KeepaliveService').then(m => m.default),
-      import('./services/MessagingBridge').then(m => m.default),
+      Promise.resolve(messagingBridge),
       import('./services/BackgroundRecovery').then(m => m.backgroundRecovery),
     ]).then(([, MCPManager, proactiveEngine, idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, messagingBridge, backgroundRecovery]) => {
       svc = { idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, messagingBridge, backgroundRecovery, proactiveEngine, MCPManager };
       return svc;
     });
 
-    import('./services/GIACoreServices').then(m => m.giaCoreServices.onAppStart());
+    void giaCoreServices.onAppStart();
 
     // Track user activity for autonomy engine + idle manager
     const trackActivity = () => {
@@ -272,13 +303,13 @@ const App: React.FC = () => {
 
     // Smart notification triage — route new notifications through the engine,
     // surface desktop notifications only for what it decides is 'immediate'.
-    import('./services/SmartNotificationEngine').then(({ default: smartNotif }) => {
+    {
       let lastIds = new Set(useNotificationStore.getState().notifications.map(n => n.id));
       useNotificationStore.subscribe((state) => {
         const currentIds = new Set(state.notifications.map(n => n.id));
         for (const n of state.notifications) {
           if (lastIds.has(n.id)) continue;
-          const decision = smartNotif.process({
+          const decision = smartNotificationEngine.process({
             id: n.id,
             title: n.title,
             body: n.body,
@@ -293,7 +324,7 @@ const App: React.FC = () => {
         }
         lastIds = currentIds;
       });
-    });
+    }
 
     // Presence-aware autonomy — pause background work while the screen is locked.
     import('./services/PresenceService').then(({ presenceService }) => {
@@ -304,21 +335,17 @@ const App: React.FC = () => {
           if (!p || p.lockState === 'UNKNOWN') return;
           if (p.lockState === 'LOCKED' && !locked) {
             locked = true;
-            const [{ automationEngine }, { proactiveEngine }] = await Promise.all([
-              import('./services/AutomationEngine'),
-              import('./services/autonomy/ProactiveEngine'),
-            ]);
+            const { proactiveEngine } = await import('./services/autonomy/ProactiveEngine');
             automationEngine.stop();
             proactiveEngine.stop();
+            jarvisOrbService.setPaused(true);
             useGiaStore.getState().addNotification('🔒 Screen locked — paused background work');
           } else if (p.lockState === 'UNLOCKED' && locked) {
             locked = false;
-            const [{ automationEngine }, { proactiveEngine }] = await Promise.all([
-              import('./services/AutomationEngine'),
-              import('./services/autonomy/ProactiveEngine'),
-            ]);
+            const { proactiveEngine } = await import('./services/autonomy/ProactiveEngine');
             automationEngine.start();
             proactiveEngine.start();
+            jarvisOrbService.setPaused(false);
           }
         } catch { /* presence polling is best-effort */ }
       };
@@ -327,9 +354,7 @@ const App: React.FC = () => {
     });
 
     // Two-way WhatsApp — event-driven via Tauri sidecar.
-    import('./services/WhatsAppBridgeService').then(async ({ whatsAppBridgeService }) => {
-      const { whatsAppSession } = await import('./services/whatsappSession');
-      const { default: GiaBrain } = await import('./services/GiaBrain');
+    void Promise.resolve().then(async () => {
 
       const notifyIncoming = async (m: WhatsAppIncomingMessage) => {
         const phone = m.from.split('@')[0];
@@ -420,7 +445,7 @@ const App: React.FC = () => {
     // Unimind — cross-device spine. Auto-connect if a relay is configured
     // (set via unimind_connect or Settings), surface phone chat as
     // notifications, and let the follow-lock rule run.
-    import('./services/unimindClient').then(async ({ unimindClient }) => {
+    void Promise.resolve().then(async () => {
       if (unimindClient.getRelayUrl()) void unimindClient.connect();
       unimindClient.onChat = (peer, text) => {
         try {
@@ -440,6 +465,12 @@ const App: React.FC = () => {
     servicesReady.then(({ SystemService, setSystemContext }) => {
       SystemService.getInfo().then(() => setSystemContext(SystemService.formattedContext));
       SystemService.startMonitoring().then(() => setSystemContext(SystemService.formattedContext));
+
+      // Device-first capability inventory — scanned on boot so GIA already
+      // knows what's installed before the first prompt, and its snapshot is
+      // folded into the system context so she never proposes an install for
+      // something that exists.
+      CapabilityService.warm();
     });
 
     // Connectivity monitoring
@@ -497,7 +528,6 @@ const App: React.FC = () => {
     if (!updateDismissed) {
       setTimeout(async () => {
         try {
-          const { updateService } = await import('./services/UpdateService');
           const info = await updateService.checkForUpdate();
           if (info) setUpdateNotification(info);
         } catch { /* ignore */ }
@@ -525,8 +555,8 @@ const App: React.FC = () => {
       const unsubUnload = idleManager.onIdleTimeout(async () => {
         if (!useGiaStore.getState().autoModelUnload) return;
         logger.log('[IdleManager] Unloading idle models…');
-        try { const { default: llm } = await import('./services/LocalLLMService'); await llm.unloadModel(); } catch { /* noop */ }
-        try { const { default: whisper } = await import('./services/WhisperService'); whisper.unload(); } catch { /* noop */ }
+try { await localLLMService.unloadModel(); } catch { /* noop */ }
+      try { whisperService.unload(); } catch { /* noop */ }
       });
       const unsubActive = idleManager.onActiveAgain(() => {
         logger.log('[IdleManager] User active — models will reload on next use');
@@ -547,7 +577,6 @@ const App: React.FC = () => {
         const ctx = incoming.isGroup ? `group "${incoming.chatTitle}"` : 'DM';
         logger.log(`[Messaging] ${ctx} from ${incoming.from}: ${incoming.text.slice(0, 80)}`);
         try {
-          const { default: GiaBrain } = await import('./services/GiaBrain');
           const systemPrompt = incoming.isGroup
             ? `You are GIA, an AI assistant in the Telegram group "${incoming.chatTitle}". ${incoming.from} is speaking to you. Be helpful, concise, and natural. Address the whole group unless the message is directed at you personally. Keep responses brief — this is a group chat.`
             : `You are GIA, chatting with ${incoming.from} on Telegram. Be concise and natural. Respond conversationally.`;
@@ -610,6 +639,17 @@ const App: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [notifications, clearNotification]);
 
+  // Jarvis eyes — react to the feature-flag toggle and restore on boot.
+  useEffect(() => {
+    const onFlagsChanged = () => {
+      if (featureFlags.isEnabled('jarvisEyes')) jarvisOrbService.start();
+      else jarvisOrbService.stop();
+    };
+    window.addEventListener('gia:feature-flags:changed', onFlagsChanged);
+    if (featureFlags.isEnabled('jarvisEyes')) jarvisOrbService.start();
+    return () => window.removeEventListener('gia:feature-flags:changed', onFlagsChanged);
+  }, []);
+
   return (
     <div
       className="flex flex-col h-full overflow-hidden relative"
@@ -618,6 +658,7 @@ const App: React.FC = () => {
       <Suspense fallback={null}>
         <ProfileDrawer />
       </Suspense>
+      <JarvisOrb />
       {/* Global Notifications */}
       <div className="fixed top-16 left-0 right-0 z-[60] px-4 pointer-events-none space-y-2">
         <AnimatePresence>
@@ -860,7 +901,23 @@ const App: React.FC = () => {
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[200] w-full h-[100dvh] bg-[var(--gia-bg)] flex flex-col overflow-y-auto"
           >
-            <SetupWizard onClose={() => setShowSetup(false)} onComplete={() => setShowSetup(false)} />
+            <SetupWizard onClose={closeSetup} onComplete={closeSetup} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showIntro && (
+          <motion.div
+            key="desktop-intro"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}
+          >
+            <Suspense fallback={null}>
+              <DesktopIntro onEnter={closeIntro} onSkip={closeIntro} />
+            </Suspense>
           </motion.div>
         )}
       </AnimatePresence>

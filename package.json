@@ -36,6 +36,7 @@
     "clsx": "^2.1.1",
     "jszip": "^3.10.1",
     "katex": "^0.16.47",
+    "kokoro-js": "^1.2.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.471.0",
     "mermaid": "^11.15.0",
@@ -73,5 +74,16 @@
     "typescript-eslint": "^8.24.1",
     "vite": "^8.0.12",
     "vitest": "^4.1.8"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "onnxruntime-node@1.24.3": true,
+    "protobufjs@7.6.5": true,
+    "sharp@0.34.5": true
+  },
+  "overrides": {
+    "kokoro-js": {
+      "@huggingface/transformers": "$@huggingface/transformers"
+    }
   }
 }

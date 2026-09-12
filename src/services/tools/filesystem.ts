@@ -2,6 +2,8 @@ import { logger } from '../../utils/logger';
 import { z } from 'zod';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { isNativePlatform } from '../../utils/helpers';
+import { isTauri } from '../../platform';
+import DesktopHostFS from '../DesktopHostFS';
 import { isPathSafe, blobToBase64, triggerDownload, MAX_FILE_SIZE } from './helpers';
 import { useGiaStore } from '../../store/useGiaStore';
 import type { Tool, ToolContext } from './types';
@@ -33,7 +35,17 @@ const filesystemRead: Tool = {
       };
     }
 
-    if (!isNative()) return { success: false, content: '', error: 'Filesystem access requires the GIA mobile app (Android).' };
+    if (isTauri()) {
+      try {
+        const content = await DesktopHostFS.readFile(path as string);
+        if (content.length > MAX_FILE_SIZE) return { success: false, content: '', error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit` };
+        return { success: true, content };
+      } catch (e: unknown) {
+        return { success: false, content: '', error: (e instanceof Error ? e.message : String(e)) };
+      }
+    }
+
+    if (!isNative()) return { success: false, content: '', error: 'Filesystem access requires the GIA mobile app (Android) or the GIA Cowork desktop app.' };
     const pathErr = isPathSafe(path as string);
     if (pathErr) return { success: false, content: '', error: pathErr };
     try {
@@ -74,8 +86,10 @@ const filesystemWrite: Tool = {
       };
     }
 
-    const pathErr = isPathSafe(path as string);
-    if (pathErr) return { success: false, content: '', error: pathErr };
+    if (!isTauri()) {
+      const pathErr = isPathSafe(path as string);
+      if (pathErr) return { success: false, content: '', error: pathErr };
+    }
     if ((content as string) && (content as string).length > MAX_FILE_SIZE) return { success: false, content: '', error: `Content exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit` };
 
     const ext = (path as string).split('.').pop()?.toLowerCase() || 'txt';
@@ -100,6 +114,15 @@ const filesystemWrite: Tool = {
         newContent: content as string,
         timestamp: Date.now(),
       });
+    }
+
+    if (isTauri()) {
+      try {
+        const size = await DesktopHostFS.writeFile(path as string, content as string);
+        return { success: true, content: `File written to ${path as string} (verified, ${size} bytes)` };
+      } catch (e: unknown) {
+        return { success: false, content: '', error: (e instanceof Error ? e.message : String(e)) };
+      }
     }
 
     if (isNative()) {
@@ -142,7 +165,17 @@ const listFiles: Tool = {
 
     const validatedPath = validationResult.data.path;
 
-    if (!isNative()) return { success: false, content: '', error: 'Filesystem access requires the GIA mobile app (Android).' };
+    if (isTauri()) {
+      try {
+        const result = await DesktopHostFS.listDir(validatedPath || undefined);
+        const lines = result.entries.map(e => e.isDir ? `${e.name}/` : e.name);
+        return { success: true, content: lines.join('\n') || `(empty: ${result.currentDir})` };
+      } catch (e: unknown) {
+        return { success: false, content: '', error: (e instanceof Error ? e.message : String(e)) };
+      }
+    }
+
+    if (!isNative()) return { success: false, content: '', error: 'Filesystem access requires the GIA mobile app (Android) or the GIA Cowork desktop app.' };
     if (validatedPath) {
       const pathErr = isPathSafe(validatedPath);
       if (pathErr) return { success: false, content: '', error: pathErr };
@@ -174,15 +207,22 @@ const zipProject: Tool = {
       }
 
       if (paths && Array.isArray(paths)) {
-        if (!isNative()) return { success: false, content: '', error: 'Reading files from device paths requires the GIA mobile app.' };
         for (const p of paths) {
-          const pathErr = isPathSafe(p);
-          if (pathErr) continue;
           try {
             ctx?.onProgress?.(0.1, `Reading ${p}...`);
             ctx?.onThought?.(`  Reading ${p}...`);
-            const res = await Filesystem.readFile({ path: p, directory: Directory.Documents, encoding: Encoding.UTF8 });
-            zip.file(p, res.data as string);
+            let text: string;
+            if (isTauri()) {
+              text = await DesktopHostFS.readFile(p);
+            } else if (isNative()) {
+              const pathErr = isPathSafe(p);
+              if (pathErr) continue;
+              const res = await Filesystem.readFile({ path: p, directory: Directory.Documents, encoding: Encoding.UTF8 });
+              text = res.data as string;
+            } else {
+              return { success: false, content: '', error: 'Reading files from paths requires the GIA mobile or desktop app.' };
+            }
+            zip.file(p, text);
           } catch (e) { logger.error('[filesystem] Skipping unreadable file:', e); }
         }
       }

@@ -1,5 +1,6 @@
 import { registerPlugin, PluginListenerHandle } from '@capacitor/core';
 import { isTauri } from '../platform';
+import { logger } from '../utils/logger';
 import { captureScreenDesktop } from './desktopScreenCapture';
 import { screenControl } from './screenControl';
 
@@ -84,14 +85,20 @@ function desktopScreenAgentPlugin(): ScreenAgentPlugin {
       // "not found" is honest rather than faking a tap on the wrong spot.
       return { clicked: false, foundOn: 'desktop', bounds: {} as ScreenElement['bounds'] };
     },
-    async startWatching() {},
+    async startWatching() {
+      // Android accessibility-tree watch — desktop uses one-shot captures.
+    },
     async stopWatching() {},
-    async showOrb() {},
+    async showOrb() {
+      logger.warn('[GIAScreenAgent] The floating orb overlay is an Android feature — not available on the desktop app.');
+    },
     async hideOrb() {},
     async isOrbShowing() {
       return { showing: false, size: 0 };
     },
-    async setOrbSize() {},
+    async setOrbSize() {
+      logger.warn('[GIAScreenAgent] Orb sizing is an Android feature — not available on the desktop app.');
+    },
     async addListener() {
       return { remove: () => {} } as PluginListenerHandle;
     },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useGiaStore } from '../store/useGiaStore';
 import { templateLearning } from '../services/TemplateLearning';
-import { X, Clock, Target, RotateCw, GraduationCap, BookOpen, Code, Calendar, Bug, GitBranch, FileCode, FileSearch, Hammer, Zap } from 'lucide-react';
+import { X, Clock, Target, RotateCw, GraduationCap, BookOpen, Code, Calendar, Bug, GitBranch, FileCode, FileSearch, Hammer, Zap, Sparkles } from 'lucide-react';
 
 interface RecommendedTemplate {
   id: string;
@@ -25,7 +25,7 @@ interface TemplateSelectorProps {
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
   'zap': Zap, 'clock': Clock, 'target': Target, 'rotate-cw': RotateCw,
   'graduation-cap': GraduationCap, 'book-open': BookOpen, 'code': Code, 'link': Code,
-  'calendar': Calendar, 'bug': Bug, 'git-branch': GitBranch, 'file-code': FileCode, 'sparkles': Zap,
+  'calendar': Calendar, 'bug': Bug, 'git-branch': GitBranch, 'file-code': FileCode, 'sparkles': Sparkles,
   'file-search': FileSearch, 'hammer': Hammer,
 };
 function getIcon(name: string) { return ICON_MAP[name] || Zap; }
@@ -74,22 +74,25 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({ isOpen, onCl
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center">
-      <div className="bg-gray-900 border border-gray-700 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[85vh] flex flex-col">
-        <div className="p-4 border-b border-gray-800 flex items-start justify-between gap-3 shrink-0">
+      <div
+        className="rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[85vh] flex flex-col overflow-hidden"
+        style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border)' }}
+      >
+        <div className="p-4 flex items-start justify-between gap-3 shrink-0" style={{ borderBottom: '1px solid var(--gia-border)' }}>
           <div>
-            <h2 className="text-base font-semibold text-white">Templates</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <h2 className="text-base font-semibold" style={{ color: 'var(--gia-text)' }}>Templates</h2>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>
               Reusable starting prompts. Tap one to drop it into the composer — the ones you use most rise to the top.
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors shrink-0">
+          <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-muted)' }}>
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="overflow-y-auto flex-1 p-2">
           {templates.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-8">No templates yet.</p>
+            <p className="text-sm text-center py-8" style={{ color: 'var(--gia-muted)' }}>No templates yet.</p>
           ) : (
             <div className="flex flex-col gap-1.5">
               {templates.map(template => {
@@ -98,31 +101,32 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({ isOpen, onCl
                   <button
                     key={template.id}
                     onClick={() => handleTemplateSelect(template)}
-                    className="w-full text-left p-3 rounded-xl border border-gray-800 bg-gray-900/50 hover:border-gray-600 hover:bg-gray-800/60 transition-colors flex items-start gap-3"
+                    className="w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all tap-feedback"
+                    style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)' }}
                   >
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: `${template.color}20` }}>
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: `${template.color}1f`, boxShadow: `0 0 14px ${template.color}22` }}
+                    >
                       <IconComponent className="w-4 h-4" style={{ color: template.color }} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-medium text-sm text-white truncate">{template.label}</h4>
+                        <h4 className="font-medium text-sm truncate" style={{ color: 'var(--gia-text)' }}>{template.label}</h4>
                         {template.isAutoGenerated && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
-                            style={{ background: 'rgba(168,85,247,0.15)', color: '#c084fc' }}>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'rgba(168,85,247,0.16)', color: '#c084fc' }}>
                             AI-generated
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{template.prompt}</p>
+                      <p className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--gia-muted)' }}>{template.prompt}</p>
                       <div className="flex items-center justify-between mt-1.5">
-                        <span className="text-[10px] text-gray-500">
+                        <span className="text-[10px]" style={{ color: 'var(--gia-muted-2)' }}>
                           {template.usageCount > 0 ? `Used ${template.usageCount} time${template.usageCount === 1 ? '' : 's'}` : 'Not used yet'}
                         </span>
                         <div className="flex gap-1">
                           {template.tags.slice(0, 2).map(tag => (
-                            <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded"
-                              style={{ backgroundColor: '#374151', color: '#9ca3af' }}>
+                            <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(139,92,246,0.12)', color: '#a5b4fc' }}>
                               {tag}
                             </span>
                           ))}
@@ -139,3 +143,5 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({ isOpen, onCl
     </div>
   );
 };
+
+export default TemplateSelector;

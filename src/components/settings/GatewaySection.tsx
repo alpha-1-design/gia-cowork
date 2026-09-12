@@ -61,7 +61,7 @@ export const GatewaySection: React.FC = () => {
         </div>
 
         <p className="text-[10px]" style={{ color: 'var(--gia-muted)' }}>
-          Gateway routes external messages to GIA. Runs in-app now — for 24/7 operation start the gateway daemon in proot terminal.
+          Gateway routes external messages to GIA. Runs in-app now — for 24/7 operation start the gateway daemon in a background terminal (Terminal on desktop / proot sandbox on Android).
         </p>
       </div>
 

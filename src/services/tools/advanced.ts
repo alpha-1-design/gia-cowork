@@ -2,6 +2,10 @@ import { useGiaStore } from '../../store/useGiaStore';
 import { useMemoryStore } from '../../store/useMemoryStore';
 import type { Tool } from './types';
 import ToolRegistry from '../ToolRegistry';
+import emailService from '../EmailService';
+import calendarService from '../CalendarService';
+import { Clipboard } from '@capacitor/clipboard';
+import connectionManager from '../ConnectionManager';
 
 // Module-level config store for tool-specific settings (not part of GiaState)
 interface ClipboardRule {
@@ -65,8 +69,6 @@ const emailPriorityMonitor: Tool = {
     }
 
     try {
-      const { default: emailService } = await import('../EmailService');
-      const { default: connectionManager } = await import('../ConnectionManager');
       const tokens = await connectionManager.getTokens('gmail');
 
       if (!tokens?.accessToken) {
@@ -108,7 +110,6 @@ const calendarSmartBrief: Tool = {
     const ch = String(channel || 'notification');
 
     try {
-      const { default: calendarService } = await import('../CalendarService');
       const now = new Date();
       const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
       const events = await calendarService.listEvents(20, now.toISOString(), windowEnd.toISOString());
@@ -218,7 +219,6 @@ const clipboardIntelligence: Tool = {
 
     if (act === 'test') {
       try {
-        const { Clipboard } = await import('@capacitor/clipboard');
         const result = await Clipboard.read();
         const text = (result as unknown as Record<string, string>).value || (result as unknown as Record<string, string>).string || '';
         if (!text) return { success: true, content: 'Clipboard is empty.' };

@@ -146,11 +146,35 @@ class VisionRouter {
       throw new Error(`Unknown vision task: ${task}`);
     }
 
-    // Mark loading if not already
-    if (this.modelStatus[localModel.id]?.status === 'not_loaded') {
-      this.modelStatus[localModel.id] = { ...this.modelStatus[localModel.id], status: 'loading' };
+    // Never kick off a multi-hundred-MB model download just to answer a vision
+    // task. If the local model isn't already loaded, a low-storage device should
+    // get provider-based vision immediately instead of sitting on a download it
+    // may not even be able to finish.
+    const isLocalLoaded = this._isLocalReady(task);
+    if (!isLocalLoaded) {
+      this.modelStatus[localModel.id] = { ...this.modelStatus[localModel.id], status: 'not_loaded' };
+      if (!this.fallbackEnabled) {
+        throw new Error(
+          `Local ${task} model is not downloaded (${localModel.downloadSize}) and provider fallback is disabled. ` +
+          `Download it in Voice & Models, or enable a vision-capable provider.`,
+        );
+      }
+      logger.log(`[VisionRouter] Local ${task} not loaded — using the provider directly`);
+      const providerStart = performance.now();
+      try {
+        const providerResult = await this._runProvider(imageUrl, task);
+        this.stats.providerCalls++;
+        const latency = Math.round(performance.now() - providerStart);
+        this._providerLatencyTotal += latency;
+        this.stats.avgProviderLatency = Math.round(this._providerLatencyTotal / this.stats.providerCalls);
+        return { ...providerResult, latencyMs: latency };
+      } catch (err) {
+        this.stats.providerErrors++;
+        throw new Error(`Local ${task} not loaded and provider failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
 
+    this.modelStatus[localModel.id] = { ...this.modelStatus[localModel.id], status: 'ready' };
     const localStart = performance.now();
     let localResult: ProcessedImageResult | null = null;
 
@@ -252,19 +276,22 @@ class VisionRouter {
 
   // ── Private helpers ──────────────────────────────────────────────
 
+  /** True only when the ONNX model for a task is already loaded (no download needed). */
+  private _isLocalReady(task: VisionTask): boolean {
+    switch (task) {
+      case 'caption':   return visionService.isCaptionReady();
+      case 'ocr':       return visionService.isOCRReady();
+      case 'detect':    return visionService.isDetectionReady();
+      case 'classify':  return visionService.isClassificationReady();
+    }
+  }
+
   private _syncStatus(): void {
     for (const m of LOCAL_MODELS) {
       const entry = this.modelStatus[m.id];
       if (!entry) continue;
 
-      const isReady = (() => {
-        switch (m.task) {
-          case 'caption':   return visionService.isCaptionReady();
-          case 'ocr':       return visionService.isOCRReady();
-          case 'detect':    return visionService.isDetectionReady();
-          case 'classify':  return visionService.isClassificationReady();
-        }
-      })();
+      const isReady = this._isLocalReady(m.task);
 
       if (isReady && entry.status !== 'error') {
         this.modelStatus[m.id] = { ...entry, status: 'ready' };

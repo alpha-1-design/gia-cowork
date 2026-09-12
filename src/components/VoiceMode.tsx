@@ -5,6 +5,7 @@ import { useGiaStore } from '../store/useGiaStore';
 import { useProviderStore } from '../store/useProviderStore';
 import GiaBrain from '../services/GiaBrain';
 import ttsService from '../services/TTSService';
+import { jarvisOrbService } from '../services/JarvisOrbService';
 import { logger } from '../utils/logger';
 
 type VoicePhase = 'idle' | 'listening' | 'thinking' | 'speaking';
@@ -34,10 +35,17 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any | null>(null);
+  const recRunningRef = useRef(false);
+  const recSessionRef = useRef({ finalText: '', hasSpeech: false, committed: false });
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoRestartRef = useRef(true);
   const mountedRef = useRef(true);
+  const lastPhaseRef = useRef<VoicePhase>('idle');
+  lastPhaseRef.current = phase;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleSendRef = useRef<(text: string) => Promise<any>>(async () => undefined);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -51,16 +59,42 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
     };
   }, []);
 
+  // Jarvis eyes: keep the floating orb in lockstep with the voice session —
+  // listening / thinking / speaking all light it up as GIA is engaged.
+  useEffect(() => {
+    jarvisOrbService.setVoice(phase);
+  }, [phase]);
+
   // ── Speech Recognition ────────────────────────────────────────────────
+  // ONE microphone grab for the whole component: a single continuous
+  // recognizer is created lazily on first use and held until unmount or
+  // explicit stop. Turns reuse the same instance (start()/abort()), and any
+  // silent auto-end just re-arms it after a 120ms nudge so the mic indicator
+  // never visibly flickers off and back on. Mic only releases when you close
+  // the voice overlay or toggle it off.
   const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch { /* ignore */ }
-      recognitionRef.current = null;
-    }
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
     }
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    if (recognitionRef.current && recRunningRef.current) {
+      recRunningRef.current = false;
+      try { recognitionRef.current.abort(); } catch { try { recognitionRef.current.stop(); } catch { /* ignore */ } }
+    }
+  }, []);
+
+  const retryRestart = useCallback(() => {
+    if (retryTimerRef.current) return;
+    retryTimerRef.current = setTimeout(() => {
+      retryTimerRef.current = null;
+      if (!mountedRef.current || recRunningRef.current || lastPhaseRef.current !== 'listening' || !autoRestartRef.current) return;
+      recRunningRef.current = true;
+      try { recognitionRef.current?.start(); } catch { recRunningRef.current = false; retryRestart(); }
+    }, 150);
   }, []);
 
   const startListening = useCallback(() => {
@@ -72,100 +106,99 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
       return;
     }
 
-    stopListening();
+    // Build the single long-lived recognizer once.
+    if (!recognitionRef.current) {
+      const sr = new SR();
+      sr.continuous = true;
+      sr.interimResults = true;
+      sr.lang = 'en-US';
+      sr.maxAlternatives = 1;
+
+      sr.onresult = (event: any) => {
+        if (!mountedRef.current) return;
+        const session = recSessionRef.current;
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          const text = result[0]?.transcript ?? '';
+          if (result.isFinal) {
+            session.finalText += (session.finalText ? ' ' : '') + text;
+            session.hasSpeech = true;
+          } else {
+            interim += (interim ? ' ' : '') + text;
+          }
+        }
+        if (interim) setInterimText(interim);
+        if (session.finalText) {
+          setUserText(session.finalText);
+          setInterimText('');
+        }
+        if (session.hasSpeech || interim) {
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+          silenceTimerRef.current = setTimeout(() => {
+            if (!mountedRef.current || session.committed) return;
+            const committed = session.finalText || interim;
+            if (committed) {
+              session.committed = true;
+              stopListening();
+              setUserText(committed);
+              setInterimText('');
+              void handleSendRef.current(committed);
+            }
+          }, 1800);
+        }
+      };
+
+      sr.onerror = (e: any) => {
+        if (!mountedRef.current) return;
+        const err = e as { error?: string };
+        if (err.error === 'no-speech' || err.error === 'aborted') {
+          const session = recSessionRef.current;
+          if (session.finalText && !session.committed) {
+            session.committed = true;
+            stopListening();
+            setUserText(session.finalText);
+            void handleSendRef.current(session.finalText);
+          } else {
+            retryRestart();
+          }
+          return;
+        }
+        logger.warn('[VoiceMode] Speech error:', err.error);
+        if (err.error !== 'not-allowed') retryRestart();
+      };
+
+      sr.onend = () => {
+        if (!mountedRef.current) return;
+        recRunningRef.current = false;
+        const session = recSessionRef.current;
+        if (session.finalText && !session.committed && lastPhaseRef.current !== 'thinking' && lastPhaseRef.current !== 'speaking') {
+          session.committed = true;
+          setUserText(session.finalText);
+          setInterimText('');
+          void handleSendRef.current(session.finalText);
+        }
+        // Re-arm the mic if we're still in a listening turn — no gap, no
+        // re-acquisition visible to the OS.
+        if (autoRestartRef.current && lastPhaseRef.current === 'listening') retryRestart();
+      };
+
+      recognitionRef.current = sr;
+    }
+
+    recSessionRef.current = { finalText: '', hasSpeech: false, committed: false };
     setPhase('listening');
     setInterimText('');
     setError(null);
 
-    const sr = new SR();
-    sr.continuous = true;
-    sr.interimResults = true;
-    sr.lang = 'en-US';
-    sr.maxAlternatives = 1;
-
-    let finalText = '';
-    let hasSpeech = false;
-
-    sr.onresult = (event: any) => {
-      if (!mountedRef.current) return;
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        const text = result[0]?.transcript ?? '';
-        if (result.isFinal) {
-          finalText += (finalText ? ' ' : '') + text;
-          hasSpeech = true;
-        } else {
-          interim += (interim ? ' ' : '') + text;
-        }
-      }
-      if (interim) setInterimText(interim);
-      if (finalText) {
-        setUserText(finalText);
-        setInterimText('');
-      }
-      // Reset silence timer on any speech
-      if (hasSpeech || interim) {
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = setTimeout(() => {
-          // Silence detected — commit whatever we have
-          if (mountedRef.current && (finalText || interim)) {
-            const committed = finalText || interim;
-            stopListening();
-            setUserText(committed);
-            setInterimText('');
-            void handleSend(committed);
-          }
-        }, 1800);
-      }
-    };
-
-    sr.onerror = (e: any) => {
-      if (!mountedRef.current) return;
-      const err = e as any;
-      if (err.error === 'no-speech' || err.error === 'aborted') {
-        // If we have text, send it. Otherwise restart.
-        if (finalText) {
-          stopListening();
-          setUserText(finalText);
-          void handleSend(finalText);
-        } else if (autoRestartRef.current && mountedRef.current) {
-          setTimeout(() => startListening(), 300);
-        }
-        return;
-      }
-      logger.warn('[VoiceMode] Speech error:', err.error);
-      if (err.error !== 'not-allowed') {
-        // Retry on transient errors
-        if (autoRestartRef.current && mountedRef.current) {
-          setTimeout(() => startListening(), 500);
-        }
-      }
-    };
-
-    sr.onend = () => {
-      if (!mountedRef.current) return;
-      recognitionRef.current = null;
-      // If we have committed text and no timer fired yet, send it
-      if (finalText && phase !== 'thinking' && phase !== 'speaking') {
-        setUserText(finalText);
-        setInterimText('');
-        void handleSend(finalText);
-      }
-      // Auto-restart if we're still in listening phase
-      if (autoRestartRef.current && mountedRef.current && phase === 'listening') {
-        setTimeout(() => startListening(), 400);
-      }
-    };
-
+    recRunningRef.current = true;
     try {
-      sr.start();
-      recognitionRef.current = sr;
-    } catch (e) {
-      logger.error('[VoiceMode] Failed to start recognition:', e);
-      setError('Could not start microphone');
+      recognitionRef.current.start();
+    } catch {
+      // Already running mid-turn — that's fine, it's live.
+      recRunningRef.current = false;
     }
-  }, [stopListening, phase]);
+  }, [retryRestart, stopListening]);
 
   // ── Send to GIA ───────────────────────────────────────────────────────
   const handleSend = useCallback(async (text: string) => {
@@ -221,6 +254,8 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
       abortRef.current = null;
     }
   }, [phase, muted, autoMode, activeSkillId, startListening]);
+
+  handleSendRef.current = handleSend;
 
   // ── Toggle mic ────────────────────────────────────────────────────────
   const toggleMic = useCallback(() => {

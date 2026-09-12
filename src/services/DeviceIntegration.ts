@@ -1,4 +1,6 @@
 import { logger } from '../utils/logger';
+import { isTauri } from '../platform';
+import { Clipboard } from '@capacitor/clipboard';
 import type { SystemInfo } from './SystemService';
 
 interface Contact {
@@ -143,7 +145,6 @@ class DeviceIntegration {
   async clipboardRead(): Promise<string> {
     try {
       if (this.isCapacitor()) {
-        const { Clipboard } = await import('@capacitor/clipboard');
         const result = await Clipboard.read();
         return result.value ?? '';
       }
@@ -167,7 +168,6 @@ class DeviceIntegration {
 
     try {
       if (this.isCapacitor()) {
-        const { Clipboard } = await import('@capacitor/clipboard');
         await Clipboard.write({ string: content });
         return;
       }
@@ -275,10 +275,12 @@ class DeviceIntegration {
       sysInfo = await this.getSystemInfo();
     } catch (e) {
       logger.warn('[DeviceIntegration] System info failed:', e);
+      const isDesktopShell = isTauri();
       sysInfo = {
         platform: 'web', os: 'unknown', language: 'en', timezone: 'UTC',
         userAgent: '', timezoneOffset: 0, isMobile: false, isDesktop: true,
-        isNativeApp: false, container: 'browser',
+        isNativeApp: isDesktopShell,
+        container: isDesktopShell ? 'tauri' : 'browser',
         screen: { width: 0, height: 0, colorDepth: 24, pixelRatio: 1 },
         network: { online: true, type: 'unknown', downlink: null, rtt: null },
         hardware: { cpuCores: null, memoryGB: null, touchScreen: false },
