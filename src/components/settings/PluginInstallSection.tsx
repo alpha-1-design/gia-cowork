@@ -14,8 +14,12 @@ export const PluginInstallSection: React.FC = () => {
     setResult(null);
 
     try {
+      const pluginUrl = new URL(installUrl.trim());
+      if (pluginUrl.protocol !== 'https:') {
+        throw new Error('Plugin manifests must be fetched over HTTPS.');
+      }
       // Fetch plugin manifest
-      const response = await fetch(installUrl.trim());
+      const response = await fetch(pluginUrl);
       if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       const manifest = await response.json();
 
@@ -24,30 +28,11 @@ export const PluginInstallSection: React.FC = () => {
         throw new Error('Invalid plugin manifest: missing required fields (id, name, version, description)');
       }
 
-      // Fetch hooks/setup
-      let hooksUrl = installUrl.trim().replace(/manifest\.json$/, 'index.js');
-      if (hooksUrl === installUrl.trim()) {
-        hooksUrl = installUrl.trim().replace(/\.json$/, '.js');
-      }
-      let hooks = {};
-      let setup = undefined;
-
-      try {
-        const moduleResponse = await fetch(hooksUrl);
-        if (moduleResponse.ok) {
-          const moduleText = await moduleResponse.text();
-          // Simple eval for hooks - in production you'd want sandboxing
-          const exports: Record<string, unknown> = {};
-          const module = { exports };
-          new Function('exports', 'module', moduleText)(exports, module);
-          hooks = (module.exports.hooks as Record<string, unknown>) || {};
-          setup = module.exports.setup as ((...args: unknown[]) => unknown) | undefined;
-        }
-      } catch {
-        // Hooks optional
+      if (manifest.hooks || manifest.setup || manifest.entrypoint) {
+        throw new Error('Executable plugin hooks are disabled. Install a declarative manifest without code.');
       }
 
-      await PluginManager.register(manifest, hooks, setup as ((api: import('../../types/plugin').PluginAPI) => void | Promise<void>) | undefined);
+      await PluginManager.register(manifest, {}, undefined);
       setResult({ success: true, message: `Plugin "${manifest.name}" installed successfully!` });
       setInstallUrl('');
       useGiaStore.getState().addNotification(`Plugin installed: ${manifest.name}`);
@@ -90,8 +75,8 @@ export const PluginInstallSection: React.FC = () => {
       </div>
 
       <p className="text-[10px]" style={{ color: 'var(--gia-muted)' }}>
-        Install plugins from a manifest URL (GitHub raw, Gist, or any HTTPS endpoint).
-        Manifest must include: id, name, version, description. Optional: hooks, setup.
+        Install declarative plugins from a manifest URL (GitHub raw, Gist, or another HTTPS endpoint).
+        Manifest must include: id, name, version, description. Executable hooks are not supported.
       </p>
 
       <div className="flex gap-2">

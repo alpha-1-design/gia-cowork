@@ -16,6 +16,10 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+const DEFAULT_TIMEOUT_MS: u64 = 60_000;
+const MAX_TIMEOUT_MS: u64 = 10 * 60_000;
+const MAX_OUTPUT_BYTES: usize = 10 * 1024 * 1024;
+
 #[derive(Clone, Serialize)]
 pub struct ExecResult {
     pub output: String,
@@ -92,7 +96,12 @@ pub async fn terminal_exec(
     env: Option<HashMap<String, String>>,
     timeout: Option<u64>,
 ) -> Result<ExecResult, String> {
-    let timeout_ms = timeout.unwrap_or(60_000);
+    if command.trim().is_empty() {
+        return Err("Command is required".into());
+    }
+    let timeout_ms = timeout
+        .unwrap_or(DEFAULT_TIMEOUT_MS)
+        .clamp(1, MAX_TIMEOUT_MS);
     let session_id = new_session_id();
 
     let mut cmd = Command::new("sh");
@@ -174,12 +183,16 @@ pub async fn terminal_exec(
 
     let mut out = String::new();
     if let Some(s) = stdout.as_mut() {
-        let _ = s.read_to_string(&mut out);
+        let mut limited = s.take(MAX_OUTPUT_BYTES as u64);
+        let _ = limited.read_to_string(&mut out);
     }
     let mut err = String::new();
     if let Some(s) = stderr.as_mut() {
-        let _ = s.read_to_string(&mut err);
+        let remaining = MAX_OUTPUT_BYTES.saturating_sub(out.len());
+        let mut limited = s.take(remaining as u64);
+        let _ = limited.read_to_string(&mut err);
     }
+    let output_truncated = out.len() + err.len() >= MAX_OUTPUT_BYTES;
     if !err.is_empty() {
         if !out.is_empty() {
             out.push('\n');
@@ -193,6 +206,12 @@ pub async fn terminal_exec(
     }
     if killed_externally {
         out.push_str("\n[killed] session was terminated");
+    }
+    if output_truncated {
+        out.push_str(&format!(
+            "\n[output truncated] maximum output is {}MB",
+            MAX_OUTPUT_BYTES / 1024 / 1024
+        ));
     }
 
     Ok(ExecResult {

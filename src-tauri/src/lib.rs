@@ -18,6 +18,34 @@ struct SystemInfo {
     cpu_cores: u32,
 }
 
+#[tauri::command]
+fn credential_get(service: String, account: String) -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new(&service, &account).map_err(|e| format!("Credential entry error: {e}"))?;
+    match entry.get_password() {
+        Ok(secret) => Ok(Some(secret)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("Credential read failed: {e}")),
+    }
+}
+
+#[tauri::command]
+fn credential_set(service: String, account: String, secret: String) -> Result<(), String> {
+    if service.trim().is_empty() || account.trim().is_empty() {
+        return Err("Credential service and account are required".into());
+    }
+    let entry = keyring::Entry::new(&service, &account).map_err(|e| format!("Credential entry error: {e}"))?;
+    entry.set_password(&secret).map_err(|e| format!("Credential write failed: {e}"))
+}
+
+#[tauri::command]
+fn credential_delete(service: String, account: String) -> Result<(), String> {
+    let entry = keyring::Entry::new(&service, &account).map_err(|e| format!("Credential entry error: {e}"))?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("Credential delete failed: {e}")),
+    }
+}
+
 /// Temporarily hide the main window so screen captures don't include GIA.
 /// Returns true if the window was hidden. The caller must invoke
 /// `show_after_capture` when done.
@@ -82,6 +110,7 @@ struct UnimindRelayInfo {
     ws_url: String,
     lan_url: Option<String>,
     secret_required: bool,
+    lan_enabled: bool,
 }
 
 #[tauri::command]
@@ -91,8 +120,13 @@ fn unimind_relay_status() -> UnimindRelayInfo {
         running: unimind_relay::relay_running(),
         port,
         ws_url: format!("ws://127.0.0.1:{port}/unimind"),
-        lan_url: unimind_relay::local_lan_ip().map(|ip| format!("ws://{ip}:{port}/unimind")),
+        lan_url: if unimind_relay::relay_lan_enabled() {
+            unimind_relay::local_lan_ip().map(|ip| format!("ws://{ip}:{port}/unimind"))
+        } else {
+            None
+        },
         secret_required: !std::env::var("UNIMIND_RELAY_SECRET").unwrap_or_default().is_empty(),
+        lan_enabled: unimind_relay::relay_lan_enabled(),
     }
 }
 
@@ -134,6 +168,9 @@ pub fn run() {
             whatsapp_bridge::whatsapp_contacts,
             app_exit,
             system_info,
+            credential_get,
+            credential_set,
+            credential_delete,
             unimind_relay_status,
         ])
         .setup(|app| {

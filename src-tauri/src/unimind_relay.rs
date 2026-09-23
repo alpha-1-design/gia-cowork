@@ -20,7 +20,8 @@
 //!
 //! Environment overrides:
 //!   UNIMIND_RELAY_PORT   (default 8787)
-//!   UNIMIND_RELAY_SECRET  optional shared secret clients must send in hello
+//!   UNIMIND_RELAY_SECRET  required when LAN mode is enabled
+//!   UNIMIND_RELAY_LAN    set to "1" to expose the relay beyond localhost
 
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
@@ -37,6 +38,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{accept_hdr_async, WebSocketStream};
 
 const MAX_CONNECTIONS: usize = 64;
+const MAX_FRAME_BYTES: usize = 1024 * 1024;
 /// A connection that sends nothing for this long is a zombie (dead phone,
 /// dropped network) — close it so the room stays clean.
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(45);
@@ -96,6 +98,17 @@ pub fn relay_port() -> u16 {
         .unwrap_or(8787)
 }
 
+fn lan_enabled() -> bool {
+    matches!(
+        std::env::var("UNIMIND_RELAY_LAN").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
+}
+
+pub fn relay_lan_enabled() -> bool {
+    lan_enabled()
+}
+
 /// Best-effort primary LAN IPv4 (via the classic UDP "connect" trick — no
 /// packets are ever sent). Used to build the URL a phone on the same Wi-Fi
 /// should use to reach this machine's embedded relay.
@@ -121,22 +134,28 @@ fn epoch_ms() -> u64 {
 /// the app still boots. Call via `tauri::async_runtime::spawn`.
 pub async fn run_relay() {
     let port = relay_port();
-    let listener = match TcpListener::bind(("0.0.0.0", port)).await {
+    let host = if lan_enabled() { "0.0.0.0" } else { "127.0.0.1" };
+    let secret = std::env::var("UNIMIND_RELAY_SECRET").unwrap_or_default();
+    if lan_enabled() && secret.trim().len() < 32 {
+        eprintln!("[unimind-relay] refusing LAN mode: UNIMIND_RELAY_SECRET must be at least 32 characters");
+        return;
+    }
+    let listener = match TcpListener::bind((host, port)).await {
         Ok(listener) => listener,
         Err(e) => {
-            eprintln!("[unimind-relay] could not bind 0.0.0.0:{port} — {e}. Pairing unavailable.");
+            eprintln!("[unimind-relay] could not bind {host}:{port} — {e}. Pairing unavailable.");
             return;
         }
     };
 
     let state: RelayState = Arc::new(RelayShared {
-        secret: std::env::var("UNIMIND_RELAY_SECRET").unwrap_or_default(),
+        secret,
         ..RelayShared::default()
     });
     RUNNING.store(true, Ordering::SeqCst);
     eprintln!(
-        "[unimind-relay] listening on 0.0.0.0:{port} (ws://<host>:{port}/unimind){}",
-        if state.secret.is_empty() { "" } else { " — shared secret required" }
+        "[unimind-relay] listening on {host}:{port} (ws://<host>:{port}/unimind){}",
+        if state.secret.is_empty() { " — local-only" } else { " — shared secret required" }
     );
 
     loop {
@@ -232,6 +251,10 @@ async fn run_client(state: RelayState, ws: WebSocketStream<TcpStream>, addr: Soc
                     Some(Err(_)) => break,
                     Some(Ok(Message::Text(text))) => {
                         let text = text.to_string();
+                        if text.len() > MAX_FRAME_BYTES {
+                            eprintln!("[unimind-relay] conn {id} sent an oversized frame");
+                            break;
+                        }
                         if let Err(e) = handle_frame(state.clone(), id, &text).await {
                             eprintln!("[unimind-relay] conn {id} closed: {e}");
                             break;

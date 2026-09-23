@@ -4,6 +4,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { idbStorage } from './idb-storage';
 import { providerRegistry } from '../services/ProviderRegistry';
 import { corsProxy } from '../services/CorsProxy';
+import CredentialVault from '../services/CredentialVault';
 
 export type ProviderType = string;
 
@@ -95,17 +96,20 @@ export const useProviderStore = create<GiaProviderState>()(
       loadProviders: async () => {
         await providerRegistry.ensureLoaded();
         const ids = providerRegistry.getAllIds();
+        const credentials = await CredentialVault.load(ids);
         set((s) => {
           const providers = { ...s.providers };
           const availableModels = { ...s.availableModels };
           for (const id of ids) {
             if (!providers[id]) {
               providers[id] = {
-                apiKey: '',
+                apiKey: credentials[id] ?? '',
                 model: providerRegistry.getDefaultModel(id),
                 enabled: false,
                 baseUrl: providerRegistry.getProvider(id)?.baseUrl,
               };
+            } else if (credentials[id] && !providers[id].apiKey) {
+              providers[id] = { ...providers[id], apiKey: credentials[id], enabled: true };
             }
             if (!availableModels[id] || availableModels[id].length === 0) {
               availableModels[id] = providerRegistry.getModels(id);
@@ -126,14 +130,16 @@ export const useProviderStore = create<GiaProviderState>()(
         });
       },
 
-      setProviderKey: (p, key) =>
+      setProviderKey: (p, key) => {
+        void CredentialVault.set(p, key);
         set((s) => {
           const needsKey = providerRegistry.getNeedsApiKey(p);
           const enabled = needsKey ? key.trim().length > 0 : true;
           const providers = { ...s.providers, [p]: { ...(s.providers[p] || { model: providerRegistry.getDefaultModel(p), enabled: false }), apiKey: key, enabled } };
           const activeProvider = enabled && !s.providers[p]?.enabled ? p : s.activeProvider;
           return { providers, activeProvider };
-        }),
+        });
+      },
 
       setProviderModel: (p, model) =>
         set((s) => ({ providers: { ...s.providers, [p]: { ...(s.providers[p] || { apiKey: '', enabled: false }), model } } })),
@@ -394,7 +400,13 @@ export const useProviderStore = create<GiaProviderState>()(
     {
       name: 'gia-provider-storage-v2',
       storage: createJSONStorage(() => idbStorage),
-      partialize: (s) => ({ providers: s.providers, activeProvider: s.activeProvider, pendingTasks: s.pendingTasks }),
+      partialize: (s) => ({
+        providers: Object.fromEntries(
+          Object.entries(s.providers).map(([id, config]) => [id, { ...config, apiKey: '' }]),
+        ),
+        activeProvider: s.activeProvider,
+        pendingTasks: s.pendingTasks,
+      }),
     }
   )
 );

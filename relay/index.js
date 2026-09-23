@@ -22,11 +22,16 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'node:http';
 
 const PORT = Number(process.env.PORT || 8787);
-const HOST = process.env.HOST || '0.0.0.0';
-// Optional shared secret: if set, clients must send it in the hello frame.
+const LAN_ENABLED = /^(1|true|yes)$/i.test(process.env.RELAY_LAN || '');
+const HOST = process.env.HOST || (LAN_ENABLED ? '0.0.0.0' : '127.0.0.1');
+// LAN mode requires a high-entropy shared secret.
 const RELAY_SECRET = process.env.RELAY_SECRET || '';
+if (LAN_ENABLED && RELAY_SECRET.length < 32) {
+  throw new Error('RELAY_SECRET must be at least 32 characters when RELAY_LAN is enabled');
+}
 // Hard cap on simultaneous connections (cheap DoS guard).
 const MAX_CONNECTIONS = 64;
+const MAX_FRAME_BYTES = 1024 * 1024;
 
 /** Map<unimindId, Set<connection>> */
 const rooms = new Map();
@@ -38,7 +43,7 @@ const server = createServer((_req, res) => {
   res.end('unimind-relay up\n');
 });
 
-const wss = new WebSocketServer({ server, path: '/unimind' });
+const wss = new WebSocketServer({ server, path: '/unimind', maxPayload: MAX_FRAME_BYTES });
 
 function broadcastTo(conn, obj) {
   if (conn.readyState === WebSocket.OPEN) {
@@ -84,6 +89,10 @@ wss.on('connection', (ws) => {
   };
 
   ws.on('message', (raw) => {
+    if (raw.length > MAX_FRAME_BYTES) {
+      ws.close(1009, 'frame too large');
+      return;
+    }
     let msg;
     try {
       msg = JSON.parse(raw.toString());
@@ -162,7 +171,8 @@ setInterval(() => {
   }
 }, 30000);
 
-server.listen(PORT, HOST, () => {
-  console.log(`[unimind-relay] listening on ${HOST}:${PORT} (ws://<host>:${PORT}/unimind)`);
-  if (RELAY_SECRET) console.log('[unimind-relay] shared secret required');
+server.listen(PORT, LAN_ENABLED ? HOST : '127.0.0.1', () => {
+  const boundHost = LAN_ENABLED ? HOST : '127.0.0.1';
+  console.log(`[unimind-relay] listening on ${boundHost}:${PORT} (ws://<host>:${PORT}/unimind)`);
+  if (LAN_ENABLED) console.log('[unimind-relay] LAN mode enabled with shared secret');
 });

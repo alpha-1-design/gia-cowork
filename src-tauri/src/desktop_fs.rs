@@ -51,6 +51,51 @@ fn home_dir() -> Result<PathBuf, String> {
         .ok_or_else(|| "Could not determine HOME directory".to_string())
 }
 
+fn workspace_root() -> Result<PathBuf, String> {
+    let configured = std::env::var_os("GIA_WORKSPACE")
+        .map(PathBuf::from)
+        .unwrap_or(home_dir()?);
+    let root = if configured.is_absolute() {
+        configured
+    } else {
+        std::env::current_dir()
+            .map_err(|e| format!("Could not resolve workspace: {e}"))?
+            .join(configured)
+    };
+    fs::canonicalize(&root)
+        .map_err(|e| format!("Workspace {} is not accessible: {e}", root.display()))
+}
+
+fn ensure_in_workspace(path: &PathBuf, for_write: bool) -> Result<PathBuf, String> {
+    let root = workspace_root()?;
+    let canonical = if path.exists() {
+        fs::canonicalize(path)
+            .map_err(|e| format!("Cannot resolve {}: {e}", path.display()))?
+    } else if for_write {
+        let parent = path
+            .parent()
+            .ok_or_else(|| format!("Cannot resolve parent of {}", path.display()))?;
+        let canonical_parent = fs::canonicalize(parent)
+            .map_err(|e| format!("Cannot resolve parent {}: {e}", parent.display()))?;
+        canonical_parent.join(
+            path.file_name()
+                .ok_or_else(|| format!("Invalid path {}", path.display()))?,
+        )
+    } else {
+        return Err(format!("Path does not exist: {}", path.display()));
+    };
+
+    if canonical == root || canonical.starts_with(&root) {
+        Ok(canonical)
+    } else {
+        Err(format!(
+            "Path {} is outside the configured GIA workspace {}",
+            path.display(),
+            root.display()
+        ))
+    }
+}
+
 /// Resolve a user-supplied path: expand `~`, and make relative paths
 /// absolute against the process working directory.
 fn resolve_path(raw: &str) -> Result<PathBuf, String> {
@@ -79,7 +124,7 @@ fn resolve_path(raw: &str) -> Result<PathBuf, String> {
 /// Read a text file from the host filesystem.
 #[tauri::command]
 pub async fn fs_read(path: String) -> Result<ReadResult, String> {
-    let p = resolve_path(&path)?;
+    let p = ensure_in_workspace(&resolve_path(&path)?, false)?;
     let meta = fs::metadata(&p).map_err(|e| format!("Cannot read {}: {e}", p.display()))?;
     if meta.is_dir() {
         return Err(format!("{} is a directory, not a file", p.display()));
@@ -101,7 +146,7 @@ pub async fn fs_read(path: String) -> Result<ReadResult, String> {
 /// Write (create or overwrite) a text file on the host filesystem.
 #[tauri::command]
 pub async fn fs_write(path: String, content: String) -> Result<WriteResult, String> {
-    let p = resolve_path(&path)?;
+    let p = ensure_in_workspace(&resolve_path(&path)?, true)?;
     if let Some(parent) = p.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
             fs::create_dir_all(parent)
@@ -128,7 +173,7 @@ pub async fn fs_write_bytes(
     append: Option<bool>,
 ) -> Result<WriteResult, String> {
     use base64::Engine;
-    let p = resolve_path(&path)?;
+    let p = ensure_in_workspace(&resolve_path(&path)?, true)?;
     if let Some(parent) = p.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
             fs::create_dir_all(parent)
@@ -160,8 +205,8 @@ pub async fn fs_write_bytes(
 #[tauri::command]
 pub async fn fs_list(path: Option<String>) -> Result<ListResult, String> {
     let p = match path {
-        Some(p) if !p.trim().is_empty() => resolve_path(&p)?,
-        _ => home_dir()?,
+        Some(p) if !p.trim().is_empty() => ensure_in_workspace(&resolve_path(&p)?, false)?,
+        _ => workspace_root()?,
     };
     let entries_rd = fs::read_dir(&p).map_err(|e| format!("Cannot list {}: {e}", p.display()))?;
 
