@@ -33,9 +33,9 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{accept_hdr_async, WebSocketStream};
+use tokio_tungstenite::{accept_async, WebSocketStream};
 
 const MAX_CONNECTIONS: usize = 64;
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -204,7 +204,7 @@ async fn handle_conn(state: RelayState, stream: TcpStream, addr: SocketAddr) {
         return;
     }
 
-    let ws = match accept_hdr_async(stream, |_req, resp| Ok(resp)).await {
+    let ws = match accept_async(stream).await {
         Ok(ws) => ws,
         Err(e) => {
             eprintln!("[unimind-relay] handshake from {addr} failed: {e}");

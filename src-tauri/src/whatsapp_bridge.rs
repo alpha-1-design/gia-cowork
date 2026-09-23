@@ -70,7 +70,7 @@ pub fn whatsapp_bridge_start(
         .map_err(|e| format!("could not resolve sidecar path: {e}"))?;
 
     let token = random_token();
-    let child = Command::new("node")
+    let mut child = Command::new("node")
         .arg("src/server.js")
         .current_dir(&sidecar_dir)
         .env("GIA_WA_BRIDGE_PORT", BRIDGE_PORT.to_string())
