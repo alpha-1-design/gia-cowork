@@ -47,8 +47,18 @@ pub struct ListResult {
 
 fn home_dir() -> Result<PathBuf, String> {
     std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .or_else(|| {
+            std::env::var_os("HOMEDRIVE")
+                .zip(std::env::var_os("HOMEPATH"))
+                .map(|(drive, path)| {
+                    let mut home = PathBuf::from(drive);
+                    home.push(path);
+                    home.into_os_string()
+                })
+        })
         .map(PathBuf::from)
-        .ok_or_else(|| "Could not determine HOME directory".to_string())
+        .or_else(|| std::env::current_dir().map_err(|e| format!("Could not determine the user home directory: {e}")))
 }
 
 fn workspace_root() -> Result<PathBuf, String> {
@@ -62,6 +72,10 @@ fn workspace_root() -> Result<PathBuf, String> {
             .map_err(|e| format!("Could not resolve workspace: {e}"))?
             .join(configured)
     };
+    if !root.exists() {
+        fs::create_dir_all(&root)
+            .map_err(|e| format!("Could not create workspace {}: {e}", root.display()))?;
+    }
     fs::canonicalize(&root)
         .map_err(|e| format!("Workspace {} is not accessible: {e}", root.display()))
 }

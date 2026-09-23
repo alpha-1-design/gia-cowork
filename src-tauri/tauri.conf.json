@@ -25,7 +25,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "appimage", "rpm"],
+    "targets": ["deb", "appimage", "rpm", "msi", "nsis"],
     "resources": {
       "sidecars/whatsapp-bridge/src/*": "sidecars/whatsapp-bridge/src/",
       "sidecars/whatsapp-bridge/package.json": "sidecars/whatsapp-bridge/package.json",
@@ -41,6 +41,12 @@
     "linux": {
       "deb": {
         "depends": []
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "perUser",
+        "displayLanguageSelector": true
       }
     }
   }

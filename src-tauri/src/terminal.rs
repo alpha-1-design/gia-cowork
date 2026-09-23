@@ -3,7 +3,7 @@
 //! Unlike the Android app -- which has to run a whole proot+Alpine guest
 //! because Android gives you no real shell -- desktop Linux already *is*
 //! a real shell. There is no rootfs, no sandbox, no proot binary to bundle
-//! or extract. We spawn `sh -c "<command>"` directly on the host and stream
+//! or extract. We spawn the platform command interpreter directly on the host and stream
 //! it back. This module intentionally mirrors the shape of the Android
 //! GIATerminalPlugin's exec/kill/listSessions/getFSInfo/getStatus contract
 //! (see TerminalService.ts) so the shared TypeScript frontend needs only a
@@ -104,8 +104,20 @@ pub async fn terminal_exec(
         .clamp(1, MAX_TIMEOUT_MS);
     let session_id = new_session_id();
 
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(&command);
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut command_builder = Command::new("powershell.exe");
+        command_builder
+            .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"])
+            .arg(&command);
+        command_builder
+    };
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = {
+        let mut command_builder = Command::new("sh");
+        command_builder.arg("-c").arg(&command);
+        command_builder
+    };
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     cmd.stdin(Stdio::null());
@@ -253,24 +265,51 @@ pub fn terminal_list_sessions(
 
 #[tauri::command]
 pub fn terminal_get_fs_info() -> Result<FsInfo, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", "(Get-PSDrive -Name (Split-Path $HOME -Qualifier).TrimEnd(':')).Free"])
+            .output()
+            .map_err(|e| format!("PowerShell disk query failed: {e}"))?;
+        let free_bytes = String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(0);
+        return Ok(FsInfo {
+            total_bytes: 0,
+            free_bytes,
+            used_bytes: 0,
+        });
+    }
+
     // Report disk usage for $HOME, mirroring what the Android plugin reports
     // for the app's terminal data directory. `df` is available on every
     // real Linux desktop (no proot/rootfs to inspect here).
+    #[cfg(not(target_os = "windows"))]
     let home = std::env::var("HOME").unwrap_or_else(|_| "/".to_string());
+    #[cfg(not(target_os = "windows"))]
     let output = Command::new("df")
         .arg("-B1")
         .arg(&home)
         .output()
         .map_err(|e| format!("df failed: {e}"))?;
+    #[cfg(not(target_os = "windows"))]
     let text = String::from_utf8_lossy(&output.stdout);
+    #[cfg(not(target_os = "windows"))]
     let line = text.lines().nth(1).ok_or("unexpected df output")?;
+    #[cfg(not(target_os = "windows"))]
     let cols: Vec<&str> = line.split_whitespace().collect();
+    #[cfg(not(target_os = "windows"))]
     if cols.len() < 4 {
         return Err("unexpected df column count".into());
     }
+    #[cfg(not(target_os = "windows"))]
     let total: u64 = cols[1].parse().unwrap_or(0);
+    #[cfg(not(target_os = "windows"))]
     let used: u64 = cols[2].parse().unwrap_or(0);
+    #[cfg(not(target_os = "windows"))]
     let free: u64 = cols[3].parse().unwrap_or(0);
+    #[cfg(not(target_os = "windows"))]
     Ok(FsInfo {
         total_bytes: total,
         free_bytes: free,

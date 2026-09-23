@@ -83,6 +83,17 @@ fn app_exit(app: tauri::AppHandle) {
 /// Reads /proc/meminfo on Linux; falls back to 0 so the caller can estimate.
 #[tauri::command]
 fn system_info() -> SystemInfo {
+    #[cfg(not(target_os = "linux"))]
+    {
+        return SystemInfo {
+            total_ram_gb: 0.0,
+            cpu_cores: std::thread::available_parallelism()
+                .map(|n| n.get() as u32)
+                .unwrap_or(0),
+        };
+    }
+
+    #[cfg(target_os = "linux")]
     let total_ram_gb: f64 = std::fs::read_to_string("/proc/meminfo")
         .ok()
         .and_then(|s| {
@@ -94,6 +105,7 @@ fn system_info() -> SystemInfo {
         .map(|kb| kb / (1024.0 * 1024.0))
         .unwrap_or(0.0);
 
+    #[cfg(target_os = "linux")]
     let cpu_cores = std::thread::available_parallelism()
         .map(|n| n.get() as u32)
         .unwrap_or(0);

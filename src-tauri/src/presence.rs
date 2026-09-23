@@ -17,7 +17,9 @@
 //! guessing.
 
 use serde::Serialize;
+#[cfg(target_os = "linux")]
 use zbus::blocking::Connection;
+#[cfg(target_os = "linux")]
 use zbus::proxy;
 
 #[derive(Clone, Copy, Serialize, PartialEq, Eq, Debug)]
@@ -38,6 +40,7 @@ pub struct PresenceInfo {
 
 // org.freedesktop.login1.Session has a `LockedHint` boolean property that
 // every major DE (GNOME, KDE, etc.) sets when the session screen is locked.
+#[cfg(target_os = "linux")]
 #[proxy(
     interface = "org.freedesktop.login1.Session",
     default_service = "org.freedesktop.login1"
@@ -47,6 +50,7 @@ trait Login1Session {
     fn locked_hint(&self) -> zbus::Result<bool>;
 }
 
+#[cfg(target_os = "linux")]
 #[proxy(
     interface = "org.freedesktop.login1.Manager",
     default_service = "org.freedesktop.login1",
@@ -56,6 +60,7 @@ trait Login1Manager {
     fn get_session_by_PID(&self, pid: u32) -> zbus::Result<zbus::zvariant::OwnedObjectPath>;
 }
 
+#[cfg(target_os = "linux")]
 fn query_lock_state() -> zbus::Result<bool> {
     let conn = Connection::system()?;
     let manager = Login1ManagerProxyBlocking::new(&conn)?;
@@ -69,6 +74,12 @@ fn query_lock_state() -> zbus::Result<bool> {
 
 #[tauri::command]
 pub fn get_presence() -> PresenceInfo {
+    #[cfg(not(target_os = "linux"))]
+    {
+        return PresenceInfo { lock_state: LockState::Unknown };
+    }
+
+    #[cfg(target_os = "linux")]
     let lock_state = match query_lock_state() {
         Ok(true) => LockState::Locked,
         Ok(false) => LockState::Unlocked,
@@ -80,5 +91,8 @@ pub fn get_presence() -> PresenceInfo {
             LockState::Unknown
         }
     };
-    PresenceInfo { lock_state }
+    #[cfg(target_os = "linux")]
+    {
+        PresenceInfo { lock_state }
+    }
 }

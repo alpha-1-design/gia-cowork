@@ -105,8 +105,9 @@ A glass orb lives on your screen. It's GIA's attention made visible.
 | 📦 `.deb` | Debian · Ubuntu · Linux Mint | `sudo apt install ./GIA.Cowork_0.1.0_amd64.deb` |
 | 🌀 `.rpm` | Fedora · RHEL · openSUSE | `sudo dnf install ./GIA.Cowork-0.1.0-1.x86_64.rpm` |
 | 🧵 `.AppImage` | Any Linux | `chmod +x GIA.Cowork_0.1.0_amd64.AppImage && ./GIA.Cowork_0.1.0_amd64.AppImage` |
+| 🪟 `.msi` / `.exe` | Windows 10/11 x64 | Download the Windows installer and follow the setup wizard |
 
-Grab the latest from the **[Releases](https://github.com/alpha-1-design/gia-cowork/releases)** page.
+Grab the latest from the **[Releases](https://github.com/alpha-1-design/gia-cowork/releases)** page. Linux packages are built on Ubuntu; Windows installers are built by the Windows release workflow.
 
 ### First run
 

@@ -96,7 +96,7 @@ class UpdateService {
       const assets: { name: string; size: number; browser_download_url: string }[] =
         release.assets ?? [];
       const asset = desktop
-        ? assets.find((a) => /\.(deb|appimage|rpm|tar\.gz|zip)$/i.test(a.name))
+        ? assets.find((a) => /\.(deb|appimage|rpm|msi|exe|tar\.gz|zip)$/i.test(a.name))
         : assets.find((a) => a.name === 'app-release.apk') ??
           assets.find((a) => a.name.endsWith('.apk'));
 
@@ -211,7 +211,7 @@ class UpdateService {
   ): Promise<void> {
     // If the release has no desktop package yet, downloadUrl is the release
     // page itself — open that instead of "downloading" an HTML page.
-    if (!/(\.deb|\.rpm|\.appimage|\.tar\.gz|\.zip)(\?|$)/i.test(url)) {
+    if (!/(\.deb|\.rpm|\.appimage|\.msi|\.exe|\.tar\.gz|\.zip)(\?|$)/i.test(url)) {
       await this.openReleasePage();
       return;
     }
@@ -323,6 +323,18 @@ class UpdateService {
         await exitDesktopApp();
         return;
       }
+      if (lower.endsWith('.msi') || lower.endsWith('.exe')) {
+        const installer = lower.endsWith('.msi')
+          ? `Start-Process msiexec.exe -ArgumentList ${psQuote(`/i "${path}"`)} -Verb RunAs -Wait`
+          : `Start-Process -FilePath ${psQuote(path)} -Verb RunAs -Wait`;
+        const installed = await terminalService.exec(installer, undefined, undefined, 600000);
+        if (installed.exitCode !== 0) {
+          throw new Error(`Windows installer failed (exit ${installed.exitCode})`);
+        }
+        await delay(1500);
+        await exitDesktopApp();
+        return;
+      }
       // .tar.gz / .zip: reveal the archive and let the user unpack it.
       await terminalService.exec('xdg-open "$HOME/Downloads"', undefined, undefined, 30000);
     } catch (e) {
@@ -352,6 +364,10 @@ function uint8ToBase64(bytes: Uint8Array): string {
 
 function shQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+function psQuote(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`;
 }
 
 function delay(ms: number): Promise<void> {
