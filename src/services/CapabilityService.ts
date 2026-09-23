@@ -58,9 +58,9 @@ export interface CapabilityScan {
     mcpTools: number;
     localLLMModels: number;
     localLLMReady: string[];
-    kokoro: 'ready' | 'idle' | 'loading' | 'error';
-    speech5: 'ready' | 'idle' | 'loading' | 'error';
-    whisper: 'ready' | 'idle' | 'loading' | 'error';
+    kokoro: 'unloaded' | 'ready' | 'idle' | 'loading' | 'error';
+    speech5: 'unloaded' | 'ready' | 'idle' | 'loading' | 'error';
+    whisper: 'unloaded' | 'ready' | 'idle' | 'loading' | 'error';
   };
   scannedAt: number;
 }

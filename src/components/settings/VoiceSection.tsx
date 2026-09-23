@@ -396,7 +396,7 @@ export const VoiceSection: React.FC = () => {
         <select
           className="gia-input"
           value={kokoroVoice}
-          onChange={e => { setKokoroVoice(e.target.value); kokoroTTS.setVoice(e.target.value); }}
+          onChange={e => { setKokoroVoice(e.target.value as typeof kokoroVoice); kokoroTTS.setVoice(e.target.value); }}
           style={{ fontSize: '12px', width: '100%' }}
         >
           {KOKORO_VOICES.map(v => (

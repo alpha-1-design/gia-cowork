@@ -1,9 +1,11 @@
 import { logger } from '../utils/logger';
-import type { KokoroTTS as KokoroModel, RawAudio } from 'kokoro-js';
+import type { KokoroTTS as KokoroModel } from 'kokoro-js';
 
 // ── Types ───────────────────────────────────────────────────────────
 
 export const KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
+type KokoroAudio = Awaited<ReturnType<KokoroModel['generate']>>;
+type KokoroVoice = NonNullable<NonNullable<Parameters<KokoroModel['generate']>[1]>['voice']>;
 
 export type KokoroStatus = 'unloaded' | 'loading' | 'ready' | 'error';
 
@@ -52,10 +54,11 @@ class KokoroService {
   private activeCtx: AudioContext | null = null;
   private activeSource: AudioBufferSourceNode | null = null;
 
-  private _voice: string;
+  private _voice: KokoroVoice;
 
   constructor() {
-    this._voice = localStorage.getItem('gia-kokoro-voice') || 'af_heart';
+    const storedVoice = localStorage.getItem('gia-kokoro-voice');
+    this._voice = (KOKORO_VOICES.some(({ id }) => id === storedVoice) ? storedVoice : 'af_heart') as KokoroVoice;
   }
 
   get status() { return this._status; }
@@ -66,7 +69,8 @@ class KokoroService {
 
   get voice() { return this._voice; }
   setVoice(v: string) {
-    this._voice = v;
+    if (!KOKORO_VOICES.some(({ id }) => id === v)) return;
+    this._voice = v as KokoroVoice;
     localStorage.setItem('gia-kokoro-voice', v);
   }
 
@@ -145,7 +149,7 @@ class KokoroService {
     }
 
     try {
-      const raw: RawAudio = await this.model.generate(text, { voice, speed: 1 });
+      const raw: KokoroAudio = await this.model.generate(text, { voice: voice as KokoroVoice, speed: 1 });
       const audio = raw.data;
       const sampleRate = raw.sampling_rate || 24000;
 

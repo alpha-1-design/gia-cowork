@@ -157,7 +157,7 @@ class JarvisOrbService {
         store.pushFeed(
           'info',
           'Screen capture is desktop-only — in the browser GIA reports her vision models' +
-          ` readiness (${['caption', 'ocr', 'detection'].filter((k) => (store.visionReady as Record<string, boolean>)[k]).length || 0}/3) but can't reach the OS screen.`
+          ` readiness (${[store.visionReady.caption, store.visionReady.ocr, store.visionReady.detection].filter(Boolean).length}/3) but can't reach the OS screen.`
         );
         this._webCapNoteShown = true;
       }
