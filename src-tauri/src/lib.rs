@@ -106,11 +106,12 @@ fn system_info() -> SystemInfo {
         .unwrap_or(0.0);
 
     #[cfg(target_os = "linux")]
-    let cpu_cores = std::thread::available_parallelism()
-        .map(|n| n.get() as u32)
-        .unwrap_or(0);
-
-    SystemInfo { total_ram_gb, cpu_cores }
+    {
+        let cpu_cores = std::thread::available_parallelism()
+            .map(|n| n.get() as u32)
+            .unwrap_or(0);
+        SystemInfo { total_ram_gb, cpu_cores }
+    }
 }
 
 /// Status of the embedded Unimind relay (auto-started on boot). Used by the

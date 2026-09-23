@@ -46,7 +46,7 @@ pub struct ListResult {
 }
 
 fn home_dir() -> Result<PathBuf, String> {
-    std::env::var_os("HOME")
+    let env_home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .or_else(|| {
             std::env::var_os("HOMEDRIVE")
@@ -57,8 +57,10 @@ fn home_dir() -> Result<PathBuf, String> {
                     home.into_os_string()
                 })
         })
-        .map(PathBuf::from)
-        .or_else(|| std::env::current_dir().map_err(|e| format!("Could not determine the user home directory: {e}")))
+        .map(PathBuf::from);
+    env_home
+        .or_else(|| std::env::current_dir().ok())
+        .ok_or_else(|| "Could not determine the user home directory".to_string())
 }
 
 fn workspace_root() -> Result<PathBuf, String> {
