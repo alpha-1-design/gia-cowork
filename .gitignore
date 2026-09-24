@@ -26,3 +26,6 @@ dist-ssr
 # Rust
 src-tauri/target/
 src-tauri/Cargo.lock
+
+# Built installer artifacts (release outputs, never source)
+windows-artifacts/

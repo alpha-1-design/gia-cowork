@@ -90,7 +90,12 @@ async function checkProviderHealth(provider: string, apiKey: string, model: stri
       return res.status === 200 || res.status === 400;
     }
     if (provider === 'gemini') {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}?key=${apiKey}`, { signal: AbortSignal.timeout(10000) });
+      // Header auth, not ?key= — a key in the URL leaks into proxy/server
+      // logs (same reason fetchModels uses the x-goog-api-key header).
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}`, {
+        headers: { 'x-goog-api-key': apiKey },
+        signal: AbortSignal.timeout(10000),
+      });
       return res.ok;
     }
     const res = await fetch(`${baseUrl}/chat/completions`, {

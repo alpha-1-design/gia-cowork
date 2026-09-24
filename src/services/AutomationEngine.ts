@@ -61,7 +61,6 @@ export class AutomationEngine {
     }
   }
 
-  private lastCronCheck = 0;
   private async tick(): Promise<void> {
     try {
       const store = useAutomationStore.getState();
@@ -123,7 +122,12 @@ export class AutomationEngine {
       const cron = parseCron(rule.trigger.params.expr || '');
       const now = new Date();
       if (matchesCron(cron, now)) {
-          if (this.lastCronCheck === now.getTime()) return false;
+        // Same-minute dedupe is handled by rule.lastTriggered below. The old
+        // `lastCronCheck === now.getTime()` guard here was dead code — the
+        // field was never assigned, so it never guarded anything — and two
+        // ticks landing in the same cron minute relied entirely on the
+        // lastTriggered check. Removed it; lastTriggered + cooldown is
+        // authoritative for dedupe.
         if (rule.lastTriggered) {
           const last = new Date(rule.lastTriggered);
           if (

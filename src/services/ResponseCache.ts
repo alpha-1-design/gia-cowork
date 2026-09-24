@@ -13,15 +13,16 @@ interface CacheKey {
   systemPrompt?: string;
 }
 
-function hashKey(key: CacheKey): string {
-  const str = JSON.stringify({ prompt: key.prompt.slice(0, 500), model: key.model, provider: key.provider, systemPrompt: key.systemPrompt?.slice(0, 200) });
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
-  }
-  return `cache:${Math.abs(hash).toString(36)}`;
+/**
+ * Collision-free cache key. The old implementation folded the key down to a
+ * 32-bit rolling hash, which meant two different prompts could map to the
+ * same slot and one could be served for the other — and slicing the prompt
+ * to 500 chars made any two long prompts sharing a prefix collide even when
+ * the hash itself hadn't. JSON.stringify of the full field tuple is injective
+ * (JSON escaping is deterministic), so distinct keys can never collide.
+ */
+function keyOf(key: CacheKey): string {
+  return JSON.stringify([key.prompt, key.model, key.provider, key.systemPrompt ?? null]);
 }
 
 class ResponseCache {
@@ -46,11 +47,11 @@ class ResponseCache {
   }
 
   get(key: CacheKey): string | null {
-    const h = hashKey(key);
-    const entry = this.memoryCache.get(h);
+    const k = keyOf(key);
+    const entry = this.memoryCache.get(k);
     if (!entry) return null;
     if (this.isExpired(entry)) {
-      this.memoryCache.delete(h);
+      this.memoryCache.delete(k);
       return null;
     }
     return entry.response;
@@ -58,11 +59,21 @@ class ResponseCache {
 
   set(key: CacheKey, response: string, ttl?: number): void {
     if (this.memoryCache.size >= this._maxEntries) {
-      const oldest = this.memoryCache.keys().next().value;
-      if (oldest) this.memoryCache.delete(oldest);
+      // Evict the oldest entry (earliest timestamp; ties resolved by
+      // insertion order, so the first-inserted entry goes first). Never
+      // evict the slot we're about to write.
+      const incoming = keyOf(key);
+      let oldestKey: string | null = null;
+      let oldestTs = Infinity;
+      for (const [k, entry] of this.memoryCache) {
+        if (k !== incoming && entry.timestamp < oldestTs) {
+          oldestTs = entry.timestamp;
+          oldestKey = k;
+        }
+      }
+      if (oldestKey) this.memoryCache.delete(oldestKey);
     }
-    const h = hashKey(key);
-    this.memoryCache.set(h, {
+    this.memoryCache.set(keyOf(key), {
       response,
       model: key.model,
       provider: key.provider,
@@ -76,9 +87,9 @@ class ResponseCache {
       this.memoryCache.clear();
       return;
     }
-    for (const [h, entry] of this.memoryCache) {
-      if (provider && entry.provider === provider) this.memoryCache.delete(h);
-      else if (model && entry.model === model) this.memoryCache.delete(h);
+    for (const [k, entry] of this.memoryCache) {
+      if (provider && entry.provider === provider) this.memoryCache.delete(k);
+      else if (model && entry.model === model) this.memoryCache.delete(k);
     }
   }
 

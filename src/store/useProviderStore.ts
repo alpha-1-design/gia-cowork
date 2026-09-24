@@ -152,7 +152,12 @@ export const useProviderStore = create<GiaProviderState>()(
       setProviderBaseUrl: (p, url) =>
         set((s) => ({ providers: { ...s.providers, [p]: { ...(s.providers[p] || { apiKey: '', enabled: false, model: providerRegistry.getDefaultModel(p) }), baseUrl: url } } })),
 
-      disconnectProvider: (p) =>
+      disconnectProvider: (p) => {
+        // The vault is the credential's real home (persisted state strips
+        // apiKey via partialize). Without deleting here, the key comes back
+        // on the next launch via loadProviders' vault rehydrate and the
+        // provider silently reconnects after the user "disconnected" it.
+        void CredentialVault.delete(p);
         set((s) => {
           const providers = { ...s.providers, [p]: { ...s.providers[p], apiKey: '', enabled: false } };
           let activeProvider = s.activeProvider;
@@ -166,7 +171,8 @@ export const useProviderStore = create<GiaProviderState>()(
             availableModels: { ...s.availableModels, [p]: providerRegistry.getModels(p) },
             modelListStatus: { ...s.modelListStatus, [p]: 'catalog' as const },
           };
-        }),
+        });
+      },
 
       fetchModels: async (p): Promise<ModelOption[]> => {
         const { providers } = get();

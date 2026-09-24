@@ -16,6 +16,11 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+// process_group(0) puts each spawned shell in its own process group so a
+// later kill can signal the whole tree, not just the shell parent.
+#[cfg(not(target_os = "windows"))]
+use std::os::unix::process::CommandExt;
+
 const DEFAULT_TIMEOUT_MS: u64 = 60_000;
 const MAX_TIMEOUT_MS: u64 = 10 * 60_000;
 const MAX_OUTPUT_BYTES: usize = 10 * 1024 * 1024;
@@ -73,6 +78,41 @@ struct SessionEntry {
 #[derive(Default)]
 pub struct TerminalState(pub Mutex<HashMap<String, SessionEntry>>);
 
+/// Kill a session's whole process tree, not just the shell parent. Killing
+/// only `sh -c "npm run dev"` leaves every grandchild (the dev server, a
+/// compiler, a downloaded installer) running as an orphan that still holds
+/// ports and files — and `terminal_get_status` keeps counting them.
+fn kill_process_tree(child: &mut Child) {
+    let pid = child.id();
+    let _ = child.kill();
+    let _ = child.wait();
+    #[cfg(target_os = "windows")]
+    {
+        // /T = tree (children too), /F = force. taskkill ships with every
+        // Windows install; the direct child may already be gone, in which
+        // case taskkill just fails harmlessly against the survivors.
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // The shell was spawned with process_group(0), so its pgid equals
+        // its pid and `kill -9 -- -PGID` signals the entire group. Routed
+        // through sh because kill is a shell builtin on minimal systems
+        // (this module already requires sh for exec, so it adds no new
+        // platform requirement).
+        let _ = Command::new("sh")
+            .arg("-c")
+            .arg(format!("kill -9 -- '-{pid}' 2>/dev/null"))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -118,6 +158,10 @@ pub async fn terminal_exec(
         command_builder.arg("-c").arg(&command);
         command_builder
     };
+    // Own process group on Unix (pgid == child pid) so kill_process_tree can
+    // take down the whole tree. Windows handles the tree via `taskkill /T`.
+    #[cfg(not(target_os = "windows"))]
+    cmd.process_group(0);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     cmd.stdin(Stdio::null());
@@ -179,8 +223,7 @@ pub async fn terminal_exec(
                 }
                 None => {
                     if start.elapsed() > Duration::from_millis(timeout_ms) {
-                        let _ = entry.child.kill();
-                        let _ = entry.child.wait();
+                        kill_process_tree(&mut entry.child);
                         sessions.remove(&session_id);
                         timed_out = true;
                         exit_code = -1;
@@ -240,7 +283,7 @@ pub fn terminal_kill(
 ) -> Result<(), String> {
     let mut sessions = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(mut entry) = sessions.remove(&session_id) {
-        entry.child.kill().map_err(|e| e.to_string())?;
+        kill_process_tree(&mut entry.child);
     }
     Ok(())
 }
