@@ -102,6 +102,29 @@ export function getModePromptName(mode: string): string {
   return MODE_NAMES[mode as Mode] ?? MODE_NAMES.code;
 }
 
+/**
+ * Edge glow per mode.
+ *
+ * A mode you cannot see is a mode you cannot trust. Plan mode in particular
+ * fails silently: GIA looks exactly as productive as usual while touching
+ * nothing, so the "don't change anything" state has to be visible in the
+ * chrome, not only in the system prompt.
+ *
+ * These are deliberately restrained — an inset rim rather than a neon halo.
+ * The point is an edge you notice once and then stop seeing, because it is
+ * permanently on while the mode is. A loud glow would be unbearable within a
+ * minute and would end up ignored entirely, which is the same as having none.
+ *
+ * `code` and `build` have no entry: those are the default states, and a glow
+ * that is normally off stops reading as "on" the moment it appears.
+ */
+export const MODE_EDGE_GLOW: Partial<Record<Mode, string>> = {
+  plan: 'inset 0 0 0 1px rgba(168, 85, 247, 0.55), inset 0 0 28px rgba(168, 85, 247, 0.10)',
+  ask: 'inset 0 0 0 1px rgba(56, 189, 248, 0.45), inset 0 0 24px rgba(56, 189, 248, 0.08)',
+  exam: 'inset 0 0 0 1px rgba(245, 158, 11, 0.45), inset 0 0 24px rgba(245, 158, 11, 0.08)',
+  analyst: 'inset 0 0 0 1px rgba(34, 197, 94, 0.45), inset 0 0 24px rgba(34, 197, 94, 0.08)',
+};
+
 export function modePromptFor(mode: string): string {
   switch (mode) {
     case 'plan': return PLAN_PROMPT;

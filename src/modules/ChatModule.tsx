@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import WorkspaceDock from '../components/WorkspaceDock';
 import BuildStudio from '../components/BuildStudio';
-import { MODES, getModePromptName } from '../services/system/modePrompts';
+import { MODES, getModePromptName, MODE_EDGE_GLOW } from '../services/system/modePrompts';
 import SessionSwitcher from '../components/SessionSwitcher';
 import AgentActivityStrip from '../components/AgentActivityStrip';
 import QueuedMessages from '../components/QueuedMessages';
@@ -280,7 +280,20 @@ const [dockOpen, setDockOpen] = React.useState(false);
   }
 
   return (
-    <div className="flex h-full relative" style={{ background: 'var(--gia-bg)' }}>
+    <div
+      className="flex h-full relative gia-mode-edges"
+      data-mode={currentModeName}
+      data-testid="chat-module-root"
+      style={{
+        background: 'var(--gia-bg)',
+        // The module's own edge picks up the active mode. Plan mode is the one
+        // that needs it most: it is the mode where being wrong is quietest —
+        // GIA looks exactly as productive as usual while touching nothing —
+        // so the boundary has to carry the state, not just the prompt.
+        boxShadow: MODE_EDGE_GLOW[currentModeName as keyof typeof MODE_EDGE_GLOW] ?? 'none',
+        transition: 'box-shadow 320ms ease',
+      }}
+    >
     <div className="flex flex-col flex-1 min-w-0 relative">
       {/* Processing bar */}
       {loading && (
