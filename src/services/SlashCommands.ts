@@ -2,6 +2,7 @@ import { useGiaStore, type ChatSession, type Message, type MessageNode } from '.
 import { THEME_IDS, getDesktopTheme } from '../config/themes';
 import { THINKING_LEVELS, THINKING_SPECS, toThinkingLevel } from './system/thinkingLevels';
 import { BUILD_STYLES, getBuildStyle } from './build/giaThemes';
+import { MODES, getModePromptName } from './system/modePrompts';
 import { useProviderStore } from '../store/useProviderStore';
 import { useMCPStore } from '../store/useMCPStore';
 import { usePluginStore } from '../store/usePluginStore';
@@ -45,7 +46,10 @@ export type SlashCommandResult = {
   action?: 'clear' | 'compact' | 'mode-switch' | 'new-session' | 'show-skills' | 'show-help';
 };
 
-export type Giamode = 'code' | 'plan' | 'ask' | 'build';
+// `Giamode` used to type the old `/mode` command, which wrote a key nothing
+// read. The live mode list is `MODES` in system/modePrompts — one source, so a
+// mode cannot be settable in one place and absent from the other.
+export type Giamode = 'code' | 'plan' | 'ask' | 'build' | 'exam' | 'analyst';
 
 export type CommandCategory =
   | 'Chat & Sessions'
@@ -476,32 +480,6 @@ const REGISTRY: CommandSpec[] = [
       };
     },
   },
-  {
-    name: 'mode',
-    category: 'Chat & Sessions',
-    description: 'Switch GIA mode: code, plan, ask, build',
-    usage: '/mode code|plan|ask|build',
-    run: ({ args }) => {
-      const state = useGiaStore.getState();
-      const mode = (args[0] || '').toLowerCase() as Giamode;
-      const current = (state.sharedData['gia-mode'] as string) || 'code';
-      if (!['code', 'plan', 'ask', 'build'].includes(mode)) {
-        return {
-          handled: true,
-          message: `Current mode: **${current}**\n\nUsage: \`/mode code\`, \`/mode plan\`, \`/mode ask\`, or \`/mode build\``,
-        };
-      }
-      useGiaStore.setState({ sharedData: { ...state.sharedData, 'gia-mode': mode } });
-      useGiaStore.getState().setBuildMode(mode === 'build');
-      const descriptions: Record<Giamode, string> = {
-        code: '🔧 **Code Mode** — GIA reads, writes, and executes code freely.',
-        plan: '📋 **Plan Mode** — GIA generates plans without making changes. Edits blocked until approval.',
-        ask: '💬 **Ask Mode** — GIA answers questions only. No file modifications.',
-        build: '🏗️ **Build Mode** — GIA scaffolds, builds, and deploys full applications. Watch it build in real time.',
-      };
-      return { handled: true, message: descriptions[mode], action: 'mode-switch' };
-    },
-  },
 
   // ── Models & Providers ────────────────────────────────────────────────
   {
@@ -713,6 +691,29 @@ const REGISTRY: CommandSpec[] = [
     run: toggleCommand('onDeviceMode', 'setOnDeviceMode', 'On-device mode', '🔒',
       'Requests stay on this machine. Requires a local model to be running.',
       'Cloud providers are available again.'),
+  },
+  {
+    name: 'mode',
+    category: 'Capabilities',
+    description: 'Set how GIA works: code, plan, ask, build, exam, analyst',
+    usage: '/mode <name>',
+    run: ({ rest }) => {
+      const s = useGiaStore.getState();
+      const cur = ((s.sharedData as { currentMode?: string } | undefined)?.currentMode) ?? 'code';
+      if (!rest.trim()) {
+        const list = MODES
+          .map((m: typeof MODES[number]) => `${m === cur ? '**' + m + '**' : m} — ${getModePromptName(m)}`)
+          .join('\n');
+        return { handled: true, message: `**Mode:** ${getModePromptName(cur)}\n\n${list}\n\n_Use \`/mode <name>\`._` };
+      }
+      const want = rest.trim().toLowerCase();
+      if (!(MODES as readonly string[]).includes(want)) {
+        return { handled: true, message: `⚠️ Unknown mode \`${rest.trim()}\`. Options: ${MODES.join(', ')}` };
+      }
+      s.updateSharedData({ currentMode: want });
+      s.setBuildMode(want === 'build');
+      return { handled: true, message: `🎚️ Mode set to **${getModePromptName(want)}**.` };
+    },
   },
   {
     name: 'thinking',
@@ -1447,7 +1448,7 @@ const REGISTRY: CommandSpec[] = [
           `**Provider:** ${activeProvider} ${cfg?.enabled ? '✅' : '❌'}${cfg?.apiKey ? '' : ' ⚠️ no key'}`,
           `**Model:** ${cfg?.model || 'none'}`,
           `**Network:** ${state.connectionStatus}`,
-          `**Mode:** ${(state.sharedData['gia-mode'] as string) || 'code'}`,
+          `**Mode:** ${(state.sharedData.currentMode as string) || 'code'}`,
           `**Active skill:** ${state.activeSkillId || 'none'}`,
           `**Presenting:** ${presenterSupported() ? (isPresenting() ? 'yes' : 'no') : 'n/a'}`,
           '',

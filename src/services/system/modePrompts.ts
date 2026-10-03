@@ -75,6 +75,33 @@ export const ANALYST_PROMPT = `You are in **ANALYST mode**. You are examining ev
 - **Say when the evidence does not settle it.** "The data cannot distinguish these two explanations" is a real finding, and more useful than a confident wrong answer.
 - **Do not manufacture certainty or consensus** to make the answer feel complete.`;
 
+/**
+ * Every mode GIA can be put into.
+ *
+ * This list exists because it was discovered the hard way: `currentMode` was
+ * only ever assigned `'build'` or `'code'` anywhere in the app, so four of the
+ * prompts below — plan, ask, exam, analyst — were unreachable. They read as
+ * features and do nothing, which is worse than not existing.
+ *
+ * Anything added here must also be settable from the UI and from `/mode`;
+ * otherwise it lands in the same trap.
+ */
+export const MODES = ['code', 'plan', 'ask', 'build', 'exam', 'analyst'] as const;
+export type Mode = typeof MODES[number];
+
+const MODE_NAMES: Record<Mode, string> = {
+  code: 'Code — full access',
+  plan: 'Plan — propose, do not touch the machine',
+  ask: 'Ask — question and answer only',
+  build: 'Build — master builder',
+  exam: 'Exam — tutor, never the answer key',
+  analyst: 'Analyst — evidence, not agreeable conclusions',
+};
+
+export function getModePromptName(mode: string): string {
+  return MODE_NAMES[mode as Mode] ?? MODE_NAMES.code;
+}
+
 export function modePromptFor(mode: string): string {
   switch (mode) {
     case 'plan': return PLAN_PROMPT;

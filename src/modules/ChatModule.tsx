@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import WorkspaceDock from '../components/WorkspaceDock';
 import BuildStudio from '../components/BuildStudio';
+import { MODES, getModePromptName } from '../services/system/modePrompts';
 import SessionSwitcher from '../components/SessionSwitcher';
 import AgentActivityStrip from '../components/AgentActivityStrip';
 import QueuedMessages from '../components/QueuedMessages';
@@ -156,6 +157,7 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
   const [showCamera, setShowCamera] = React.useState(false);
   const [showPreviewSheet, setShowPreviewSheet] = React.useState(false);
   const [showBuildStudio, setShowBuildStudio] = React.useState(false);
+  const currentModeName = ((useGiaStore(s => s.sharedData) as { currentMode?: string } | undefined)?.currentMode) ?? 'code';
   const [showVoiceMode, setShowVoiceMode] = React.useState(false);
   // Terminal + files docked beside the chat (desktop workflow).
   // Persisted, not local state. The panel is a workspace preference — losing it
@@ -679,6 +681,35 @@ const [dockOpen, setDockOpen] = React.useState(false);
               <LayoutTemplate size={11} /> Templates
             </button>
             <div className="w-px h-4 mx-1 shrink-0" style={{ background: 'var(--gia-border)' }} />
+            <div
+              className="flex items-center gap-0.5 px-1 py-0.5 rounded-xl shrink-0"
+              style={{ border: '1px solid var(--gia-border)' }}
+              role="group"
+              aria-label="GIA mode"
+              data-testid="mode-picker"
+            >
+              {MODES.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    useGiaStore.getState().updateSharedData({ currentMode: m });
+                    setBuildMode(m === 'build');
+                  }}
+                  data-testid={`mode-${m}`}
+                  aria-pressed={currentModeName === m}
+                  className="px-2 py-1 rounded-lg text-[10px] font-medium transition-all"
+                  style={{
+                    background: currentModeName === m ? 'var(--gia-accent-dim)' : 'transparent',
+                    color: currentModeName === m ? 'var(--gia-accent)' : 'var(--gia-muted)',
+                    border: `1px solid ${currentModeName === m ? 'var(--gia-accent-glow)' : 'var(--gia-border)'}`,
+                  }}
+                  title={getModePromptName(m)}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={() => setShowBuildStudio(true)}
