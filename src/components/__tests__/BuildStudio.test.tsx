@@ -6,6 +6,7 @@ import { useGiaStore } from '../../store/useGiaStore';
 import { useProviderStore } from '../../store/useProviderStore';
 import { setShell, type ShellResult } from '../../services/agents/peerAgents';
 import { DESKTOP_THEMES, DEFAULT_THEME } from '../../config/themes';
+import { BUILD_STYLES } from '../../services/build/giaThemes';
 
 /**
  * The gate is the behaviour worth protecting.
@@ -125,5 +126,32 @@ describe('BuildStudio', () => {
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('studio styles', () => {
+  it('renders all seven build styles with distinct swatches', async () => {
+    render(<BuildStudio onClose={() => {}} onStart={() => {}} />);
+    for (const s of BUILD_STYLES) expect(screen.getByTestId(`build-style-${s.id}`)).toBeTruthy();
+    expect(screen.getByTestId('build-style-obsidian')).toBeTruthy();
+    expect(screen.getByTestId('build-style-prism')).toBeTruthy();
+    await waitFor(() => expect(shell).toHaveBeenCalled());
+  });
+
+  it('persists the chosen style to the store', () => {
+    render(<BuildStudio onClose={() => {}} onStart={() => {}} />);
+    fireEvent.click(screen.getByTestId('build-style-carbon'));
+    expect(useGiaStore.getState().buildStyleId).toBe('carbon');
+  });
+
+  it('includes the chosen style in the brief that starts the build', async () => {
+    const onStart = vi.fn();
+    render(<BuildStudio onClose={() => {}} onStart={onStart} />);
+    fireEvent.change(screen.getByTestId('build-brief'), { target: { value: 'A kanban board with drag and drop' } });
+    fireEvent.click(screen.getByTestId('build-style-verdant'));
+    fireEvent.click(screen.getByTestId('build-skill-core-developer'));
+    await waitFor(() => expect((screen.getByTestId('build-start') as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId('build-start'));
+    expect(onStart.mock.calls[0][0]).toContain('Verdant');
   });
 });
