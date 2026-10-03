@@ -71,16 +71,23 @@ export const PEER_AGENTS: PeerAgent[] = [
     id: 'hermes',
     name: 'Hermes',
     bin: 'hermes',
-    strength: 'Scriptable automation and scheduled agent runs.',
-    usage: 'hermes run "<prompt>"',
+    strength: 'Deep multi-step runs; has its own git worktree isolation.',
+    // `hermes chat -q` is the one-shot form that keeps tool output. `hermes -z`
+    // is the scripted variant that prints only the final answer, which is wrong
+    // here: delegation needs to come back with what the agent actually did.
+    // (Verified against the Hermes CLI reference — there is no `hermes run`.)
+    usage: 'hermes chat -q "<prompt>"',
     kind: 'agent',
   },
   {
     id: 'pi',
     name: 'Pi',
     bin: 'pi',
-    strength: 'Small focused sub-tasks and quick one-file changes.',
-    usage: 'pi "<prompt>"',
+    strength: 'Minimal and fast. Small focused sub-tasks and one-file changes.',
+    // `-p` / `--print` is required. Plain `pi "<prompt>"` opens the interactive
+    // TUI and waits for a human, so it would hang until the terminal timeout
+    // rather than failing — verified against the Pi CLI docs.
+    usage: 'pi -p "<prompt>"',
     kind: 'agent',
   },
   {

@@ -85,6 +85,54 @@ describe('detectPeerAgents', () => {
   });
 });
 
+describe('verified non-interactive invocations', () => {
+  /**
+   * Every agent's `usage` string was checked against that tool's own docs:
+   *   claude  → `claude -p`            (Claude Code CLI)
+   *   opencode → `opencode run`        (opencode.ai/docs/cli)
+   *   copilot → `copilot -p`           (docs.github.com copilot-cli)
+   *   hermes  → `hermes chat -q`       (Hermes CLI reference)
+   *   pi      → `pi -p`                (pi.dev / pi-coding-agent docs)
+   *
+   * Two of these were originally wrong, and both wrong in the expensive
+   * direction: `hermes run` does not exist, and bare `pi "<prompt>"` launches
+   * the interactive TUI and waits for a human rather than failing. A bare
+   * interactive invocation is the worst case here — it does not error, it
+   * simply hangs until the terminal timeout.
+   */
+  const EXPECTED: Record<string, string> = {
+    claude: 'claude -p "<prompt>"',
+    opencode: 'opencode run "<prompt>"',
+    copilot: 'copilot -p "<prompt>"',
+    hermes: 'hermes chat -q "<prompt>"',
+    pi: 'pi -p "<prompt>"',
+  };
+
+  it('matches the documented flags for every agent', () => {
+    for (const agent of PEER_AGENTS.filter(a => a.kind === 'agent')) {
+      expect(agent.usage, `${agent.id} usage drifted from its documented CLI`)
+        .toBe(EXPECTED[agent.id]);
+    }
+  });
+
+  it('never invokes an agent without a non-interactive flag', () => {
+    for (const agent of PEER_AGENTS.filter(a => a.kind === 'agent')) {
+      const cmd = buildDelegateCommand(agent, 'do the thing');
+      // `hermes chat`/`opencode run` carry the non-interactive form in the
+      // subcommand; everything else must pass an explicit flag or it hangs.
+      const nonInteractive = /\s(-p|--print|-q|--query|-z|run\s)/.test(cmd);
+      expect(nonInteractive, `${agent.id} would hang: ${cmd}`).toBe(true);
+    }
+  });
+
+  it('places the prompt after the flags, not before', () => {
+    expect(buildDelegateCommand(PEER_AGENTS.find(a => a.id === 'pi')!, 'x'))
+      .toBe(`pi -p 'x'`);
+    expect(buildDelegateCommand(PEER_AGENTS.find(a => a.id === 'hermes')!, 'x'))
+      .toBe(`hermes chat -q 'x'`);
+  });
+});
+
 describe('shell quoting', () => {
   it('wraps in single quotes so the shell cannot reinterpret it', () => {
     expect(shellQuote('hello world')).toBe(`'hello world'`);
