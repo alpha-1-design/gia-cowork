@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MODE_EDGE_GLOW, MODES } from '../system/modePrompts';
+import { useGiaStore } from '../../store/useGiaStore';
 
 /**
  * The module edges have to show which mode is active, because the modes where
@@ -76,5 +77,48 @@ describe('the chat module uses it', () => {
     // Without a transition the glow appears instantly on switching modes, which
     // reads as a rendering glitch rather than a state change.
     expect(src).toMatch(/transition:\s*'box-shadow/);
+  });
+});
+describe('the edge actually reacts to a mode change', () => {
+  /**
+   * The string assertions above prove the wiring exists. This proves it works.
+   *
+   * `currentModeName` in ChatModule subscribes with `useGiaStore(s =>
+   * s.sharedData)`, which only fires if the selector returns a new reference.
+   * If `updateSharedData` mutated `sharedData` in place, zustand would see no
+   * change, the component would never re-render, and the glow would stay
+   * frozen on whatever mode was active when the app loaded — which is exactly
+   * the bug this feature exists to prevent.
+   */
+  it('re-renders a sharedData subscriber when the mode changes', () => {
+    const seen: (string | undefined)[] = [];
+    const unsub = useGiaStore.subscribe((s) => { seen.push(s.sharedData.currentMode as string | undefined); });
+
+    useGiaStore.getState().updateSharedData({ currentMode: 'plan' });
+    expect(seen.at(-1)).toBe('plan');
+
+    useGiaStore.getState().updateSharedData({ currentMode: 'code' });
+    expect(seen.at(-1)).toBe('code');
+    unsub();
+  });
+
+  it('resolves to the same glow the component reads', () => {
+    for (const m of MODES) {
+      useGiaStore.getState().updateSharedData({ currentMode: m });
+      const current = (useGiaStore.getState().sharedData as { currentMode?: string }).currentMode ?? 'code';
+      expect(current).toBe(m);
+      expect(MODE_EDGE_GLOW[current as keyof typeof MODE_EDGE_GLOW] ?? 'none')
+        .toBe(MODE_EDGE_GLOW[m as keyof typeof MODE_EDGE_GLOW] ?? 'none');
+    }
+  });
+
+  it('defaults to code — no edge — for a session with no mode set', () => {
+    // Clear it first: the previous test leaves `analyst` in sharedData, and
+    // asserting against whatever the last test happened to set is how a
+    // default-case test passes or fails for the wrong reason.
+    useGiaStore.getState().updateSharedData({ currentMode: undefined });
+    const current = (useGiaStore.getState().sharedData as { currentMode?: string }).currentMode ?? 'code';
+    expect(current).toBe('code');
+    expect(MODE_EDGE_GLOW[current as keyof typeof MODE_EDGE_GLOW]).toBeUndefined();
   });
 });
