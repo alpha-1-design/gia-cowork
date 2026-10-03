@@ -32,7 +32,7 @@ export const SecuritySection: React.FC = () => {
             BiometricService.setLockEnabled(newVal);
           }}
           className="w-8 h-4 rounded-full relative transition-all shrink-0"
-          style={{ background: lockEnabled ? 'rgba(59,130,246,0.4)' : 'rgba(255,255,255,0.1)' }}
+          style={{ background: lockEnabled ? 'rgba(59,130,246,0.4)' : 'var(--gia-overlay-3)' }}
         >
           <div
             className="absolute top-0.5 w-3 h-3 rounded-full transition-all"

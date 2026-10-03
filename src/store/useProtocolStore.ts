@@ -21,7 +21,6 @@ interface ProtocolStore {
   propose: (p: ProtocolProposal) => void;
   confirm: (protocolId: string) => void;
   reject: (protocolId: string) => void;
-  modify: (protocolId: string, args: Record<string, unknown>) => void;
   setExecuting: (protocolId: string) => void;
   setProgress: (protocolId: string, progress: number, label: string) => void;
   setCompleted: (protocolId: string, result: string, sources?: { title: string; url: string }[]) => void;
@@ -75,18 +74,6 @@ export const useProtocolStore = create<ProtocolStore>()(
           ),
         }));
         get().resolvePending({ type: 'reject', protocolId, timestamp: Date.now() });
-      },
-
-      modify: (protocolId, args) => {
-        set((s) => ({
-          protocols: s.protocols.map((p) =>
-            p.id === protocolId ? { ...p, state: 'modified' as const, args } : p
-          ),
-          consoleProtocols: s.consoleProtocols.map((p) =>
-            p.id === protocolId ? { ...p, state: 'modified' as const, args } : p
-          ),
-        }));
-        get().resolvePending({ type: 'modify', protocolId, modifiedArgs: args, timestamp: Date.now() });
       },
 
       setExecuting: (protocolId) => {

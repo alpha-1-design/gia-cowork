@@ -4,7 +4,8 @@ import type { Tool } from './types';
 import { advancedTools } from './advanced';
 import { autonomyTools } from './autonomy';
 import { brainCloudTools } from './brainCloud';
-import { browserAutomationTools } from './browserAutomation';
+import { browserSessionTools } from './browserSession';
+import { peerAgentTools } from './peerAgents';
 import { buildTools } from './build';
 import { calendarTools } from './calendar';
 import { cameraTools } from './camera';
@@ -44,6 +45,8 @@ import { notificationTools } from './notifications';
 import { personalEnhancedTools } from './personalEnhanced';
 import { personalTools } from './personal';
 import { pluginTools } from './plugin';
+import { projectContextTools } from './projectContext';
+import { projectMemoryTools } from './projectMemory';
 import { powerTools } from './powerTools';
 import { providerHealthTools } from './providerHealth';
 import { ragTools } from './rag';
@@ -55,6 +58,7 @@ import { securityTools } from './security';
 import { sessionTools } from './session';
 import { shareTools } from './share';
 import { skillTools } from './skills';
+import { skillAuthoringTools } from './skillAuthoring';
 import { smartHomeTools } from './smartHome';
 import { socialMediaTools } from './socialMedia';
 import { sshTools } from './ssh';
@@ -72,7 +76,8 @@ export function registerAllTools(): void {
     advancedTools,
     autonomyTools,
     brainCloudTools,
-    browserAutomationTools,
+    browserSessionTools,
+    peerAgentTools,
     buildTools,
     calendarTools,
     cameraTools,
@@ -112,6 +117,8 @@ export function registerAllTools(): void {
     personalEnhancedTools,
     personalTools,
     pluginTools,
+    projectContextTools,
+    projectMemoryTools,
     powerTools,
     providerHealthTools,
     ragTools,
@@ -123,6 +130,7 @@ export function registerAllTools(): void {
     sessionTools,
     shareTools,
     skillTools,
+    skillAuthoringTools,
     smartHomeTools,
     socialMediaTools,
     sshTools,

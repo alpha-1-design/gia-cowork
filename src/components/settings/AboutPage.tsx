@@ -33,7 +33,7 @@ export const AboutPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       <div className="gia-card p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#0d0d14', border: '1px solid rgba(139,92,246,0.2)' }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--gia-code-bg)', border: '1px solid rgba(139,92,246,0.2)' }}>
               <BarChart3 size={18} style={{ color: '#a78bfa' }} />
             </div>
             <div>
@@ -51,7 +51,7 @@ export const AboutPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             }}
             className="relative w-11 h-6 rounded-full transition-colors"
             style={{
-              background: AnalyticsService.isOptedIn() ? 'rgba(139,92,246,0.3)' : 'rgba(255,255,255,0.1)',
+              background: AnalyticsService.isOptedIn() ? 'rgba(139,92,246,0.3)' : 'var(--gia-overlay-3)',
               border: `1px solid ${AnalyticsService.isOptedIn() ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.15)'}`,
             }}
           >

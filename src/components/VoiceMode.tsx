@@ -342,8 +342,8 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
             onClick={() => setAutoMode(!autoMode)}
             className="w-7 h-7 rounded-lg flex items-center justify-center transition-all"
             style={{
-              background: autoMode ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.05)',
-              border: `1px solid ${autoMode ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.08)'}`,
+              background: autoMode ? 'rgba(52,211,153,0.15)' : 'var(--gia-overlay-2)',
+              border: `1px solid ${autoMode ? 'rgba(52,211,153,0.3)' : 'var(--gia-overlay-2)'}`,
             }}
             title={autoMode ? 'Auto-reply ON' : 'Auto-reply OFF'}
           >
@@ -354,7 +354,7 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
           <button
             onClick={() => { ttsService.stop(); setMuted(!muted); }}
             className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+            style={{ background: 'var(--gia-overlay-2)', border: '1px solid var(--gia-overlay-2)' }}
           >
             {muted ? <VolumeX size={12} style={{ color: '#71717a' }} /> : <Volume2 size={12} style={{ color: 'var(--gia-muted)' }} />}
           </button>
@@ -367,7 +367,7 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
               onClose?.() ?? toggleFullScreenMode();
             }}
             className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+            style={{ background: 'var(--gia-overlay-2)', border: '1px solid var(--gia-overlay-2)' }}
           >
             <X size={12} style={{ color: 'var(--gia-muted)' }} />
           </button>
@@ -546,13 +546,13 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
         <div className="flex items-center gap-2 w-full max-w-md px-4">
           <button
             className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+            style={{ background: 'var(--gia-overlay-2)', border: '1px solid var(--gia-overlay-2)' }}
           >
             <Plus size={16} style={{ color: 'var(--gia-muted)' }} />
           </button>
           <div
             className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-full"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+            style={{ background: 'var(--gia-overlay-2)', border: '1px solid var(--gia-overlay-2)' }}
           >
             <span className="flex-1 text-[12px]" style={{ color: 'var(--gia-muted-2)' }}>
               {phase === 'idle' ? 'How can I help you today?' : phaseLabel}

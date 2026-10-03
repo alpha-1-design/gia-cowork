@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { X, Check, ChevronRight, KeyRound, Settings2, Zap, Eye, Wrench, Cpu, RefreshCw } from 'lucide-react';
+import { X, Check, ChevronRight, KeyRound, Settings2, Zap, Eye, Wrench, Cpu, RefreshCw, Film, AudioLines, Image as ImageIcon, Brain, Info } from 'lucide-react';
 import { useProviderStore } from '../../store/useProviderStore';
 import { providerRegistry } from '../../services/ProviderRegistry';
 import { useShallow } from 'zustand/react/shallow';
 import ProviderIcon from '../ProviderIcon';
 import BottomSheet from '../ui/BottomSheet';
+import { resolveCapabilities, capabilityBadges, type ModelCapabilities } from '../../services/ModelCapabilities';
 
 interface ModelSwitcherSheetProps {
   open: boolean;
@@ -12,25 +13,52 @@ interface ModelSwitcherSheetProps {
   onOpenEngine?: () => void;
 }
 
-const ModelBadges: React.FC<{ free?: boolean; vision?: boolean; tools?: boolean }> = ({ free, vision, tools }) => (
-  <div className="flex items-center gap-1">
-    {free && (
-      <span className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399' }}>
-        <Zap size={8} /> FREE
-      </span>
-    )}
-    {vision && (
-      <span className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-semibold" style={{ background: 'rgba(236,72,153,0.12)', color: '#ec4899' }}>
-        <Eye size={8} /> VISION
-      </span>
-    )}
-    {tools && (
-      <span className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-semibold" style={{ background: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
-        <Wrench size={8} /> TOOLS
-      </span>
-    )}
-  </div>
-);
+const BADGE_ICON: Record<string, React.ReactNode> = {
+  vision: <Eye size={8} />, video: <Film size={8} />, audio: <AudioLines size={8} />,
+  imagegen: <ImageIcon size={8} />, tools: <Wrench size={8} />, reasoning: <Brain size={8} />,
+};
+
+/**
+ * Capability badges.
+ *
+ * Three badges used to be all this showed, so a vision model and a reasoning
+ * model looked identical in the list and picking between them was guesswork.
+ * These are the abilities that actually change what GIA can do, so they are
+ * what gets shown — including the ones people rarely think to look for
+ * (audio input, video, image generation).
+ */
+const ModelBadges: React.FC<{ free?: boolean; caps: ModelCapabilities }> = ({ free, caps }) => {
+  const badges = capabilityBadges(caps);
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {free && (
+        <span className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-semibold" style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399' }}>
+          <Zap size={8} /> FREE
+        </span>
+      )}
+      {badges.map(b => (
+        <span
+          key={b.key}
+          title={b.title}
+          className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-semibold"
+          style={{ background: `${b.color}1f`, color: b.color }}
+        >
+          {BADGE_ICON[b.key]}
+          {b.label}
+        </span>
+      ))}
+      {caps.inferred && (
+        <span
+          title="The provider did not declare these — they were inferred from the model name."
+          className="px-1 py-0.5 rounded text-[8px] font-semibold"
+          style={{ background: 'rgba(148,163,184,0.12)', color: '#94a3b8' }}
+        >
+          INFERRED
+        </span>
+      )}
+    </div>
+  );
+};
 
 const ModelSwitcherSheet: React.FC<ModelSwitcherSheetProps> = ({ open, onClose, onOpenEngine }) => {
   const {
@@ -52,6 +80,8 @@ const ModelSwitcherSheet: React.FC<ModelSwitcherSheetProps> = ({ open, onClose, 
   const [keyInput, setKeyInput] = useState('');
   const [imageModelInput, setImageModelInput] = useState('');
   const [loadingModels, setLoadingModels] = useState(false);
+  // Which model row has its capability detail open (at most one).
+  const [detailFor, setDetailFor] = useState<string | null>(null);
 
   // Keep the selected provider in sync when the sheet (re)opens.
   useEffect(() => { if (open) setSelected(activeProvider); }, [open, activeProvider]);
@@ -224,23 +254,81 @@ const ModelSwitcherSheet: React.FC<ModelSwitcherSheetProps> = ({ open, onClose, 
                 ) : (
                   models.map((m) => {
                     const isCurrent = m.id === currentModelId && selected === activeProvider;
+                    const caps = resolveCapabilities(m.id, {
+                      // Provider-declared values win over inference.
+                      vision: m.vision,
+                      tools: m.tools,
+                      context: m.context,
+                    });
+                    const expanded = detailFor === m.id;
                     return (
-                      <button
-                        key={m.id}
-                        onClick={() => handlePickModel(m.id)}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-all tap-feedback"
-                        style={{
-                          background: isCurrent ? 'rgba(168,85,247,0.12)' : 'transparent',
-                          border: isCurrent ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
-                        }}
-                      >
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-[12px] font-medium truncate" style={{ color: 'var(--gia-text)' }}>{m.label}</span>
-                          <span className="block mt-1"><ModelBadges free={m.free} vision={m.vision} tools={m.tools} /></span>
-                        </span>
-                        {isCurrent && <Check size={15} style={{ color: '#a855f7' }} />}
-                        {!isCurrent && <ChevronRight size={14} style={{ color: 'var(--gia-muted-2)' }} />}
-                      </button>
+                      <div key={m.id}>
+                        <div
+                          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-all tap-feedback"
+                          style={{
+                            background: isCurrent ? 'rgba(168,85,247,0.12)' : 'transparent',
+                            border: isCurrent ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
+                          }}
+                        >
+                          <button
+                            onClick={() => handlePickModel(m.id)}
+                            className="flex-1 min-w-0 text-left"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <span className="text-[12px] font-medium truncate" style={{ color: 'var(--gia-text)' }}>{m.label}</span>
+                              {caps.contextWindow && (
+                                <span className="shrink-0 text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>
+                                  {(caps.contextWindow / 1000).toFixed(caps.contextWindow >= 100000 ? 0 : 0)}k ctx
+                                </span>
+                              )}
+                            </span>
+                            <span className="block mt-1"><ModelBadges free={m.free} caps={caps} /></span>
+                          </button>
+                          <button
+                            onClick={() => setDetailFor(expanded ? null : m.id)}
+                            title="What this model can do"
+                            className="shrink-0 p-1.5 rounded-lg transition-colors hover:bg-white/5"
+                            style={{ color: expanded ? '#a855f7' : 'var(--gia-muted-2)' }}
+                          >
+                            <Info size={14} />
+                          </button>
+                          {isCurrent
+                            ? <Check size={15} style={{ color: '#a855f7' }} />
+                            : <ChevronRight size={14} style={{ color: 'var(--gia-muted-2)' }} />}
+                        </div>
+
+                        {expanded && (
+                          <div className="px-3 pb-3 -mt-1">
+                            <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--gia-overlay)', border: '1px solid var(--gia-overlay-2)' }}>
+                              <p className="text-[10px] font-semibold" style={{ color: 'var(--gia-muted)' }}>
+                                GIA uses this model to
+                              </p>
+                              <ul className="space-y-1">
+                                {capabilityBadges(caps).map(b => (
+                                  <li key={b.key} className="flex items-center gap-2 text-[11px]">
+                                    <span style={{ color: b.color }}>{BADGE_ICON[b.key]}</span>
+                                    <span style={{ color: 'var(--gia-text)' }}>{b.title}</span>
+                                  </li>
+                                ))}
+                                {capabilityBadges(caps).length === 0 && (
+                                  <li className="text-[11px]" style={{ color: 'var(--gia-muted)' }}>
+                                    Nothing beyond plain text is known for this model.
+                                  </li>
+                                )}
+                              </ul>
+                              <div className="pt-1.5 text-[10px] space-y-0.5" style={{ color: 'var(--gia-muted-2)', borderTop: '1px solid var(--gia-overlay-2)' }}>
+                                <p>id: <code>{m.id}</code></p>
+                                <p>context: {caps.contextWindow ? `${caps.contextWindow.toLocaleString()} tokens` : 'unknown'}</p>
+                                {caps.inferred && (
+                                  <p style={{ color: '#fbbf24' }}>
+                                    Inferred from the model name — the provider did not declare these.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     );
                   })
                 )}

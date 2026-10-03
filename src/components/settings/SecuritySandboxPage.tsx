@@ -133,7 +133,7 @@ function computeHealth(scan: ScanResult | null, firewall: FirewallStatus | null,
   return { total: Math.round(total), items };
 }
 
-const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const SecuritySandboxPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [sandboxOk, setSandboxOk] = useState<boolean | null>(null);
@@ -277,7 +277,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--gia-bg)', padding: '20px 16px', gap: '16px' }}>
-      <SubPageHeader title="Mical" onBack={onBack} />
+      <SubPageHeader title="Security & Sandbox" onBack={onBack} />
 
       {/* Health Summary */}
       <div className="rounded-xl p-4 flex items-center gap-4" style={{
@@ -286,7 +286,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       }}>
         <div className="relative w-14 h-14 shrink-0 flex items-center justify-center">
           <svg className="absolute inset-0" viewBox="0 0 48 48" width="56" height="56">
-            <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+            <circle cx="24" cy="24" r="20" fill="none" stroke="var(--gia-overlay-2)" strokeWidth="3" />
             <circle cx="24" cy="24" r="20" fill="none"
               stroke={health.total >= 80 ? '#34d399' : health.total >= 50 ? '#f59e0b' : '#f87171'}
               strokeWidth="3" strokeLinecap="round"
@@ -437,7 +437,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           {!sandboxStatus && <p className="text-xs" style={{ color: 'var(--gia-muted)' }}>Checking environment packages...</p>}
         </div>
 
-        <div className="flex gap-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div className="flex gap-2 pt-2 border-t" style={{ borderColor: 'var(--gia-overlay-2)' }}>
           <button
             disabled={sandboxBusy !== null}
             onClick={async () => {
@@ -467,7 +467,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               refreshSandboxStatus();
             }}
             className="px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all"
-            style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--gia-text)', border: '1px solid rgba(255,255,255,0.08)', opacity: sandboxBusy ? 0.6 : 1 }}
+            style={{ background: 'var(--gia-overlay)', color: 'var(--gia-text)', border: '1px solid var(--gia-overlay-2)', opacity: sandboxBusy ? 0.6 : 1 }}
           >
             {sandboxBusy === 'repair' ? <Loader2 size={13} className="animate-spin" /> : <Wrench size={13} />} Repair
           </button>
@@ -484,7 +484,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         {sandboxBusy && (
           <div className="p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
             <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--gia-text)' }}>{sandboxProgress}</p>
-            <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--gia-overlay-2)' }}>
               <div className="h-full w-full animate-pulse" style={{ background: '#34d399' }} />
             </div>
           </div>
@@ -534,7 +534,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               Are you sure? This immediately kills suspicious processes, blocks all network traffic via iptables and software-level blocking, and secures the device. Use only when you've detected a confirmed threat.
             </p>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowQuarantine(false)} className="px-4 py-2 rounded-lg text-xs" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--gia-muted)' }}>Cancel</button>
+              <button onClick={() => setShowQuarantine(false)} className="px-4 py-2 rounded-lg text-xs" style={{ background: 'var(--gia-overlay-2)', color: 'var(--gia-muted)' }}>Cancel</button>
               <button onClick={doQuarantine} disabled={quarantining} className="px-4 py-2 rounded-lg text-xs font-semibold" style={{ background: 'rgba(239,68,68,0.2)', color: '#ef4444', opacity: quarantining ? 0.6 : 1 }}>
                 {quarantining ? 'Isolating...' : 'Confirm Quarantine'}
               </button>
@@ -582,12 +582,12 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 background: scanResult.severity === 'critical' ? 'rgba(239,68,68,0.1)' :
                   scanResult.severity === 'warning' ? 'rgba(245,158,11,0.1)' : 'rgba(52,211,153,0.08)',
                 color: severityColor(scanResult.severity),
-                borderBottom: '1px solid rgba(255,255,255,0.04)',
+                borderBottom: '1px solid var(--gia-overlay)',
               }}>
               {severityIcon(scanResult.severity)}
               <span className="flex-1">{scanResult.summary}</span>
             </div>
-            <div className="grid grid-cols-2 gap-px" style={{ background: 'rgba(255,255,255,0.04)' }}>
+            <div className="grid grid-cols-2 gap-px" style={{ background: 'var(--gia-overlay)' }}>
               {[
                 { tag: 'processes' as const, label: 'Processes', value: scanResult.processes, icon: <Terminal size={12} />, color: '#a78bfa' },
                 { tag: 'ports' as const, label: 'Open Ports', value: scanResult.openPorts.length, icon: <Wifi size={12} />, color: scanResult.openPorts.some(p => !p.safe) ? '#f59e0b' : '#34d399' },
@@ -616,7 +616,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               <div className="gia-card p-0 overflow-hidden">
                 {scanResult.openPorts.map((p, i) => (
                   <div key={i} className="flex items-center gap-3 px-4 py-2.5 text-xs"
-                    style={{ borderBottom: i < scanResult.openPorts.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                    style={{ borderBottom: i < scanResult.openPorts.length - 1 ? '1px solid var(--gia-overlay)' : 'none' }}>
                     <div className="w-2 h-2 rounded-full shrink-0" style={{ background: p.safe ? '#34d399' : '#f59e0b' }} />
                     <span className="font-mono font-medium" style={{ color: 'var(--gia-text)', minWidth: 50 }}>{p.port}</span>
                     <span className="font-medium" style={{ color: p.safe ? '#34d399' : '#f59e0b', minWidth: 80 }}>{p.service}</span>
@@ -637,7 +637,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               <div className="gia-card p-0 overflow-hidden">
                 {scanResult.connections.map((c, i) => (
                   <div key={i} className="flex items-center gap-3 px-4 py-2.5 text-xs"
-                    style={{ borderBottom: i < scanResult.connections.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                    style={{ borderBottom: i < scanResult.connections.length - 1 ? '1px solid var(--gia-overlay)' : 'none' }}>
                     <span style={{ color: '#34d399' }}>→</span>
                     <span className="font-mono" style={{ color: 'var(--gia-text)' }}>{c.target}:{c.port}</span>
                     <span className="px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'rgba(52,211,153,0.1)', color: '#34d399' }}>{c.status}</span>
@@ -713,7 +713,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       <div className="gia-card p-4">
         <div className="flex gap-2 mb-2">
           <input value={netTarget} onChange={e => setNetTarget(e.target.value)} placeholder="Host or IP..." onKeyDown={e => e.key === 'Enter' && doNetScan()}
-            className="flex-1 px-3 py-2 rounded-lg text-xs font-mono outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--gia-text)' }} />
+            className="flex-1 px-3 py-2 rounded-lg text-xs font-mono outline-none" style={{ background: 'var(--gia-overlay)', border: '1px solid var(--gia-overlay-2)', color: 'var(--gia-text)' }} />
           <button onClick={doNetScan} disabled={netLoading || !netTarget.trim()}
             className="px-3 py-2 rounded-lg text-xs font-medium transition-all shrink-0"
             style={{ background: netLoading ? 'rgba(34,211,238,0.08)' : 'rgba(34,211,238,0.12)', color: '#22d3ee', opacity: netLoading ? 0.6 : 1 }}>
@@ -721,11 +721,11 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           </button>
         </div>
         {netResult && (
-          <div className="rounded-lg overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)' }}>
+          <div className="rounded-lg overflow-hidden" style={{ background: 'var(--gia-overlay)' }}>
             {netResult.openPorts.length === 0 && !netResult.error && <p className="px-3 py-2 text-[11px]" style={{ color: '#34d399' }}>No open ports found on {netResult.host}</p>}
             {netResult.error && <p className="px-3 py-2 text-[11px]" style={{ color: '#f87171' }}>{netResult.error}</p>}
             {netResult.openPorts.map((p, i) => (
-              <div key={i} className="flex items-center gap-2 px-3 py-1.5 text-[11px]" style={{ borderBottom: i < netResult.openPorts.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+              <div key={i} className="flex items-center gap-2 px-3 py-1.5 text-[11px]" style={{ borderBottom: i < netResult.openPorts.length - 1 ? '1px solid var(--gia-overlay)' : 'none' }}>
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 <span className="font-mono font-medium" style={{ color: 'var(--gia-text)' }}>{p.port}</span>
                 <span className="text-emerald-400">{p.service}</span>
@@ -744,7 +744,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       <div className="gia-card p-4">
         <div className="flex gap-2 mb-2">
           <input value={pingTarget} onChange={e => setPingTarget(e.target.value)} placeholder="Host or IP..." onKeyDown={e => e.key === 'Enter' && doPing()}
-            className="flex-1 px-3 py-2 rounded-lg text-xs font-mono outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--gia-text)' }} />
+            className="flex-1 px-3 py-2 rounded-lg text-xs font-mono outline-none" style={{ background: 'var(--gia-overlay)', border: '1px solid var(--gia-overlay-2)', color: 'var(--gia-text)' }} />
           <button onClick={doPing} disabled={pingLoading || !pingTarget.trim()}
             className="px-3 py-2 rounded-lg text-xs font-medium transition-all shrink-0"
             style={{ background: pingLoading ? 'rgba(52,211,153,0.08)' : 'rgba(52,211,153,0.12)', color: '#34d399', opacity: pingLoading ? 0.6 : 1 }}>
@@ -753,7 +753,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
         {pingResult && (
           <div className="px-3 py-2 rounded-lg text-[11px] font-mono whitespace-pre-wrap leading-relaxed"
-            style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--gia-text)' }}>
+            style={{ background: 'var(--gia-overlay)', color: 'var(--gia-text)' }}>
             {pingResult}
           </div>
         )}
@@ -767,7 +767,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       <div className="gia-card p-4">
         <div className="flex gap-2 mb-2">
           <input value={lookupTarget} onChange={e => setLookupTarget(e.target.value)} placeholder="IP, domain, or hash..." onKeyDown={e => e.key === 'Enter' && doLookup()}
-            className="flex-1 px-3 py-2 rounded-lg text-xs font-mono outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--gia-text)' }} />
+            className="flex-1 px-3 py-2 rounded-lg text-xs font-mono outline-none" style={{ background: 'var(--gia-overlay)', border: '1px solid var(--gia-overlay-2)', color: 'var(--gia-text)' }} />
           <button onClick={doLookup} disabled={lookupLoading || !lookupTarget.trim()}
             className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
             style={{ background: lookupLoading ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.12)', color: '#f59e0b', opacity: lookupLoading ? 0.6 : 1 }}>
@@ -776,7 +776,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
         {lookupResult && (
           <div className="px-3 py-2 rounded-lg text-[11px] font-mono whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto"
-            style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--gia-text)' }}>
+            style={{ background: 'var(--gia-overlay)', color: 'var(--gia-text)' }}>
             {lookupResult}
           </div>
         )}
@@ -790,7 +790,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       <div className="gia-card p-4">
         <div className="flex gap-2 mb-2">
           <input value={traceTarget} onChange={e => setTraceTarget(e.target.value)} placeholder="IP or domain..." onKeyDown={e => e.key === 'Enter' && doTrace()}
-            className="flex-1 px-3 py-2 rounded-lg text-xs font-mono outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--gia-text)' }} />
+            className="flex-1 px-3 py-2 rounded-lg text-xs font-mono outline-none" style={{ background: 'var(--gia-overlay)', border: '1px solid var(--gia-overlay-2)', color: 'var(--gia-text)' }} />
           <button onClick={doTrace} disabled={traceLoading || !traceTarget.trim()}
             className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
             style={{ background: traceLoading ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.12)', color: '#3b82f6', opacity: traceLoading ? 0.6 : 1 }}>
@@ -799,7 +799,7 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
         {traceResult && (
           <div className="px-3 py-2 rounded-lg text-[11px] font-mono whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto"
-            style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--gia-text)' }}>
+            style={{ background: 'var(--gia-overlay)', color: 'var(--gia-text)' }}>
             {traceResult}
           </div>
         )}
@@ -808,5 +808,5 @@ const MicalPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   );
 };
 
-export { MicalPage };
-export default MicalPage;
+export { SecuritySandboxPage };
+export default SecuritySandboxPage;

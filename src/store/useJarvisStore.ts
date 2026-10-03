@@ -19,6 +19,8 @@ import { create } from 'zustand';
 
 export type JarvisState =
   | 'off'      // flag disabled — orb shows dim, everything paused
+  | 'paused'   // enabled but deliberately not looking (screen locked) — must
+               // be visually distinct from 'idle', which means actively watching
   | 'idle'     // enabled, breathing slowly, nothing happening
   | 'listening' // the user called GIA by voice / a wake word was heard
   | 'seeing'   // capturing + running vision models on a screen

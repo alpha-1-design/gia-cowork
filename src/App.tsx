@@ -17,6 +17,7 @@ import JarvisOrb from './components/JarvisOrb';
 import { SourcesPanel } from './components/SourcesPanel';
 import AppNavigation from './components/AppNavigation';
 import AppSidebar from './components/AppSidebar';
+import TransferIndicator from './components/TransferIndicator';
 import MenuBar from './components/MenuBar';
 import TerminalPanel from './components/TerminalPanel';
 import CommandPalette from './components/CommandPalette';
@@ -27,6 +28,9 @@ import type { WhatsAppIncomingMessage } from './services/WhatsAppBridgeService';
 import messagingBridge from './services/MessagingBridge';
 import { giaCoreServices, featureFlags } from './services/GIACoreServices';
 import { jarvisOrbService } from './services/JarvisOrbService';
+import { JarvisPanel } from './components/JarvisPanel';
+import { TrustGate } from './components/TrustGate';
+import { useTrustStore } from './store/useTrustStore';
 import smartNotificationEngine from './services/SmartNotificationEngine';
 import { whatsAppBridgeService } from './services/WhatsAppBridgeService';
 import { whatsAppSession } from './services/whatsappSession';
@@ -40,6 +44,8 @@ import whisperService from './services/WhisperService';
 import CapabilityService from './services/CapabilityService';
 import { useProviderStore } from './store/useProviderStore';
 import { logger } from './utils/logger';
+import { togglePresenterMode, attachTrayBridge } from './services/PresenterMode';
+import TTSService from './services/TTSService';
 import { useClipboardMonitor } from './hooks/useClipboardMonitor';
 import { useAutomationBridge } from './hooks/useAutomationBridge';
 import type { UpdateInfo } from './services/UpdateService';
@@ -160,11 +166,71 @@ const App: React.FC = () => {
   const [showTaskBoard, setShowTaskBoard] = useState(false);
   const [showNotesPanel, setShowNotesPanel] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Transparency surface for the orb — without it the eyes have a toggle and
+  // no way to see what they observed.
+  const [jarvisPanelOpen, setJarvisPanelOpen] = useState(false);
 
   // Desktop command palette — Ctrl/Cmd+K opens it anywhere in the app.
+  // Ctrl/Cmd+Shift+P toggles presenter mode (GIA hides for a screen share).
   useKeyboardShortcuts([
     { key: 'k', ctrl: true, handler: () => setPaletteOpen(o => !o), preventDefault: true },
+    { key: 'p', ctrl: true, shift: true, handler: () => { void togglePresenterMode(); }, preventDefault: true },
+    // The kill switch. One chord, no dialog, no reading required — which is
+    // the entire point. Every other control in this app makes you read before
+    // you click; this one is for the moment when you cannot afford to read.
+    // It outranks Full Autonomy, standing grants, and the prompt queue.
+    { key: 'x', ctrl: true, shift: true, handler: () => {
+      const armed = useTrustStore.getState().toggleArmed();
+      useGiaStore.getState().addNotification(
+        armed
+          ? '🔓 GIA armed — she can run tools again.'
+          : '🛑 GIA stopped — every tool call is blocked until you re-arm. Shortcut to undo: Ctrl/Cmd+Shift+X',
+      );
+    }, preventDefault: true },
+    // Fast kill switch for the eyes. Every always-on assistant ships one —
+    // Limitless does it with a physical gesture, Humane with a hardware
+    // light. A desktop agent has no hardware to borrow, so the keyboard is
+    // the honest equivalent: one chord, reachable without finding a menu.
+    { key: 'j', ctrl: true, shift: true, handler: () => {
+      // setEnabled dispatches gia:feature-flags:changed, and the effect above
+      // already starts/stops the orb from it — calling both would double-start.
+      const nowOn = featureFlags.toggle('jarvisEyes');
+      useGiaStore.getState().addNotification(
+        nowOn
+          ? '👁️ Jarvis eyes on — watching the screen on-device.'
+          : '🛑 Jarvis eyes off — she stopped watching the screen.',
+      );
+    }, preventDefault: true },
   ]);
+
+  // Right-clicking the orb opens the transparency panel.
+  useEffect(() => {
+    const open = () => setJarvisPanelOpen(true);
+    window.addEventListener('gia:jarvis-panel', open);
+    return () => window.removeEventListener('gia:jarvis-panel', open);
+  }, []);
+
+  // Orb follows TTS. VoiceMode feeds its own phase machine into the orb, but
+  // the main chat path speaks through TTSService directly — without this the
+  // orb sat at "idle" through every spoken answer.
+  useEffect(() => {
+    const detach = TTSService.onSpeakingChange(speaking => {
+      jarvisOrbService.setSpeaking(speaking);
+    });
+    return detach;
+  }, []);
+
+  // Presenter mode — attach the tray escape hatch. Once the window is hidden
+  // the tray is the only way back, so the webview has to hear about it.
+  useEffect(() => {
+    let detach: (() => void) | undefined;
+    let cancelled = false;
+    void attachTrayBridge().then(d => {
+      if (cancelled) d();
+      else detach = d;
+    });
+    return () => { cancelled = true; detach?.(); };
+  }, []);
   // First run: show the SetupWizard until the user completes or skips it
   // (SetupWizard writes 'gia-wizard-completed' to localStorage on close).
   const [showSetup, setShowSetup] = useState(() => {
@@ -278,8 +344,9 @@ const App: React.FC = () => {
       import('./services/KeepaliveService').then(m => m.default),
       Promise.resolve(messagingBridge),
       import('./services/BackgroundRecovery').then(m => m.backgroundRecovery),
-    ]).then(([, MCPManager, proactiveEngine, idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, messagingBridge, backgroundRecovery]) => {
-      svc = { idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, messagingBridge, backgroundRecovery, proactiveEngine, MCPManager };
+      import('./services/SelfImprovement').then(m => { m.default.start(); return m.default; }),
+    ]).then(([, MCPManager, proactiveEngine, idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, messagingBridge, backgroundRecovery, selfImprovement]) => {
+      svc = { idleManager, SystemService, setSystemContext, wakeLockService, keepaliveService, messagingBridge, backgroundRecovery, proactiveEngine, MCPManager, selfImprovement };
       return svc;
     });
 
@@ -289,6 +356,9 @@ const App: React.FC = () => {
     const trackActivity = () => {
       useAutonomyStore.getState().setLastUserActivity();
       if (svc) svc.idleManager.ping();
+      // Reset the self-improvement idle timer so the night-shift loop only
+      // starts once the user has genuinely gone away.
+      import('./services/SelfImprovement').then(m => m.default.noteActivity()).catch(() => {});
       // Feed the activity-learning engines (adaptive scheduler + fusion engine)
       import('./services/AdaptiveScheduler').then(a => a.default.recordActivity('interaction')).catch(() => {});
       import('./services/ContextFusionEngine').then(c => c.contextFusionEngine.recordActivity('interaction')).catch(() => {});
@@ -664,8 +734,10 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
         <ProfileDrawer />
       </Suspense>
       <JarvisOrb />
+      <JarvisPanel open={jarvisPanelOpen} onClose={() => setJarvisPanelOpen(false)} />
+      <TrustGate />
       {/* Global Notifications */}
-      <div className="fixed top-16 left-0 right-0 z-[60] px-4 pointer-events-none space-y-2">
+      <div data-presenter-hide="" className="fixed top-16 left-0 right-0 z-[60] px-4 pointer-events-none space-y-2">
         <AnimatePresence>
           {notifications.map((n) => {
             const msg = n.message;
@@ -729,6 +801,10 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
         </div>
       </div>
 
+      {/* Global download / install progress — long transfers used to look
+          frozen because nothing surfaced their progress app-wide. */}
+      <TransferIndicator />
+
       {/* Clipboard toast */}
       <AnimatePresence>
         {copiedText && (
@@ -736,6 +812,7 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
             initial={{ opacity: 0, y: 40, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            data-presenter-hide=""
             className="fixed bottom-24 left-4 right-4 z-50 max-w-md mx-auto"
           >
             <div
@@ -814,7 +891,7 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
                 <button
                   onClick={() => { setUpdateNotification(null); setUpdateDismissed(true); }}
                   className="w-8 h-8 rounded-xl flex items-center justify-center text-zinc-600 hover:text-zinc-400 transition-all"
-                  style={{ background: 'rgba(255,255,255,0.03)' }}
+                  style={{ background: 'var(--gia-overlay)' }}
                 >
                   <X size={14} />
                 </button>

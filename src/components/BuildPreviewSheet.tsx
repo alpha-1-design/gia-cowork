@@ -64,6 +64,15 @@ const BuildPreviewSheet: React.FC<BuildPreviewSheetProps> = ({ url, open, onClos
               key={refreshKey}
               src={url}
               title="App preview"
+              // This preview runs whatever the agent just built, and it had no
+              // sandbox at all — a built page could navigate the top frame, open
+              // popups, and submit forms as the user. `allow-scripts` keeps the
+              // app actually running; omitting `allow-same-origin` denies it the
+              // GIA origin, its storage and its cookies. Same trade as
+              // ArtifactRenderer, for the same reason: generated output is
+              // untrusted input.
+              sandbox="allow-scripts allow-forms allow-modals allow-popups"
+              referrerPolicy="no-referrer"
               className="flex-1 w-full border-0 block"
               style={{ background: '#fff' }}
             />

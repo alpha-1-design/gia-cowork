@@ -136,7 +136,7 @@ export const CodeExecutionSection: React.FC<{ codeEndpoint: string; setCodeEndpo
         </summary>
         <div className="mt-2 text-[10px] space-y-1.5" style={{ color: 'var(--gia-muted-2)' }}>
           <p><strong>Quick start (Docker):</strong></p>
-          <pre className="p-2 rounded-lg text-[9px] overflow-x-auto" style={{ background: '#0d0d14', border: '1px solid var(--gia-border)' }}>
+          <pre className="p-2 rounded-lg text-[9px] overflow-x-auto" style={{ background: 'var(--gia-code-bg)', border: '1px solid var(--gia-border)' }}>
 {`docker run -d \\
   --name piston \\
   -p 2000:2000 \\
@@ -145,7 +145,7 @@ export const CodeExecutionSection: React.FC<{ codeEndpoint: string; setCodeEndpo
           </pre>
           <p>Then set endpoint to <code>http://localhost:2000</code>. No API key needed for local instances.</p>
           <p><strong>Or run without Docker (requires Node.js):</strong></p>
-          <pre className="p-2 rounded-lg text-[9px] overflow-x-auto" style={{ background: '#0d0d14', border: '1px solid var(--gia-border)' }}>
+          <pre className="p-2 rounded-lg text-[9px] overflow-x-auto" style={{ background: 'var(--gia-code-bg)', border: '1px solid var(--gia-border)' }}>
 {`git clone https://github.com/engineerman/piston
 cd piston
 npm install

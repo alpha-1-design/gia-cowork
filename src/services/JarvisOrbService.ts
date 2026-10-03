@@ -92,7 +92,9 @@ class JarvisOrbService {
   private refreshState(): JarvisState {
     const { setState, enabled, paused } = useJarvisStore.getState();
     if (!enabled) return 'off';
-    if (paused) return 'idle';
+    // 'paused', not 'idle' — the user must be able to tell at a glance that
+    // she is NOT looking right now.
+    if (paused) return 'paused';
     if (this._speaking) return 'speaking';
     if (this._listening) return 'listening';
     if (this._acting) return 'acting';

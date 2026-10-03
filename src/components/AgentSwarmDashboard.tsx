@@ -253,7 +253,7 @@ const AgentSwarmDashboard: React.FC = () => {
 
         {/* Progress bar */}
         {isRunning && summary && summary.total > 0 && (
-          <div className="h-0.5 w-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <div className="h-0.5 w-full overflow-hidden" style={{ background: 'var(--gia-overlay-2)' }}>
             <motion.div
               className="h-full"
               style={{ background: activeRun.isGodMode ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' : 'linear-gradient(90deg, #a855f7, #6366f1)' }}

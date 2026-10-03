@@ -37,13 +37,13 @@ export const InstallSection: React.FC = () => {
 
       <div className="flex justify-center py-2">
         {qrError || !repo ? (
-          <div className="w-40 h-40 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)' }}>
+          <div className="w-40 h-40 rounded-xl flex items-center justify-center" style={{ background: 'var(--gia-overlay)', border: '1px dashed var(--gia-overlay-3)' }}>
             <p className="text-[10px] text-center px-4" style={{ color: 'var(--gia-muted-2)' }}>
               {!repo ? 'Set your GitHub repo below' : 'Could not generate QR'}
             </p>
           </div>
         ) : (
-          <canvas ref={canvasRef} className="rounded-xl" style={{ border: '2px solid rgba(255,255,255,0.08)' }} />
+          <canvas ref={canvasRef} className="rounded-xl" style={{ border: '2px solid var(--gia-overlay-2)' }} />
         )}
       </div>
 

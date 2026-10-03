@@ -27,6 +27,16 @@ class TTSService {
   private queue: string[] = [];
   private speaking = false;
   private onComplete: SpeakCallback | null = null;
+  /**
+   * Subscribers told whenever GIA starts or stops talking.
+   *
+   * The floating orb reflects her state, and "speaking" is the one a user
+   * notices most — but TTS runs on several paths (chunked streaming from chat,
+   * the dedicated model-voice path, and stop/cancel), and only the VoiceMode
+   * UI was reporting into the orb before. Everything else talked with the orb
+   * still showing "idle" while she was plainly mid-sentence.
+   */
+  private speakingListeners = new Set<(speaking: boolean) => void>();
   private streamBuffer = '';
   private streamTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -64,6 +74,24 @@ class TTSService {
     this.onComplete = cb;
   }
 
+  /** Subscribe to start/stop of speech. Returns an unsubscribe function. */
+  onSpeakingChange(fn: (speaking: boolean) => void): () => void {
+    this.speakingListeners.add(fn);
+    return () => { this.speakingListeners.delete(fn); };
+  }
+
+  /**
+   * The single place the speaking flag changes, so no path can flip it
+   * silently and leave a listener showing stale state.
+   */
+  private setSpeaking(v: boolean) {
+    if (this.speaking === v) return;
+    this.speaking = v;
+    for (const fn of [...this.speakingListeners]) {
+      try { fn(v); } catch (e) { logger.warn('[TTSService] speaking listener failed:', e); }
+    }
+  }
+
   async speak(text: string, isStreaming: boolean = false) {
     if (!this.enabled) return;
     const cleanText = cleanTTS(text);
@@ -96,12 +124,12 @@ class TTSService {
 
   private async processQueue() {
     if (this.queue.length === 0) {
-      this.speaking = false;
+      this.setSpeaking(false);
       this.onComplete?.();
       return;
     }
 
-    this.speaking = true;
+    this.setSpeaking(true);
     const text = this.queue.shift()!;
 
     try {
@@ -165,26 +193,29 @@ class TTSService {
     // Clear any device-TTS stream still speaking so native audio doesn't overlap.
     await this.stop();
 
-    if (this.modelVoiceEnabled) {
-      const spoken = await speakWithModelVoice(cleanText);
-      if (spoken) return;
+    // This is the main chat path, and it used to speak without ever touching
+    // the speaking flag — so the orb stayed "idle" for the whole answer while
+    // GIA was audibly talking.
+    this.setSpeaking(true);
+    let handedOffToQueue = false;
+    try {
+      if (this.modelVoiceEnabled && await speakWithModelVoice(cleanText)) return;
+      if (this.kokoroEnabled && kokoroTTS.isReady && await kokoroTTS.speak(cleanText)) return;
+      if (this.localTTSEnabled && localTTS.isReady && await localTTS.speak(cleanText)) return;
+      // Nothing handled it directly — the chunk queue takes over and owns the
+      // flag from here, so don't clear it out from under it.
+      handedOffToQueue = true;
+      this.enqueue(cleanText);
+    } finally {
+      if (!handedOffToQueue) this.setSpeaking(false);
     }
-    if (this.kokoroEnabled && kokoroTTS.isReady) {
-      const spoken = await kokoroTTS.speak(cleanText);
-      if (spoken) return;
-    }
-    if (this.localTTSEnabled && localTTS.isReady) {
-      const spoken = await localTTS.speak(cleanText);
-      if (spoken) return;
-    }
-    this.enqueue(cleanText);
   }
 
   async stop() {
     if (this.streamTimer) { clearTimeout(this.streamTimer); this.streamTimer = null; }
     this.streamBuffer = '';
     this.queue = [];
-    this.speaking = false;
+    this.setSpeaking(false);
     stopModelVoice();
     kokoroTTS.stop();
     if (isNative) {

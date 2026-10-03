@@ -97,7 +97,7 @@ export const ProfileIdentityPage: React.FC<{ onBack: () => void }> = ({ onBack }
       {/* Navigations */}
       <button onClick={() => setPage('identity')}
         className="gia-card p-4 flex items-center gap-4 w-full text-left tap-feedback">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#0d0d14', border: '1px solid rgba(168,85,247,0.2)' }}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--gia-code-bg)', border: '1px solid rgba(168,85,247,0.2)' }}>
           <Sparkles size={18} style={{ color: '#a855f7' }} />
         </div>
         <div className="flex-1">
@@ -111,7 +111,7 @@ export const ProfileIdentityPage: React.FC<{ onBack: () => void }> = ({ onBack }
 
       <button onClick={() => setPage('skills')}
         className="gia-card p-4 flex items-center gap-4 w-full text-left tap-feedback">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#0d0d14', border: '1px solid rgba(245,158,11,0.2)' }}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--gia-code-bg)', border: '1px solid rgba(245,158,11,0.2)' }}>
           <Zap size={18} style={{ color: '#f59e0b' }} />
         </div>
         <div className="flex-1">
@@ -125,7 +125,7 @@ export const ProfileIdentityPage: React.FC<{ onBack: () => void }> = ({ onBack }
 
       <button onClick={() => setPage('brain-export')}
         className="gia-card p-4 flex items-center gap-4 w-full text-left tap-feedback">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#0d0d14', border: '1px solid rgba(16,185,129,0.2)' }}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--gia-code-bg)', border: '1px solid rgba(16,185,129,0.2)' }}>
           <Download size={18} style={{ color: '#34d399' }} />
         </div>
         <div className="flex-1">

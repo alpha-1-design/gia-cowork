@@ -226,7 +226,7 @@ export const DeveloperSettings: React.FC = () => {
               onClick={() => setLogLevel(l.value)}
               className="flex-1 py-1.5 rounded-lg text-[10px] font-medium transition-all"
               style={{
-                background: logLevel === l.value ? `${l.color}20` : 'rgba(255,255,255,0.04)',
+                background: logLevel === l.value ? `${l.color}20` : 'var(--gia-overlay)',
                 color: logLevel === l.value ? l.color : 'var(--gia-muted)',
                 border: `1px solid ${logLevel === l.value ? `${l.color}30` : 'transparent'}`,
               }}
@@ -342,7 +342,7 @@ export const DeveloperSettings: React.FC = () => {
           <button
             onClick={refreshCacheInfo}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[10px] font-medium transition-colors"
-            style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--gia-muted)', border: '1px solid var(--gia-border)' }}
+            style={{ background: 'var(--gia-overlay)', color: 'var(--gia-muted)', border: '1px solid var(--gia-border)' }}
           >
             <RefreshCw size={10} /> Refresh
           </button>

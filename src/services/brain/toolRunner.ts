@@ -5,6 +5,8 @@ import { useGiaStore } from '../../store/useGiaStore';
 import { useSearchActivity } from '../../store/useSearchActivity';
 import { ProtocolProposal } from '../../types/protocol';
 import { validateToolArgs, toolToProtocolType, toolToImpact } from './toolSchemas';
+import { checkAction } from '../system/compliance';
+import { isComplianceEnabled, currentMode } from '../system/complianceRuntime';
 import { delegateTask } from './subAgent';
 import { SubAgentManager } from './SubAgentManager';
 import { extractToolCalls, hasTruncatedToolCall, ToolCall } from '../../utils/jsonRepair';
@@ -12,6 +14,9 @@ import AnalyticsService from '../AnalyticsService';
 import AnalyticsTracker from '../AnalyticsTracker';
 import { toolRateLimiter, globalToolLimiter } from '../ToolRateLimiter';
 import { jarvisOrbService } from '../JarvisOrbService';
+import { analyzeShellCommand } from './shellConcurrency';
+import { gateToolCall } from './permissionGate';
+import { useTrustStore } from '../../store/useTrustStore';
 
 import type { BrainRequest } from '../providers/types';
 
@@ -34,6 +39,9 @@ const FALLBACK_HINTS: Record<string, string> = {
   github: 'web_search or read_url',
   search_places: 'web_search',
   browser_navigate: 'read_url',
+  browser_snapshot: 'browser_open the URL first — a snapshot needs a tab',
+  browser_click: 'browser_open the URL and browser_snapshot to get a valid ref first',
+  browser_type: 'browser_open the URL and browser_snapshot to get a valid ref first',
   zip_project: 'Try filesystem_write as individual files',
   set_alarm: 'Ask the user to set the alarm manually, or set a reminder via send_email',
   send_whatsapp: 'Try messaging_send with channel telegram, or send_email instead',
@@ -61,7 +69,27 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'calendar_list_events', 'calendar_status',
   'messaging_status',
   'bible_verse', 'daily_devotion',
+  // Read-only MCP tools — the server is already remote and concurrent-safe,
+  // and these were needlessly serialising behind each other.
+  'mcp_list_servers', 'mcp_list_tools', 'mcp_server_status', 'mcp_stats',
 ]);
+
+/**
+ * Whether a call can join the current parallel group.
+ *
+ * `terminal_run` gets special treatment: a shell command that only reads can
+ * run alongside other work instead of blocking it. Writes stay strictly
+ * sequential, because two mutating commands racing can destroy work — see
+ * shellConcurrency for why the classifier is conservative.
+ */
+function canRunInParallel(call: ToolCall): boolean {
+  if (PARALLEL_SAFE_TOOLS.has(call.id)) return true;
+  if (call.id === 'terminal_run') {
+    const command = typeof call.args.command === 'string' ? call.args.command : '';
+    return analyzeShellCommand(command).safe;
+  }
+  return false;
+}
 
 // Tools that visibly change the desktop — while these run, the Jarvis orb flips
 // to "acting" and takes a fresh look afterwards to verify the result landed.
@@ -87,7 +115,7 @@ function getIndependentGroups(toolCalls: ToolCall[]): ToolCall[][] {
         currentGroup = [];
       }
       groups.push([call]);
-    } else if (PARALLEL_SAFE_TOOLS.has(call.id)) {
+    } else if (canRunInParallel(call)) {
       if (subAgentGroup.length > 0) {
         groups.push(subAgentGroup);
         subAgentGroup = [];
@@ -120,6 +148,22 @@ async function executeSingleTool(
   messageId?: string,
 ): Promise<{ result?: string; observations: string[] }> {
   const observations: string[] = [];
+
+  // System-prompt compliance — checked BEFORE the tool runs.
+  //
+  // Placement is the whole point. Checking after would mean telling GIA she
+  // broke a rule once the file was already written or the command already ran,
+  // which is a notification, not a control. Checking here means the action is
+  // actually stopped and GIA is handed the correction while it still matters.
+  if (isComplianceEnabled()) {
+    const mode = currentMode();
+    const check = checkAction(mode, toolCall.id, toolCall.args as Record<string, unknown>);
+    if (check.verdict === 'fail') {
+      onThought?.(`🛑 Blocked: ${toolCall.id} breaks ${mode} mode rules`);
+      observations.push(`COMPLIANCE BLOCK: ${check.corrections.join(' ')}`);
+      return { result: 'compliance_blocked', observations };
+    }
+  }
 
   // Rate limiting: check per-tool and global limits
   if (!toolRateLimiter.consume(toolCall.id)) {
@@ -187,16 +231,37 @@ async function executeSingleTool(
   }).join(', ');
   onThought?.(`🧠 ${tool.name} → ${argsStr}`);
 
-  const needsConfirm = !useProtocolStore.getState().isAutoConfirmed(protocol.type);
-  if (needsConfirm) {
-    const action = await useProtocolStore.getState().waitForConfirmation(protocolId, 120_000);
-    if (action.type === 'reject') {
-      observations.push(`User rejected tool execution: ${toolCall.id}`);
-      useProtocolStore.getState().setFailed(protocolId, 'Rejected by user');
+  // Permission gate. This replaces the old per-category confirmation card: that
+  // card asked "run this tool?" on a blob of truncated args, and the only
+  // answer was yes or no. This asks "run THIS thing?", shows the actual diff
+  // or command, and lets consent be scoped to a path or a command prefix
+  // instead of to a whole category for the rest of time.
+  //
+  // Full Autonomy is an explicit, visible delegation, so it skips the prompt —
+  // but never the kill switch. If something is running away, the one thing
+  // that must work is the key that stops it, and that cannot be conditional on
+  // a settings toggle someone flipped an hour ago.
+  if (!useTrustStore.getState().armed) {
+    observations.push('PERMISSION DENIED: the kill switch is engaged, so GIA is not allowed to run tools. Tell the user to re-arm with the kill switch shortcut before continuing.');
+    useProtocolStore.getState().setFailed(protocolId, 'Blocked by kill switch');
+    useGiaStore.getState().setCurrentTool(null);
+    return { result: 'rejected', observations };
+  }
+
+  if (useProtocolStore.getState().fullAutonomy) {
+    onThought?.('⏩ Full Autonomy — running without a permission prompt');
+  } else {
+    const gate = await gateToolCall(toolCall.id, tool.name, toolCall.args);
+    if (!gate.allowed) {
+      const reason = gate.refusalReason ?? 'Permission denied';
+      observations.push(`PERMISSION DENIED: ${toolCall.id} — ${reason} Do not retry this action; ask the user what they want instead.`);
+      useProtocolStore.getState().setFailed(protocolId, reason);
+      useGiaStore.getState().setCurrentTool(null);
+      onThought?.(`🚫 Blocked: ${tool.name} — ${reason}`);
       return { result: 'rejected', observations };
     }
-    if (action.type === 'modify' && action.modifiedArgs) {
-      toolCall.args = action.modifiedArgs;
+    if (gate.request.risk !== 'none') {
+      onThought?.(`🔓 ${gate.request.risk} risk cleared (${gate.choice})`);
     }
   }
 
@@ -362,6 +427,21 @@ export async function executeToolBlocks(
 
   for (const group of groups) {
     if (signal?.aborted) break;
+
+    // Steering — corrections the user sent while THIS turn was running.
+    //
+    // Drained at the top of each group so a note lands before the next step
+    // rather than after the whole task. `takeSteering` is destructive, so a
+    // note is delivered exactly once no matter how many groups follow.
+    const steering = useGiaStore.getState().takeSteering(useGiaStore.getState().activeSessionId || '');
+    if (steering.length > 0) {
+      const text_ = steering.map(n => n.text).join('\n');
+      onThought?.(`🧭 Steering applied: ${text_.slice(0, 60)}`);
+      state.history.push({
+        role: 'user',
+        content: `STEERING FROM USER (correct this now, mid-task): ${text_}\nTreat this as a correction to the approach above. Re-plan if it invalidates a step you were about to take.`,
+      });
+    }
 
     // Sub-agent batch — run all in parallel via SubAgentManager
     if (group.length > 0 && group[0].id === 'sub_agent_call') {

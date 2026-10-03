@@ -121,7 +121,7 @@ const MenuBar: React.FC<MenuBarProps> = ({ onOpenPalette, onOpenTerminal, onOpen
             className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
             style={{
               color: openMenu === menu.id ? 'var(--gia-text)' : 'var(--gia-muted)',
-              background: openMenu === menu.id ? 'rgba(255,255,255,0.06)' : 'transparent',
+              background: openMenu === menu.id ? 'var(--gia-overlay-2)' : 'transparent',
             }}
           >
             {menu.label}
@@ -140,7 +140,7 @@ const MenuBar: React.FC<MenuBarProps> = ({ onOpenPalette, onOpenTerminal, onOpen
                 >
                   <span>{item.label}</span>
                   {item.shortcut && (
-                    <kbd className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--gia-muted-2)' }}>
+                    <kbd className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'var(--gia-overlay-2)', color: 'var(--gia-muted-2)' }}>
                       {item.shortcut}
                     </kbd>
                   )}

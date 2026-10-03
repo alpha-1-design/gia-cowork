@@ -53,7 +53,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const TOOL_CATEGORY: Record<string, string> = {
   web_search: 'research', read_url: 'research', browser_navigate: 'research',
-  browser_click: 'research', browser_fill: 'research', browser_scroll: 'research',
+  browser_click: 'research', browser_type: 'research', browser_scroll: 'research',
+  browser_open: 'research', browser_snapshot: 'research', browser_tabs: 'research',
   page_info: 'research', wikipedia: 'research', weather: 'research',
   get_directions: 'research',
   terminal_run: 'code', sandbox_exec: 'code', build_project: 'code',

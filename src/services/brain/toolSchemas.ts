@@ -661,6 +661,7 @@ export function toolToProtocolType(id: string): ProtocolType {
 
 export function toolToImpact(id: string): ProtocolImpact {
   const readTools = ['web_search', 'read_url', 'filesystem_read', 'list_files', 'get_environment_info',
+    'browser_snapshot', 'browser_tabs',
     'get_user_location', 'search_places', 'device_info', 'device_health',
     'email_list', 'email_read', 'email_search', 'email_status',
     'calendar_list_events', 'calendar_status',
@@ -674,7 +675,8 @@ export function toolToImpact(id: string): ProtocolImpact {
     'messaging_setup_telegram', 'messaging_setup_whatsapp', 'messaging_send', 'messaging_disconnect',
     'setup_morning_briefing', 'set_reminder', 'play_music'];
   const destructiveTools = ['forget_memory'];
-  const networkTools = ['web_search', 'read_url', 'terminal_run', 'image_generation', 'search_places', 'show_map', 'get_directions'];
+  const networkTools = ['web_search', 'read_url', 'terminal_run', 'image_generation', 'search_places', 'show_map', 'get_directions',
+    'browser_navigate', 'browser_open', 'browser_click', 'browser_type', 'browser_scroll'];
   const locationTools = ['get_user_location', 'search_places', 'show_map', 'get_directions'];
   if (destructiveTools.includes(id)) return 'destructive';
   if (locationTools.includes(id)) return 'location';

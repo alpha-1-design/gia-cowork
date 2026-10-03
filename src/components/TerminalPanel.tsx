@@ -46,9 +46,16 @@ const UNAVAILABLE_LINES: Line[] = [
 
 interface TerminalPanelProps {
   onClose: () => void;
+  /**
+   * Dock inside the chat column instead of covering the screen. The docked
+   * shell is the primary desktop workflow — terminal next to the conversation
+   * it is driving — while the fullscreen overlay stays useful for a focused
+   * long-running session.
+   */
+  embedded?: boolean;
 }
 
-const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
+const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose, embedded = false }) => {
   const available = isTauri() && terminalService.isAvailable();
   const [lines, setLines] = useState<Line[]>(available ? WELCOME : UNAVAILABLE_LINES);
   const [input, setInput] = useState('');
@@ -87,6 +94,17 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
     }
   }, [busy, push]);
 
+  // Commands handed over from elsewhere in the app (e.g. the Files tab's
+  // quick actions) run here so their output stays visible.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const cmd = (e as CustomEvent<string>).detail;
+      if (typeof cmd === 'string' && cmd.trim()) void run(cmd);
+    };
+    window.addEventListener('gia:run-terminal-command', handler);
+    return () => window.removeEventListener('gia:run-terminal-command', handler);
+  }, [run]);
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') { e.preventDefault(); void run(input); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); const i = Math.min(histIdx + 1, history.length - 1); setHistIdx(i); setInput(history[i] ?? ''); }
@@ -102,10 +120,10 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
       : 'text-zinc-300';
 
   return (
-    <div className="fixed inset-0 z-[160] bg-zinc-950 flex flex-col font-mono text-sm">
+    <div className={embedded ? 'h-full bg-zinc-950 flex flex-col font-mono text-sm' : 'fixed inset-0 z-[160] bg-zinc-950 flex flex-col font-mono text-sm'}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-zinc-900 border-b border-zinc-800 shrink-0">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <TerminalIcon size={14} className="text-emerald-400" />
           <span className="text-xs font-medium text-zinc-300 tracking-widest uppercase">Terminal — Host Shell</span>
           <span
@@ -145,7 +163,7 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({ onClose }) => {
               key={q.label}
               onClick={() => { setInput(q.cmd); inputRef.current?.focus(); }}
               className="text-[10px] px-2 py-1 rounded-lg transition-colors"
-              style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--gia-muted)', border: '1px solid rgba(255,255,255,0.08)' }}
+              style={{ background: 'var(--gia-overlay)', color: 'var(--gia-muted)', border: '1px solid var(--gia-overlay-2)' }}
             >
               {q.label}
             </button>

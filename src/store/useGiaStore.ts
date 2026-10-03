@@ -4,6 +4,7 @@ import { idbStorage } from './idb-storage';
 import { genId } from '../utils/id';
 import { useMemoryStore } from './useMemoryStore';
 import type { MessageSegment } from '../utils/streamParser';
+import { createWorktree, removeWorktree } from '../services/git/worktree';
 
 export type { MessageSegment };
 
@@ -12,6 +13,38 @@ const FEEDBACK_KEYS = { up: 'feedback:liked', down: 'feedback:disliked' } as con
 export type Module = 'chat' | 'writer' | 'analyst' | 'planner' | 'settings' | 'exam' | 'autonomy' | 'agents' | 'build';
 export type IntentState = 'idle' | 'typing' | 'analyst' | 'writer' | 'planner' | 'thinking' | 'responding';
 export type ThinkingPhase = 'gathering' | 'analyzing' | 'coding' | 'writing' | 'searching' | 'planning' | 'reasoning' | 'processing' | 'idle';
+
+/**
+ * A message typed while GIA was busy.
+ *
+ * Deliberately shape-agnostic about attachments — the composer owns that type
+ * and duplicating it here would be a second thing to keep in sync. Anything
+ * non-serialisable is flattened by the caller before enqueueing.
+ */
+export interface QueuedMessage {
+  id: string;
+  sessionId: string;
+  text: string;
+  attachments: { name: string; type: string; content: string; preview?: string }[];
+  queuedAt: number;
+}
+
+/**
+ * A correction the user sent INTO a turn that is already running.
+ *
+ * The queue answers "what do I say next"; this answers "wait, not like that" —
+ * AgentGUI's manual steering, and the thing that makes an orchestrator seat
+ * real rather than decorative. Queued text cannot help until the turn ends,
+ * which is precisely when the answer is least useful: by then the agent has
+ * already taken the wrong action. Drained by the tool runner between tool
+ * groups, so it lands before the next step rather than after the whole task.
+ */
+export interface SteeringNote {
+  id: string;
+  sessionId: string;
+  text: string;
+  createdAt: number;
+}
 
 export interface LiveFileEdit {
   path: string;
@@ -84,6 +117,27 @@ export interface ChatSession {
   updatedAt: number;
   currentBranchId: string; // Active branch
   branches?: Record<string, { id: string; name: string; createdAt: number }>; // Named branches
+  /**
+   * This conversation's isolated git checkout, when worktree isolation is on.
+   *
+   * Optional because it is only ever set by an explicit action — a session must
+   * not spawn a branch just because it exists, and must not hold one after the
+   * worktree is removed. `undefined` and `null` both read as "not isolated";
+   * `path` is present only once git has actually created the checkout.
+   */
+  worktree?: SessionWorktree | null;
+}
+
+/** Per-session git isolation state, kept on the session itself. */
+export interface SessionWorktree {
+  /** Absolute path of the worktree checkout. */
+  path: string;
+  /** Branch checked out there. */
+  branch: string;
+  /** Repository the worktree belongs to. */
+  repoRoot: string;
+  /** Last failure, so the UI can explain itself instead of silently doing nothing. */
+  error?: string;
 }
 
 // Tree helper functions
@@ -262,6 +316,12 @@ export interface Skill {
   systemPrompt: string;
   tools: string[]; 
   category: 'core' | 'user' | 'dev' | 'creative';
+  /**
+   * Emoji shown on the skill chip/tile. Optional so existing persisted
+   * skills keep working — resolveSkillIcon() derives a stable fallback when
+   * it's absent, rather than every skill rendering with the same glyph.
+   */
+  icon?: string;
 }
 
 export interface UserProfile {
@@ -322,6 +382,12 @@ interface GiaState {
   deepSearch: boolean;
   reactions: Record<string, { value: 'up' | 'down'; snippet: string }>;
   extThinking: boolean;
+  /** Reasoning depth: off | low | medium | high | max. `extThinking` is the legacy boolean. */
+  thinkingLevel: string;
+  /** Whether the system-prompt compliance auditor runs. */
+  systemCompliance: boolean;
+  /** Whether the side panel is docked open. */
+  sidePanelOpen: boolean;
   handsOff: boolean;
   localVision: boolean;
   localSummarize: boolean;
@@ -378,6 +444,28 @@ interface GiaState {
   setPendingApiKeyRequest: (v: { providerId: string; description: string } | null) => void;
   deepLinkQueue: string[];
   setDeepLinkQueue: (v: string[]) => void;
+  /**
+   * Messages sent while GIA is still working on the previous one.
+   *
+   * Without this, a follow-up typed mid-task either gets dropped or starts a
+   * second generation that races the first. Both are worse than waiting: the
+   * user cannot think out loud, which is how people actually work with an
+   * agent. Queued items are session-scoped and drained in order.
+   */
+  queuedMessages: QueuedMessage[];
+  enqueueMessage: (m: QueuedMessage) => void;
+  dequeueMessage: (id: string) => QueuedMessage | null;
+  clearQueue: (sessionId?: string) => void;
+  /** Notes waiting to be handed to the running turn. */
+  steeringNotes: SteeringNote[];
+  /** Push a correction into the turn that is currently running. */
+  addSteering: (sessionId: string, text: string) => void;
+  /**
+   * Drain this session's steering notes. Destructive by design: the runner
+   * calls it once per group and must not re-deliver the same note on the next
+   * group, or the agent would act on one correction repeatedly.
+   */
+  takeSteering: (sessionId: string) => SteeringNote[];
   liveFileEdit: LiveFileEdit | null;
   setLiveFileEdit: (edit: LiveFileEdit | null) => void;
 
@@ -398,6 +486,9 @@ interface GiaState {
   setDeepSearch: (enabled: boolean) => void;
   setReaction: (msgId: string, value: 'up' | 'down', snippet: string) => void;
   setExtThinking: (enabled: boolean) => void;
+  setThinkingLevel: (level: string) => void;
+  setSystemCompliance: (v: boolean) => void;
+  setSidePanelOpen: (v: boolean) => void;
   setHandsOff: (enabled: boolean) => void;
   setLocalVision: (enabled: boolean) => void;
   setLocalSummarize: (enabled: boolean) => void;
@@ -423,6 +514,14 @@ interface GiaState {
   setSharedData: (data: Record<string, unknown>) => void;
   updateSharedData: (data: Record<string, unknown>) => void;
   createSession: () => string;
+  /**
+   * Give a session its own git worktree, so parallel tasks stop sharing one
+   * working tree. Returns false when the folder is not a repository, which is
+   * an ordinary state rather than an error.
+   */
+  enableWorktree: (sessionId: string, repoRoot: string) => Promise<boolean>;
+  /** Tear down a session's worktree. Refuses to force; see `removeWorktree`. */
+  disableWorktree: (sessionId: string, opts?: { force?: boolean }) => Promise<boolean>;
   setActiveSession: (id: string) => void;
   addMessage: (sessionId: string, msg: Message) => void;
   updateMessage: (sessionId: string, msgId: string, content: string, thoughts?: string) => void;
@@ -460,10 +559,13 @@ interface GiaState {
   clearConsole: () => void;
   setShowProtocols: (show: boolean) => void;
   buildMode: boolean;
+  /** Visual style for what GIA builds. Distinct from the desktop `theme`. */
+  buildStyleId: string;
   setBuildMode: (v: boolean) => void;
   buildSessionId: string | null;
   buildPreviewUrl: string | null;
   setBuildPreview: (url: string | null) => void;
+  setBuildStyle: (id: string) => void;
   sandboxEnvReady: boolean | null;
   setSandboxEnvReady: (v: boolean | null) => void;
   longRunningMode: boolean;
@@ -564,6 +666,9 @@ export const useGiaStore = create<GiaState>()(
       deepSearch: false,
       reactions: {},
       extThinking: false,
+      thinkingLevel: 'medium',
+      systemCompliance: true,
+      sidePanelOpen: true,
       handsOff: false,
       localVision: false,
       localSummarize: true,
@@ -606,8 +711,11 @@ export const useGiaStore = create<GiaState>()(
       pendingAction: null,
       pendingApiKeyRequest: null,
       deepLinkQueue: [],
+      queuedMessages: [],
+      steeringNotes: [],
       liveFileEdit: null,
       buildMode: false,
+      buildStyleId: 'obsidian',
       buildSessionId: null,
       buildPreviewUrl: null,
       sandboxEnvReady: null,
@@ -618,6 +726,7 @@ export const useGiaStore = create<GiaState>()(
 
       setShowVoiceMode: (v) => set({ showVoiceMode: v }),
 
+      setBuildStyle: (id: string) => set({ buildStyleId: id }),
       setBuildMode: (v) => set((s) => ({ buildMode: v, buildSessionId: v ? s.activeSessionId : s.buildSessionId })),
       setBuildPreview: (url) => set({ buildPreviewUrl: url }),
       setSandboxEnvReady: (v) => set({ sandboxEnvReady: v }),
@@ -710,6 +819,9 @@ export const useGiaStore = create<GiaState>()(
         return { reactions: next };
       }),
       setExtThinking: (enabled) => set({ extThinking: enabled }),
+      setThinkingLevel: (level: string) => set({ thinkingLevel: level, extThinking: level !== 'off' }),
+      setSystemCompliance: (v) => set({ systemCompliance: v }),
+      setSidePanelOpen: (v) => set({ sidePanelOpen: v }),
       setHandsOff: (enabled) => set({ handsOff: enabled }),
       setLocalVision: (enabled) => set({ localVision: enabled }),
       setLocalSummarize: (enabled) => set({ localSummarize: enabled }),
@@ -768,6 +880,35 @@ export const useGiaStore = create<GiaState>()(
       setPendingAction: (v) => set({ pendingAction: v }),
       setPendingApiKeyRequest: (v) => set({ pendingApiKeyRequest: v }),
       setDeepLinkQueue: (v) => set({ deepLinkQueue: v }),
+
+      enqueueMessage: (m) => set((s) => ({ queuedMessages: [...s.queuedMessages, m] })),
+
+      dequeueMessage: (id) => {
+        const item = get().queuedMessages.find(m => m.id === id);
+        if (item) set((s) => ({ queuedMessages: s.queuedMessages.filter(m => m.id !== id) }));
+        return item ?? null;
+      },
+
+      // Default to clearing everything; naming a session narrows it, which is
+      // what "switch chats" needs — the other chat's queue is still valid.
+      clearQueue: (sessionId) => set((s) => ({
+        queuedMessages: sessionId
+          ? s.queuedMessages.filter(m => m.sessionId !== sessionId)
+          : [],
+      })),
+      addSteering: (sessionId, text) => set((s) => ({
+        steeringNotes: [...s.steeringNotes, {
+          id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          sessionId, text, createdAt: Date.now(),
+        }],
+      })),
+      takeSteering: (sessionId) => {
+        const all = get().steeringNotes;
+        const mine = all.filter(n => n.sessionId === sessionId);
+        if (mine.length === 0) return [];
+        set((s) => ({ steeringNotes: s.steeringNotes.filter(n => n.sessionId !== sessionId) }));
+        return mine;
+      },
       setLiveFileEdit: (edit) => set({ liveFileEdit: edit }),
       setLongRunningMode: (v) => { localStorage.setItem('gia-long-running', String(v)); set({ longRunningMode: v }); },
       setAutoModelUnload: (v) => { localStorage.setItem('gia-auto-model-unload', String(v)); set({ autoModelUnload: v }); },
@@ -784,6 +925,47 @@ export const useGiaStore = create<GiaState>()(
       }),
       setSharedData: (data) => set({ sharedData: data }),
       updateSharedData: (data) => set((s) => ({ sharedData: { ...s.sharedData, ...data } })),
+
+      enableWorktree: async (sessionId, repoRoot) => {
+        const session = useGiaStore.getState().sessions.find(s => s.id === sessionId);
+        if (!session) return false;
+        const res = await createWorktree(repoRoot, sessionId, session.title);
+        if (!res.ok || !res.target) {
+          set(s => ({
+            sessions: s.sessions.map(sess =>
+              sess.id === sessionId
+                ? { ...sess, worktree: { path: '', branch: '', repoRoot, error: res.error || 'Could not create worktree' } }
+                : sess),
+          }));
+          return false;
+        }
+        set(s => ({
+          sessions: s.sessions.map(sess =>
+            sess.id === sessionId
+              ? { ...sess, worktree: { path: res.target!.path, branch: res.target!.branch, repoRoot } }
+              : sess),
+        }));
+        return true;
+      },
+      disableWorktree: async (sessionId, opts) => {
+        const session = useGiaStore.getState().sessions.find(s => s.id === sessionId);
+        const wt = session?.worktree;
+        if (!session || !wt || !wt.path) return false;
+        const res = await removeWorktree(wt.repoRoot, wt.path, opts);
+        if (!res.ok) {
+          set(s => ({
+            sessions: s.sessions.map(sess =>
+              sess.id === sessionId && sess.worktree
+                ? { ...sess, worktree: { ...sess.worktree, error: res.error } }
+                : sess),
+          }));
+          return false;
+        }
+        set(s => ({
+          sessions: s.sessions.map(sess => (sess.id === sessionId ? { ...sess, worktree: null } : sess)),
+        }));
+        return true;
+      },
 
       createSession: () => {
         const id = genId();
@@ -1095,9 +1277,25 @@ export const useGiaStore = create<GiaState>()(
     }),
     {
       name: 'gia-store-v3',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persistedState: unknown, version: number) => {
+        // v3 → v4: Obsidian Aurora becomes the desktop default.
+        //
+        // Only `'dark'` is rewritten, and that asymmetry is the whole design.
+        // Before this, `'dark'` WAS the default, so a stored `'dark'` cannot be
+        // distinguished from "never picked a theme" — leaving it alone would mean
+        // the new default only ever reaches new installs, and every existing
+        // user is quietly stuck on the old look forever. `'light'` and
+        // `'system'` were always deliberate departures from the default, so
+        // those are real choices and are left alone. Overriding them would be
+        // the app overruling someone who actually asked for something.
+        if (version < 4 && persistedState && typeof persistedState === 'object') {
+          const s4 = persistedState as Record<string, unknown>;
+          if (s4.theme === 'dark' || s4.theme === undefined) {
+            s4.theme = 'obsidian-aurora';
+          }
+        }
         if (version < 3 && persistedState && typeof persistedState === 'object') {
           const state = persistedState as Record<string, unknown>;
           if (Array.isArray(state.sessions)) {
@@ -1146,6 +1344,9 @@ export const useGiaStore = create<GiaState>()(
         deepSearch: s.deepSearch,
         reactions: s.reactions,
         extThinking: s.extThinking,
+        thinkingLevel: s.thinkingLevel,
+        systemCompliance: s.systemCompliance,
+        sidePanelOpen: s.sidePanelOpen,
         handsOff: s.handsOff,
         localVision: s.localVision,
         localSummarize: s.localSummarize,
@@ -1168,6 +1369,7 @@ export const useGiaStore = create<GiaState>()(
         wakeWordAccessKey: s.wakeWordAccessKey,
         useWhisper: s.useWhisper,
         buildMode: s.buildMode,
+        buildStyleId: s.buildStyleId,
         buildSessionId: s.buildSessionId,
         buildPreviewUrl: s.buildPreviewUrl,
       }),

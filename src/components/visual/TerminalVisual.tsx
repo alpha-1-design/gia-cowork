@@ -56,9 +56,9 @@ export const TerminalVisual: React.FC<{ data: Record<string, unknown> }> = ({ da
 
   return (
     <VisualCard title={title || 'Terminal Output'} onCopy={copyOutput} copied={copied} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
-      <div className="rounded-lg overflow-hidden" style={{ background: '#0d0d14', maxHeight: expanded ? '600px' : '200px', overflowY: 'auto' }}>
+      <div className="rounded-lg overflow-hidden" style={{ background: 'var(--gia-code-bg)', maxHeight: expanded ? '600px' : '200px', overflowY: 'auto' }}>
         {command && (
-          <div className="px-3 py-1.5 text-[9px] font-mono" style={{ background: 'rgba(255,255,255,0.03)', color: 'var(--gia-muted-2)' }}>
+          <div className="px-3 py-1.5 text-[9px] font-mono" style={{ background: 'var(--gia-overlay)', color: 'var(--gia-muted-2)' }}>
             $ {command}
           </div>
         )}

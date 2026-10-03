@@ -286,4 +286,55 @@ describe('useAutonomyStore', () => {
       expect(useAutonomyStore.getState().activeGoalId).toBe('goal-1');
     });
   });
+
+  describe('step startedAt timestamps', () => {
+    const seedPlan = () => {
+      const gid = useAutonomyStore.getState().addGoal('G1', '');
+      const pid = useAutonomyStore.getState().createPlan(gid, [
+        { description: 'S1', action: '', expectedOutcome: '', status: 'pending' },
+        { description: 'S2', action: '', expectedOutcome: '', status: 'pending' },
+      ]);
+      return { pid, steps: useAutonomyStore.getState().plans[0].steps };
+    };
+
+    it('stamps startedAt when a step enters in_progress', () => {
+      const { pid, steps } = seedPlan();
+      expect(steps[0].startedAt).toBeUndefined();
+      useAutonomyStore.getState().updateStepStatus(pid, steps[0].id, 'in_progress');
+      const after = useAutonomyStore.getState().plans[0].steps[0];
+      expect(after.status).toBe('in_progress');
+      expect(typeof after.startedAt).toBe('number');
+    });
+
+    it('preserves startedAt when the step reaches a terminal state', () => {
+      const { pid, steps } = seedPlan();
+      useAutonomyStore.getState().updateStepStatus(pid, steps[0].id, 'in_progress');
+      const stamped = useAutonomyStore.getState().plans[0].steps[0].startedAt;
+      useAutonomyStore.getState().updateStepStatus(pid, steps[0].id, 'completed', 'done');
+      const done = useAutonomyStore.getState().plans[0].steps[0];
+      expect(done.status).toBe('completed');
+      expect(done.startedAt).toBe(stamped);
+    });
+
+    it('does not stamp steps that are not being updated', () => {
+      const { pid, steps } = seedPlan();
+      useAutonomyStore.getState().updateStepStatus(pid, steps[0].id, 'in_progress');
+      const after = useAutonomyStore.getState().plans[0].steps;
+      expect(after[0].startedAt).toBeTypeOf('number');
+      expect(after[1].startedAt).toBeUndefined();
+    });
+
+    it('keeps a step own timestamp when a sibling step progresses', () => {
+      // The hang watchdog used to measure goal.updated, which ANY change
+      // bumps — so unrelated step progress kept resetting the timeout for a
+      // genuinely hung step. Each step must keep its own start time.
+      const { pid, steps } = seedPlan();
+      useAutonomyStore.getState().updateStepStatus(pid, steps[0].id, 'in_progress');
+      const firstStart = useAutonomyStore.getState().plans[0].steps[0].startedAt;
+
+      useAutonomyStore.getState().updateStepStatus(pid, steps[1].id, 'completed', 'ok');
+
+      expect(useAutonomyStore.getState().plans[0].steps[0].startedAt).toBe(firstStart);
+    });
+  });
 });

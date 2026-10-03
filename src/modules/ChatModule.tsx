@@ -7,8 +7,14 @@ import {
   BookOpen, Zap, Undo2, Search, Headphones, GitBranch,
   Eye, Loader2, Upload, LayoutTemplate, Languages, Hammer, RotateCcw, Archive, Radar, SlidersHorizontal, Wrench,
   Maximize2, ChevronRight, Settings as SettingsIcon,
-  PlugZap, Plug, KeyRound, MessagesSquare,
+  PlugZap, Plug, KeyRound, MessagesSquare, PanelRight, Files as FilesIcon, MoreHorizontal,
 } from 'lucide-react';
+import WorkspaceDock from '../components/WorkspaceDock';
+import BuildStudio from '../components/BuildStudio';
+import SessionSwitcher from '../components/SessionSwitcher';
+import AgentActivityStrip from '../components/AgentActivityStrip';
+import QueuedMessages from '../components/QueuedMessages';
+import UpdateBanner from '../components/UpdateBanner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useGiaStore } from '../store/useGiaStore';
 import { useProtocolStore } from '../store/useProtocolStore';
@@ -149,9 +155,34 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
   const [showTemplateSelector, setShowTemplateSelector] = React.useState(false);
   const [showCamera, setShowCamera] = React.useState(false);
   const [showPreviewSheet, setShowPreviewSheet] = React.useState(false);
+  const [showBuildStudio, setShowBuildStudio] = React.useState(false);
   const [showVoiceMode, setShowVoiceMode] = React.useState(false);
+  // Terminal + files docked beside the chat (desktop workflow).
+  // Persisted, not local state. The panel is a workspace preference — losing it
+// on every reload meant the toggle felt broken rather than remembered.
+const sidePanelOpen = useGiaStore(s => s.sidePanelOpen);
+const setSidePanelOpen = useGiaStore(s => s.setSidePanelOpen);
+const [dockOpen, setDockOpen] = React.useState(false);
+  const [showMoreMenu, setShowMoreMenu] = React.useState(false);
   const toggleFullScreenMode = useGiaStore((s) => s.toggleFullScreenMode);
   const openVoice = React.useCallback(() => { setShowVoiceMode(true); toggleFullScreenMode(); }, [toggleFullScreenMode]);
+
+  // Ctrl/Cmd+B — the same shortcut VS Code and most editors use for the side
+  // panel, so it lands where the user's hand already is.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'b') return;
+      const el = document.activeElement;
+      const tag = (el?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || (el as HTMLElement)?.isContentEditable) return;
+      e.preventDefault();
+      const next = !useGiaStore.getState().sidePanelOpen;
+      useGiaStore.getState().setSidePanelOpen(next);
+      setDockOpen(next);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const closeVoice = React.useCallback(() => { setShowVoiceMode(false); if (useGiaStore.getState().fullScreenMode) toggleFullScreenMode(); }, [toggleFullScreenMode]);
 
   const handleCameraCapture = React.useCallback((dataUrl: string, name: string) => {
@@ -247,7 +278,8 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
   }
 
   return (
-    <div className="flex flex-col h-full relative" style={{ background: 'var(--gia-bg)' }}>
+    <div className="flex h-full relative" style={{ background: 'var(--gia-bg)' }}>
+    <div className="flex flex-col flex-1 min-w-0 relative">
       {/* Processing bar */}
       {loading && (
         <div className="absolute top-0 left-0 right-0 h-0.5 z-30 overflow-hidden" style={{ background: 'rgba(168,85,247,0.15)' }}>
@@ -297,10 +329,64 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
             <ChevronDown size={11} className="shrink-0 opacity-70" />
           </button>
           <button onClick={() => setShowFileManager(true)} className="p-1.5 rounded-lg tap-feedback shrink-0" style={{ color: 'var(--gia-muted)' }} aria-label="File Manager" title="File Manager"><Upload size={13} /></button>
-          <button onClick={() => setShowKnowledge(true)} className="p-1.5 rounded-lg tap-feedback shrink-0" style={{ color: 'var(--gia-muted)' }} aria-label="Knowledge" title="Knowledge"><Brain size={13} /></button>
+          <button
+            onClick={() => { setDockOpen(o => !o); setSidePanelOpen(!sidePanelOpen); }}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg tap-feedback shrink-0 transition-colors"
+            style={{ color: sidePanelOpen ? 'var(--gia-accent)' : 'var(--gia-muted)', background: sidePanelOpen ? 'var(--gia-accent-dim)' : 'transparent' }}
+            aria-label="Toggle workspace panel"
+            aria-pressed={sidePanelOpen}
+            data-testid="toggle-side-panel"
+            title="Workspace panel (Terminal, Files, Browser, Preview) — Ctrl+B"
+          >
+            <PanelRight size={13} />
+            <span className="hidden md:inline text-[10px] font-medium">Panel</span>
+          </button>
           <SearchActivityButton />
-          <button onClick={exportChat} className="p-1.5 rounded-lg tap-feedback shrink-0" style={{ color: 'var(--gia-muted)' }} aria-label="Export chat" title="Export chat"><Download size={13} /></button>
           <button onClick={createSession} className="p-1.5 rounded-lg tap-feedback shrink-0" style={{ color: 'var(--gia-muted)' }} aria-label="New chat" title="New chat"><Plus size={13} /></button>
+
+          {/* Overflow — the header was carrying seven undifferentiated icon
+              buttons, which made the chat feel cluttered and gave every
+              action equal visual weight. Secondary actions live here now. */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowMoreMenu(o => !o)}
+              className="p-1.5 rounded-lg tap-feedback transition-colors"
+              style={{ color: showMoreMenu ? '#a855f7' : 'var(--gia-muted)', background: showMoreMenu ? 'rgba(168,85,247,0.12)' : 'transparent' }}
+              aria-label="More actions"
+              title="More"
+            >
+              <MoreHorizontal size={14} />
+            </button>
+            {showMoreMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
+                <div
+                  className="absolute right-0 top-9 z-50 w-52 rounded-xl py-1 shadow-xl"
+                  style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border)' }}
+                >
+                  {[
+                    { icon: <Brain size={13} />, label: 'Knowledge base', onClick: () => { setShowKnowledge(true); setShowMoreMenu(false); } },
+                    { icon: <Download size={13} />, label: 'Export chat', onClick: () => { exportChat(); setShowMoreMenu(false); } },
+                    { icon: <Terminal size={13} />, label: 'Open fullscreen terminal', onClick: () => { window.dispatchEvent(new CustomEvent('gia:open-fullscreen-terminal')); setShowMoreMenu(false); } },
+                    { icon: <Eye size={13} />, label: 'Toggle thoughts', onClick: () => { setShowThoughts(v => v.size > 0 ? new Set() : new Set(['all'])); setShowMoreMenu(false); } },
+                    { icon: <History size={13} />, label: 'Chat history', onClick: () => { setShowHistory(true); setShowMoreMenu(false); } },
+                  ].map(item => (
+                    <button
+                      key={item.label}
+                      onClick={item.onClick}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-[11px] transition-colors"
+                      style={{ color: 'var(--gia-text)' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--gia-surface-2)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      <span style={{ color: 'var(--gia-muted)' }}>{item.icon}</span>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -414,6 +500,14 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
           </div>
         )}
 
+        <div className="flex items-center gap-2 mb-1">
+          <SessionSwitcher />
+        </div>
+
+        <AgentActivityStrip />
+        <QueuedMessages />
+        <UpdateBanner />
+
         <AgentSwarmDashboard />
 
         <MessageList
@@ -508,7 +602,7 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
             className="absolute left-4 right-4 bottom-28 z-20"
           >
             <div className="flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl"
-              style={{ background: '#1a1a24', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(20px)' }}>
+              style={{ background: '#1a1a24', border: '1px solid var(--gia-overlay-2)', backdropFilter: 'blur(20px)' }}>
               <Trash2 size={13} style={{ color: '#f87171' }} />
               <span className="text-xs flex-1" style={{ color: 'var(--gia-text)' }}>Message deleted</span>
               <button onClick={handleUndoDelete}
@@ -521,7 +615,7 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
         )}
       </AnimatePresence>
 
-        <div ref={inputContainerRef} onPaste={handlePaste} className="px-3 pb-4 pt-2 absolute bottom-3 left-3 right-3 z-10 backdrop-blur-2xl rounded-2xl border shadow-2xl transition-all duration-300" style={{ background: messages.length === 0 ? 'rgba(10,10,15,0.7)' : 'rgba(10,10,15,0.2)', borderColor: messages.length === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.04)' }}>
+        <div ref={inputContainerRef} onPaste={handlePaste} className="px-3 pb-4 pt-2 absolute bottom-3 left-3 right-3 z-10 backdrop-blur-2xl rounded-2xl border shadow-2xl transition-all duration-300" style={{ background: messages.length === 0 ? 'rgba(10,10,15,0.7)' : 'rgba(10,10,15,0.2)', borderColor: messages.length === 0 ? 'var(--gia-overlay)' : 'var(--gia-overlay)' }}>
         {showAgentMention && (
           <AgentMentionPicker
             query={agentMentionQuery}
@@ -585,6 +679,17 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
               <LayoutTemplate size={11} /> Templates
             </button>
             <div className="w-px h-4 mx-1 shrink-0" style={{ background: 'var(--gia-border)' }} />
+            <button
+              type="button"
+              onClick={() => setShowBuildStudio(true)}
+              data-testid="open-build-studio"
+              className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border transition-all tap-feedback shrink-0"
+              style={{ background: 'var(--gia-accent-dim)', border: '1px solid var(--gia-accent-glow)', color: 'var(--gia-accent)', fontWeight: 500 }}
+              title="Describe what you want, choose a model and a look, load a skill"
+            >
+              <Sparkles size={11} />
+              Studio
+            </button>
             <button type="button" onClick={() => {
               if (forceBuild) return;
               const next = !buildModeStore;
@@ -699,6 +804,21 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
         )}
       </AnimatePresence>
       <BuildPreviewSheet url={buildPreviewUrl} open={showPreviewSheet} onClose={() => setShowPreviewSheet(false)} />
+      <AnimatePresence>
+        {showBuildStudio && (
+          <BuildStudio
+            onClose={() => setShowBuildStudio(false)}
+            onStart={(brief) => {
+              // Entering BUILD is part of the brief, not a separate toggle: the
+              // studio already chose the model, theme and skill, so the request
+              // should arrive with the mode already set.
+              setBuildMode(true);
+              useGiaStore.getState().updateSharedData({ currentMode: 'build' });
+              sendText(brief);
+            }}
+          />
+        )}
+      </AnimatePresence>
       {showKnowledge && <KnowledgePanel onClose={() => setShowKnowledge(false)} />}
       {showFileManager && <FileManager onClose={() => setShowFileManager(false)} />}
       {showBranchView && activeSession && (
@@ -722,6 +842,16 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
           <VoiceMode onClose={closeVoice} />
         )}
       </AnimatePresence>
+    </div>
+
+      {/* Workspace dock — terminal + files beside the conversation, so you
+          watch GIA work without the two views fighting for the screen. */}
+      {dockOpen && (
+        <WorkspaceDock
+          onClose={() => { setDockOpen(false); setSidePanelOpen(false); }}
+          onExpandPreview={() => setShowPreviewSheet(true)}
+        />
+      )}
     </div>
   );
 };

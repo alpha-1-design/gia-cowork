@@ -51,7 +51,7 @@ const AgentMentionPicker: React.FC<AgentMentionPickerProps> = ({ query, onSelect
       >
         <div
           className="rounded-2xl overflow-hidden shadow-2xl border max-h-64 overflow-y-auto"
-          style={{ background: 'rgba(13, 13, 18, 0.98)', borderColor: 'rgba(255,255,255,0.08)' }}
+          style={{ background: 'rgba(13, 13, 18, 0.98)', borderColor: 'var(--gia-overlay-2)' }}
         >
           {pickedAgent ? (
             <div className="p-3">
@@ -83,7 +83,7 @@ const AgentMentionPicker: React.FC<AgentMentionPickerProps> = ({ query, onSelect
                   onKeyDown={e => { if (e.key === 'Enter') submitTask(); }}
                   placeholder={`What should ${pickedAgent.name} specifically do?`}
                   className="flex-1 px-2.5 py-1.5 rounded-lg text-[11px] outline-none"
-                  style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--gia-text)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  style={{ background: 'var(--gia-overlay-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-overlay-2)' }}
                 />
                 <button
                   onClick={submitTask}

@@ -137,9 +137,15 @@ export const useAutonomyStore = create<AutonomyStore>()(
               ? {
                   ...p,
                   updated: Date.now(),
-                  steps: p.steps.map(st =>
-                    st.id === stepId ? { ...st, status, result: result ?? st.result } : st
-                  ),
+                  steps: p.steps.map(st => {
+                    if (st.id !== stepId) return st;
+                    // Stamp the start time on the pending -> in_progress edge
+                    // so the hang watchdog can measure this step rather than
+                    // the goal as a whole. Keep any existing stamp when the
+                    // step moves to a terminal state so history survives.
+                    const startedAt = status === 'in_progress' ? (st.startedAt ?? Date.now()) : st.startedAt;
+                    return { ...st, status, result: result ?? st.result, startedAt };
+                  }),
                   status: status === 'completed' && p.steps.every(s => s.id === stepId || s.status === 'completed' || s.status === 'skipped')
                     ? 'completed'
                     : status === 'failed'

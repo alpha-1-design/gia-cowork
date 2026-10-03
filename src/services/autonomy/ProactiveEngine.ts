@@ -43,15 +43,18 @@ export class ProactiveEngine {
     for (const plan of store.plans) {
       if (plan.status !== 'active') continue;
       for (const step of plan.steps) {
-        if (step.status === 'in_progress') {
-          const goal = store.goals.find(g => g.id === plan.goalId);
-          if (!goal) continue;
-          const stepAge = now - goal.updated;
-          if (stepAge > this.hangingTimeoutMs) {
-            logger.warn(`[ProactiveEngine] Step "${step.description}" hanging for ${Math.round(stepAge / 1000)}s — marking as failed`);
-            store.updateStepStatus(plan.id, step.id, 'failed', `Timed out — step did not complete within ${this.hangingTimeoutMs / 60000} minutes`);
-            useGiaStore.getState().addNotification(`⚠️ Goal step timed out: "${step.description.slice(0, 60)}"`);
-          }
+        if (step.status !== 'in_progress') continue;
+        // Measure THIS step, not the goal. Using goal.updated meant any
+        // unrelated step completing on the same goal reset the clock, so a
+        // step that hung forever could never trip the watchdog. Fall back to
+        // the step's own stamp, then to the plan, so steps persisted before
+        // startedAt existed still get caught.
+        const since = step.startedAt ?? plan.updated;
+        const stepAge = now - since;
+        if (stepAge > this.hangingTimeoutMs) {
+          logger.warn(`[ProactiveEngine] Step "${step.description}" hanging for ${Math.round(stepAge / 1000)}s — marking as failed`);
+          store.updateStepStatus(plan.id, step.id, 'failed', `Timed out — step did not complete within ${this.hangingTimeoutMs / 60000} minutes`);
+          useGiaStore.getState().addNotification(`⚠️ Goal step timed out: "${step.description.slice(0, 60)}"`);
         }
       }
     }

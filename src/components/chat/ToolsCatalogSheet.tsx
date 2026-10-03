@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Copy, Check, Play, Globe, Code2, FileText, Image, Cpu, Wrench } from 'lucide-react';
+import { X, Copy, Check, Play, Wrench } from 'lucide-react';
 import giaTools from '../../services/GiaTools';
+import { categorizeTool } from '../../utils/toolCategories';
 import type { LucideIcon } from 'lucide-react';
 
 interface ToolsCatalogSheetProps {
@@ -11,19 +12,8 @@ interface ToolsCatalogSheetProps {
   onUse?: (id: string, description: string) => void;
 }
 
-// Same taxonomy as the Agents tool picker — every registered tool, grouped.
-const CATEGORY_RULES: { test: (id: string) => boolean; category: string; icon: LucideIcon }[] = [
-  { test: (id) => ['web_search', 'read_url', 'browser_navigate', 'wikipedia', 'page_info', 'search_places', 'show_map', 'get_directions', 'web_scrape', 'http_request', 'network_scan', 'network_connectivity', 'network_detect'].includes(id), category: 'Web & Search', icon: Globe },
-  { test: (id) => /^(terminal_|code_|build_|zip_|github|ssh_|db_|filegen|create_pdf|read_pdf|document)/.test(id), category: 'Code & Dev', icon: Code2 },
-  { test: (id) => /^(filesystem_|list_files|file_|rag_|neura_)/.test(id), category: 'Files & Data', icon: FileText },
-  { test: (id) => /^(image_|save_memory|forget_memory|request_clarification|summarize_|brain_|skill)/.test(id), category: 'AI & Creative', icon: Image },
-  { test: () => true, category: 'System & Device', icon: Cpu },
-];
-
-function categorize(id: string): { category: string; icon: LucideIcon } {
-  const rule = CATEGORY_RULES.find(r => r.test(id)) || CATEGORY_RULES[CATEGORY_RULES.length - 1];
-  return { category: rule.category, icon: rule.icon };
-}
+// Taxonomy lives in utils/toolCategories so this sheet and the `/tools` slash
+// command group identically.
 
 export const ToolsCatalogSheet: React.FC<ToolsCatalogSheetProps> = ({ open, onClose, onUse }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -32,7 +22,7 @@ export const ToolsCatalogSheet: React.FC<ToolsCatalogSheetProps> = ({ open, onCl
     const tools = giaTools.getAllTools();
     const map = new Map<string, { id: string; description: string; icon: LucideIcon }[]>();
     for (const t of tools) {
-      const { category, icon } = categorize(t.id);
+      const { category, icon } = categorizeTool(t.id);
       if (!map.has(category)) map.set(category, []);
       map.get(category)!.push({ id: t.id, description: t.description || '', icon });
     }

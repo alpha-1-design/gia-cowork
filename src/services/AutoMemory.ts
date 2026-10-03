@@ -2,6 +2,13 @@ import { logger } from '../utils/logger';
 import { useMemoryStore, type MemoryCategory } from '../store/useMemoryStore';
 import { knowledgeGraphService } from './KnowledgeGraphService';
 
+/** One message waiting to be analyzed. Identity travels with the payload. */
+interface QueuedMemory {
+  text: string;
+  messageId: string;
+  role: 'user' | 'assistant';
+}
+
 interface AutoMemoryConfig {
   enabled: boolean;
   extractEntities: boolean;
@@ -53,7 +60,7 @@ function isTrivialMessage(text: string): boolean {
 export class AutoMemory {
   private config: AutoMemoryConfig = { ...DEFAULT_CONFIG };
   private processedMessages = new Set<string>();
-  private processingQueue: string[] = [];
+  private processingQueue: QueuedMemory[] = [];
   private processing = false;
 
   updateConfig(updates: Partial<AutoMemoryConfig>): void {
@@ -64,13 +71,13 @@ export class AutoMemory {
     if (!this.config.enabled || !text || text.length < 5) return;
     if (this.processedMessages.has(messageId)) return;
 
-    this.processingQueue.push(text);
+    this.processingQueue.push({ text, messageId, role });
     if (this.processing) return;
 
     this.processing = true;
     while (this.processingQueue.length > 0) {
       const msg = this.processingQueue.shift()!;
-      await this.analyzeAndStore(msg, messageId, role);
+      await this.analyzeAndStore(msg.text, msg.messageId, msg.role);
     }
     this.processing = false;
   }
@@ -163,12 +170,41 @@ export class AutoMemory {
   }
 
   private entityTimeout: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Messages waiting to be mined for entities.
+   *
+   * These ACCUMULATE rather than being overwritten. The previous version cleared
+   * the pending timer and kept only the newest text, which meant that during a
+   * normal conversation — where messages arrive seconds apart — only the last
+   * message in each window was ever extracted. Neura appeared to learn because
+   * the graph filled up slowly, while most of what was said was dropped on the
+   * floor. Debouncing the CALL is right; discarding the DATA is not.
+   */
+  private pendingExtractions: { text: string; messageId: string }[] = [];
+
   private scheduleEntityExtraction(text: string, messageId: string): void {
+    this.pendingExtractions.push({ text, messageId });
+    // Bound the buffer so a runaway long session cannot grow it without limit.
+    if (this.pendingExtractions.length > 20) this.pendingExtractions.shift();
     if (this.entityTimeout) clearTimeout(this.entityTimeout);
-    this.entityTimeout = setTimeout(() => {
-      knowledgeGraphService.extractFromText(text, messageId).catch(() => {});
-      this.entityTimeout = null;
-    }, 2000);
+    this.entityTimeout = setTimeout(() => this.flushEntityExtractions(), 2000);
+  }
+
+  private flushEntityExtractions(): void {
+    const batch = this.pendingExtractions;
+    this.pendingExtractions = [];
+    this.entityTimeout = null;
+    for (const item of batch) {
+      knowledgeGraphService
+        .extractFromText(item.text, item.messageId)
+        .catch(() => { /* extraction is best-effort; never break the chat */ });
+    }
+  }
+
+  /** Flush immediately — used when a conversation ends or the app idles. */
+  flushPending(): void {
+    if (this.entityTimeout) clearTimeout(this.entityTimeout);
+    if (this.pendingExtractions.length) this.flushEntityExtractions();
   }
 
   getSystemPromptInjections(): string {

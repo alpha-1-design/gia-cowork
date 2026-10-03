@@ -237,11 +237,11 @@ Rules: 4-15 data points, labels under 20 chars, no markdown, pure JSON. If user 
             {chartType === 'bar' && (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--gia-overlay-2)" />
                   <XAxis dataKey="label" stroke="#8888a0" fontSize={10} />
                   <YAxis stroke="#8888a0" fontSize={10} />
                   <Tooltip 
-                    contentStyle={{ background: '#111118', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                    contentStyle={{ background: '#111118', border: '1px solid var(--gia-overlay-3)', borderRadius: '8px' }}
                     itemStyle={{ color: '#f0f0f5', fontSize: '12px' }}
                   />
                   <Bar dataKey="value" fill="#7c3aed" radius={[4, 4, 0, 0]} />
@@ -264,7 +264,7 @@ Rules: 4-15 data points, labels under 20 chars, no markdown, pure JSON. If user 
                     ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ background: '#111118', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                    contentStyle={{ background: '#111118', border: '1px solid var(--gia-overlay-3)', borderRadius: '8px' }}
                     itemStyle={{ color: '#f0f0f5', fontSize: '12px' }}
                   />
                 </PieChart>
@@ -279,11 +279,11 @@ Rules: 4-15 data points, labels under 20 chars, no markdown, pure JSON. If user 
                       <stop offset="95%" stopColor="#7c3aed" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--gia-overlay-2)" />
                   <XAxis dataKey="label" stroke="#8888a0" fontSize={10} />
                   <YAxis stroke="#8888a0" fontSize={10} />
                   <Tooltip 
-                    contentStyle={{ background: '#111118', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                    contentStyle={{ background: '#111118', border: '1px solid var(--gia-overlay-3)', borderRadius: '8px' }}
                     itemStyle={{ color: '#f0f0f5', fontSize: '12px' }}
                   />
                   <Area type="monotone" dataKey="value" stroke="#7c3aed" fillOpacity={1} fill="url(#colorVal)" />

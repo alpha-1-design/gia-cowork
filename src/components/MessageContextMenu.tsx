@@ -172,7 +172,7 @@ const MessageContextMenu: React.FC<Props> = ({
               left: adjustedPos.x,
               top: adjustedPos.y,
               background: '#1a1a24',
-              border: '1px solid rgba(255,255,255,0.08)',
+              border: '1px solid var(--gia-overlay-2)',
               backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
             }}
@@ -180,12 +180,12 @@ const MessageContextMenu: React.FC<Props> = ({
             <div className="py-1">
               {actions.map((a, i) => (
                 <React.Fragment key={a.id}>
-                  {i > 0 && i === actions.length - 1 && <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '2px 8px' }} />}
+                  {i > 0 && i === actions.length - 1 && <div style={{ height: '1px', background: 'var(--gia-overlay-2)', margin: '2px 8px' }} />}
                   <button
                     onClick={a.action}
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors tap-feedback"
                     style={{ color: a.color || 'var(--gia-muted)' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--gia-overlay-2)'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
                     {a.icon}

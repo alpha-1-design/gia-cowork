@@ -1,8 +1,20 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle2, XCircle, Clock, Loader2, AlertCircle, Play, X, Edit3 } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Loader2, AlertCircle, Play, X, DollarSign } from 'lucide-react';
 import { useProtocolStore } from '../store/useProtocolStore';
 import { ProtocolProposal, PROTOCOL_META } from '../types/protocol';
+import { useProviderStore } from '../store/useProviderStore';
+import { formatCost, getPrice, isLocalProvider } from '../services/CostTracker';
+
+/**
+ * Rough cost of the generation that produced this tool call, shown on the
+ * approval card. Every competitor hides what a task will cost until the
+ * invoice arrives; showing the running estimate at approval time is the
+ * whole point of the spend panel. Uses a nominal ~1.5k in / 500 out token
+ * tool-loop call, which is typical for one agentic step.
+ */
+const NOMINAL_INPUT_TOKENS = 1500;
+const NOMINAL_OUTPUT_TOKENS = 500;
 
 interface ProtocolCardProps {
   protocol: ProtocolProposal;
@@ -18,15 +30,26 @@ const STATE_CONFIG: Record<string, { label: string; color: string; icon: React.R
   completed: { label: 'Completed', color: '#22c55e', icon: <CheckCircle2 size={12} /> },
   failed:    { label: 'Failed',    color: '#ef4444', icon: <AlertCircle size={12} /> },
   rejected:  { label: 'Rejected',  color: '#6b7280', icon: <XCircle size={12} /> },
-  modified:  { label: 'Modified',  color: '#eab308', icon: <Edit3 size={12} /> },
 };
 
 const ProtocolCard: React.FC<ProtocolCardProps> = ({ protocol, onConfirm, onReject, compact }) => {
   const { confirm, reject } = useProtocolStore();
+  const activeProvider = useProviderStore(s => s.activeProvider);
   const meta = PROTOCOL_META[protocol.type] || PROTOCOL_META.custom;
   const stateCfg = STATE_CONFIG[protocol.state] || STATE_CONFIG.proposed;
   const isPending = protocol.state === 'proposed';
   const isActive = protocol.state === 'executing';
+
+  // Estimate what this step costs before the user approves it. Local
+  // providers render as "free" rather than "$0.0000" so on-device work
+  // reads as a deliberate win, not a rounding artifact.
+  const estimate = useMemo(() => {
+    const model = useProviderStore.getState().providers[activeProvider]?.model || '';
+    if (isLocalProvider(activeProvider)) return { label: 'Free — on-device', cost: 0, local: true };
+    const price = getPrice(activeProvider, model);
+    const cost = (NOMINAL_INPUT_TOKENS / 1_000_000) * price.input + (NOMINAL_OUTPUT_TOKENS / 1_000_000) * price.output;
+    return { label: formatCost(cost), cost, local: false };
+  }, [activeProvider]);
 
   const handleConfirm = () => {
     if (onConfirm) onConfirm(protocol.id);
@@ -121,28 +144,58 @@ const ProtocolCard: React.FC<ProtocolCardProps> = ({ protocol, onConfirm, onReje
         )}
 
         {isPending && (
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={handleConfirm}
-              className="flex items-center gap-1.5 text-[10px] font-semibold px-3 py-1.5 rounded-lg transition-all"
-              style={{ background: '#22c55e', color: 'white' }}
+          <div className="flex items-center gap-2">
+            <div
+              className="flex items-center gap-1 text-[9px] font-medium px-2 py-1 rounded-lg"
+              style={{
+                background: estimate.local ? 'rgba(59,130,246,0.1)' : 'rgba(52,211,153,0.08)',
+                color: estimate.local ? '#60a5fa' : '#34d399',
+              }}
+              title="Estimated cost of the model call for this step"
             >
-              <Play size={10} /> Execute
-            </button>
-            <button
-              onClick={handleReject}
-              className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-lg transition-all"
-              style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}
-            >
-              <X size={10} /> Reject
-            </button>
+              {estimate.local ? null : <DollarSign size={9} />}
+              ~{estimate.label}
+            </div>
+            <div className="flex gap-2 flex-1">
+              <button
+                onClick={handleConfirm}
+                className="flex items-center gap-1.5 text-[10px] font-semibold px-3 py-1.5 rounded-lg transition-all"
+                style={{ background: '#22c55e', color: 'white' }}
+              >
+                <Play size={10} /> Execute
+              </button>
+              <button
+                onClick={handleReject}
+                className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-lg transition-all"
+                style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}
+              >
+                <X size={10} /> Reject
+              </button>
+            </div>
           </div>
         )}
 
         {isActive && (
           <div className="flex items-center gap-2 text-[10px]" style={{ color: meta.color }}>
             <Loader2 size={10} className="animate-spin" />
-            Executing...
+            {typeof protocol.progress === 'number' && protocol.progress > 0
+              ? protocol.progressLabel || `Working… ${Math.round(protocol.progress * 100)}%`
+              : 'Executing...'}
+          </div>
+        )}
+
+        {/* Progress bar — toolRunner already reports 0..1 progress via
+            setProgress, but it was never rendered, so long installs and
+            downloads looked frozen. */}
+        {isActive && typeof protocol.progress === 'number' && (
+          <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--gia-overlay-2)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: `${Math.min(100, Math.max(2, protocol.progress * 100))}%`,
+                background: `linear-gradient(90deg, ${meta.color}, ${meta.color}aa)`,
+              }}
+            />
           </div>
         )}
       </div>

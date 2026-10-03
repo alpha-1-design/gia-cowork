@@ -13,7 +13,7 @@ interface ToggleRowProps {
 const ToggleRow: React.FC<ToggleRowProps> = ({ label, desc, icon, enabled, onToggle }) => (
   <div className="flex items-start gap-3 py-2">
     <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-      style={{ background: enabled ? 'rgba(52,211,153,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${enabled ? 'rgba(52,211,153,0.2)' : 'transparent'}` }}>
+      style={{ background: enabled ? 'rgba(52,211,153,0.1)' : 'var(--gia-overlay)', border: `1px solid ${enabled ? 'rgba(52,211,153,0.2)' : 'transparent'}` }}>
       {icon}
     </div>
     <div className="flex-1 min-w-0">
@@ -23,7 +23,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ label, desc, icon, enabled, onTog
     <button
       onClick={() => onToggle(!enabled)}
       className="w-9 h-5 rounded-full shrink-0 transition-all tap-feedback relative"
-      style={{ background: enabled ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.1)', border: `1px solid ${enabled ? 'rgba(52,211,153,0.4)' : 'transparent'}` }}
+      style={{ background: enabled ? 'rgba(52,211,153,0.3)' : 'var(--gia-overlay-3)', border: `1px solid ${enabled ? 'rgba(52,211,153,0.4)' : 'transparent'}` }}
     >
       <div className="w-3.5 h-3.5 rounded-full absolute top-0.5 transition-all"
         style={{ left: enabled ? '18px' : '3px', background: enabled ? '#34d399' : 'rgba(255,255,255,0.3)' }} />

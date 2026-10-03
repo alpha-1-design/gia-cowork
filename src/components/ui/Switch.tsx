@@ -30,7 +30,7 @@ export const Switch: React.FC<SwitchProps> = ({
         style={{
           background: checked
             ? `${accentColor}40`
-            : 'rgba(255,255,255,0.1)',
+            : 'var(--gia-overlay-3)',
         }}
       >
         <div

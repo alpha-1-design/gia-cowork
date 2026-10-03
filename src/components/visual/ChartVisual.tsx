@@ -163,7 +163,7 @@ export const ChartVisual: React.FC<{ data: Record<string, unknown> }> = ({ data 
               <CartesianGrid strokeDasharray="3 3" stroke="var(--gia-border)" vertical={false} />
               <XAxis dataKey="name" {...axisProps} minTickGap={16} />
               <YAxis {...axisProps} width={36} />
-              <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+              <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'var(--gia-overlay)' }} />
               <Legend wrapperStyle={{ fontSize: '10px', color: 'var(--gia-muted)' }} iconType="circle" iconSize={8} />
               {keys.map((k, i) => {
                 const c = VIZ_COLORS[i % VIZ_COLORS.length];

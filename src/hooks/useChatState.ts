@@ -129,7 +129,7 @@ export function useChatState() {
     activeProvider: s.activeProvider,
   })));
   const protocols = useProtocolStore(s => s.protocols);
-  const activeProtocols = useMemo(() => protocols.filter(p => p.state !== 'confirmed' && p.state !== 'modified'), [protocols]);
+  const activeProtocols = useMemo(() => protocols.filter(p => p.state !== 'confirmed'), [protocols]);
   const providerLabel = providerRegistry.getLabel(activeProvider);
   const providerConnected = providers[activeProvider]?.enabled ?? false;
   const activeModel = providers[activeProvider]?.model ?? '';
@@ -497,9 +497,52 @@ export function useChatState() {
       }
     }
 
+    // Busy? Queue instead of sending.
+    //
+    // Sending anyway would start a second generation that races the first and
+    // interleaves two answers into one thread; dropping it loses something the
+    // user typed. Queueing is what every competing agent does, and it is what
+    // lets someone think out loud while the agent is still working.
+    const state = useGiaStore.getState();
+    if (state.generationState.active) {
+      state.enqueueMessage({
+        id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        sessionId: state.activeSessionId ?? '',
+        text: input,
+        attachments: attachments.map(a => ({ name: a.name, type: a.type, content: a.content, preview: a.preview })),
+        queuedAt: Date.now(),
+      });
+      setInput('');
+      setAttachments([]);
+      return;
+    }
+
     gen.handleSend(input, attachments, setInput, v => setAttachments(v as Attachment[]), mentionedAgents, cleanedInput || input);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input, attachments, gen.handleSend, setAttachments]);
+
+  // Drain the queue as soon as the current turn finishes. Exactly one message
+  // per completion, so a queue of three takes three turns rather than firing
+  // all three at once and racing each other.
+  const queuedCount = useGiaStore(s => s.queuedMessages.length);
+  const generationActive = useGiaStore(s => s.generationState.active);
+  useEffect(() => {
+    if (generationActive || queuedCount === 0) return;
+    const state = useGiaStore.getState();
+    const next = state.queuedMessages[0];
+    // Only drain the chat this hook is driving — a queued message for another
+    // session must survive you switching away and coming back.
+    if (!next || (activeSessionId && next.sessionId && next.sessionId !== activeSessionId)) return;
+    state.dequeueMessage(next.id);
+    setTimeout(() => {
+      genRef.current.handleSend(
+        next.text,
+        next.attachments as Attachment[],
+        () => {},
+        () => {},
+      );
+    }, 50);
+  }, [generationActive, queuedCount, activeSessionId]);
 
   const handleEditResend = useCallback((msgId: string) => {
     editingAssistIdRef.current = msgId;

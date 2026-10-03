@@ -70,16 +70,6 @@ describe('useProtocolStore', () => {
     });
   });
 
-  describe('modify', () => {
-    it('marks protocol as modified with new args', () => {
-      useProtocolStore.getState().propose(makeProposal());
-      useProtocolStore.getState().modify('test-proposal-1', { query: 'modified query' });
-      const p = useProtocolStore.getState().protocols[0];
-      expect(p.state).toBe('modified');
-      expect(p.args).toEqual({ query: 'modified query' });
-    });
-  });
-
   describe('setExecuting', () => {
     it('marks protocol as executing', () => {
       useProtocolStore.getState().propose(makeProposal());
@@ -152,17 +142,6 @@ describe('useProtocolStore', () => {
 
       const action = await promise;
       expect(action.type).toBe('reject');
-    });
-
-    it('resolves with modify action', async () => {
-      useProtocolStore.getState().propose(makeProposal());
-
-      const promise = useProtocolStore.getState().waitForConfirmation('test-proposal-1');
-      useProtocolStore.getState().modify('test-proposal-1', { query: 'modified' });
-
-      const action = await promise;
-      expect(action.type).toBe('modify');
-      expect(action.modifiedArgs).toEqual({ query: 'modified' });
     });
 
     it('rejects after timeout', async () => {

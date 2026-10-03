@@ -8,10 +8,10 @@
 
 :root, [data-theme="dark"] {
   /* Core palette */
-  --gia-bg:          #0a0a0f;
-  --gia-surface:     #111118;
-  --gia-surface-2:   #18181f;
-  --gia-surface-3:   #202028;
+  --gia-bg:          #08080c;
+  --gia-surface:     #0e0e14;
+  --gia-surface-2:   #14141c;
+  --gia-surface-3:   #1b1b24;
   --gia-border:      rgba(255,255,255,0.07);
   --gia-border-2:    rgba(255,255,255,0.12);
   --gia-text:        #f0f0f5;
@@ -37,9 +37,26 @@
 
   /* Ambient glow system */
   --glow-color:   var(--mod-chat);
-  --glow-opacity: 0.25;
+  --glow-opacity: 0.18;
   --glow-size:    40px;
   --glow-speed:   4s;
+
+  /* ── Interaction washes ──────────────────────────────────────────────
+     These used to be hardcoded `rgba(255,255,255,0.04)` scattered across
+     ~130 call sites. A white wash is only correct on a dark background: it
+     lightens whatever is under it. That is fine on #0a0a0f, but it is why the
+     dark theme read as a grey haze rather than as dark — the average perceived
+     luminance came from dozens of translucent white panels stacked over the
+     base, not from the palette. Worse, the same white washes are invisible on
+     the light theme, where a BLACK wash is what reads as a hover.
+     So the overlay is now a token that flips with the theme, and the call
+     sites ask for "a hover" rather than naming a colour. */
+  --gia-overlay:        rgba(255, 255, 255, 0.04);
+  --gia-overlay-2:      rgba(255, 255, 255, 0.07);
+  --gia-overlay-3:      rgba(255, 255, 255, 0.10);
+  --gia-overlay-border: rgba(255, 255, 255, 0.08);
+  /* Raised code / code block background. */
+  --gia-code-bg:        #0c0c13;
 
   /* Spacing / radius */
   --radius-sm:  10px;
@@ -48,7 +65,16 @@
   --radius-xl:  28px;
 }
 
+/* Light theme washes are BLACK, not white. This is the flip that the
+   hardcoded rgba(255,255,255,...) call sites could never express: a white
+   overlay on a light background adds nothing, so hover and "raised" states
+   silently vanished in light mode while looking correct in dark. */
 [data-theme="light"] {
+  --gia-overlay:        rgba(0, 0, 0, 0.035);
+  --gia-overlay-2:      rgba(0, 0, 0, 0.06);
+  --gia-overlay-3:      rgba(0, 0, 0, 0.09);
+  --gia-overlay-border: rgba(0, 0, 0, 0.10);
+  --gia-code-bg:        #ebebf2;
   /* Soft, low-glare light palette — surfaces stay off-white instead of pure
    * white and the background is a muted grey so the screen doesn't feel
    * blindingly bright (strain complaint). Contrast is kept comfortably high. */
@@ -116,6 +142,11 @@
 }
 
 [data-theme="obsidian-aurora"] {
+  --gia-overlay:        rgba(255, 255, 255, 0.035);
+  --gia-overlay-2:      rgba(255, 255, 255, 0.06);
+  --gia-overlay-3:      rgba(255, 255, 255, 0.09);
+  --gia-overlay-border: rgba(255, 255, 255, 0.08);
+  --gia-code-bg:        #0a0a10;
   /* Core — true OLED black */
   --gia-bg:          #000000;
   --gia-surface:     #08080c;
@@ -829,6 +860,13 @@ body {
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* Indeterminate transfer bar — used when a download is streaming but its
+   total size is unknown, so a percentage would be a lie. */
+@keyframes gia-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
 }
 
 /* Skeleton loader */

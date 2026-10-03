@@ -5,12 +5,55 @@ mod whatsapp_bridge;
 mod screen;
 mod unimind_relay;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use terminal::TerminalState;
 use whatsapp_bridge::WhatsAppBridgeState;
+
+/// Whether presenter mode currently owns the window visibility.
+///
+/// This lives in Rust rather than only in the webview because the tray is the
+/// only way to reach a hidden window: if the user restores GIA from the tray
+/// during a screen share, the webview needs to be told to put its floating
+/// chrome back. Without this flag the window would reappear still presenting,
+/// with the orb suppressed and no way to clear it.
+#[derive(Default)]
+struct PresenterState {
+    active: AtomicBool,
+}
+
+/// Event the webview listens for so it can restore in-app chrome when the
+/// window is shown from outside the webview (tray menu).
+const PRESENTER_EXIT_EVENT: &str = "gia://presenter-exit";
+
+#[tauri::command]
+fn presenter_is_active(state: tauri::State<'_, Arc<PresenterState>>) -> bool {
+    state.active.load(Ordering::SeqCst)
+}
+
+#[tauri::command]
+async fn presenter_set(app: tauri::AppHandle, active: bool) -> Result<bool, String> {
+    let state = app.state::<Arc<PresenterState>>().inner().clone();
+    let already = state.active.swap(active, Ordering::SeqCst);
+    if already == active {
+        // Idempotent: a second toggle must not stack hides with no matching
+        // show, so an unchanged state returns without touching the window.
+        return Ok(false);
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        if active {
+            window.hide().map_err(|e| e.to_string())?;
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        } else {
+            window.show().map_err(|e| e.to_string())?;
+            window.set_focus().map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(true)
+}
 
 #[derive(serde::Serialize)]
 struct SystemInfo {
@@ -150,6 +193,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .manage(Arc::new(TerminalState::default()))
         .manage(WhatsAppBridgeState::default())
+        .manage(Arc::new(PresenterState::default()))
         .invoke_handler(tauri::generate_handler![
             terminal::terminal_exec,
             terminal::terminal_kill,
@@ -173,6 +217,8 @@ pub fn run() {
             screen::screen_scroll,
             hide_for_capture,
             show_after_capture,
+            presenter_is_active,
+            presenter_set,
             whatsapp_bridge::whatsapp_bridge_start,
             whatsapp_bridge::whatsapp_bridge_stop,
             whatsapp_bridge::whatsapp_notify,
@@ -191,19 +237,42 @@ pub fn run() {
             // not just a foreground window -- the "always-on" part of the
             // presence model needs the app alive when the window is closed.
             let show_item = MenuItem::with_id(app, "show", "Show GIA Cowork", true, None::<&str>)?;
+            let presenter_item =
+                MenuItem::with_id(app, "presenter", "Presenter Mode (hide for screen share)", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+            let menu = Menu::with_items(app, &[&show_item, &presenter_item, &quit_item])?;
+
+            let presenter_for_menu = app.state::<Arc<PresenterState>>().inner().clone();
 
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(true)
-                .on_menu_event(|app, event| match event.id.as_ref() {
+                .on_menu_event(move |app, event| match event.id.as_ref() {
                     "show" => {
+                        // Any external show ends presenter mode: the user has
+                        // decided they want GIA back, so clear the flag and let
+                        // the webview restore its own floating chrome.
+                        if presenter_for_menu.active.swap(false, Ordering::SeqCst) {
+                            let _ = app.emit(PRESENTER_EXIT_EVENT, ());
+                        }
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
+                    }
+                    "presenter" => {
+                        let now_active = !presenter_for_menu.active.load(Ordering::SeqCst);
+                        let handle = app.clone();
+                        let emitter = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if presenter_set(handle, now_active).await.is_ok() && !now_active {
+                                // Turning it off from the tray is an external
+                                // exit, exactly like "Show GIA Cowork" — the
+                                // webview still needs to restore its own chrome.
+                                let _ = emitter.emit(PRESENTER_EXIT_EVENT, ());
+                            }
+                        });
                     }
                     "quit" => {
                         app.exit(0);

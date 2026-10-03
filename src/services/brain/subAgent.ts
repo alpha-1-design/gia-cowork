@@ -4,6 +4,37 @@ import { providerRegistry } from '../ProviderRegistry';
 import { buildGiaSystem } from '../buildGiaSystem';
 import { isRateLimitOrQuotaError, isRetryableServerError, pickFallbackProvider, backoffDelay } from './ResilientRelay';
 import ProviderMonitor from '../ProviderMonitor';
+import { costTracker } from '../CostTracker';
+import { useGiaStore } from '../../store/useGiaStore';
+
+interface SubAgentResult {
+  text: string;
+  input: number;
+  output: number;
+}
+
+/**
+ * Extract usage from an OpenAI/Anthropic-shaped response body. Returns
+ * zeros when the provider omits usage — sub-agent spend must still be
+ * accounted for when it IS reported, and a provider that doesn't report it
+ * simply contributes an estimate of 0 rather than corrupting the total.
+ */
+function extractUsage(data: unknown): { input: number; output: number } {
+  const d = data as {
+    usage?: {
+      prompt_tokens?: number; completion_tokens?: number;
+      input_tokens?: number; output_tokens?: number;
+    };
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+  } | null;
+  if (!d) return { input: 0, output: 0 };
+  const u = d.usage;
+  return {
+    input: u?.prompt_tokens ?? u?.input_tokens ?? d.promptTokenCount ?? 0,
+    output: u?.completion_tokens ?? u?.output_tokens ?? d.candidatesTokenCount ?? 0,
+  };
+}
 
 /**
  * Picks the persona whose description shares the most overlapping
@@ -30,7 +61,7 @@ function selectBestAgent(prompt: string): { id: string; name: string; descriptio
 }
 
 /** A single, non-streaming completion call against one specific provider. Throws on failure. */
-async function callProviderOnce(providerId: string, prompt: string, systemPrompt: string, signal?: AbortSignal): Promise<string> {
+async function callProviderOnce(providerId: string, prompt: string, systemPrompt: string, signal?: AbortSignal): Promise<SubAgentResult> {
   const { providers } = useProviderStore.getState();
   const config = providers[providerId];
   if (!config || !config.enabled) throw new Error(`Provider ${providerId} is not configured.`);
@@ -56,8 +87,9 @@ async function callProviderOnce(providerId: string, prompt: string, systemPrompt
       signal,
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data: { content?: { type: string; text?: string }[] } = await res.json();
-    return data.content?.find(b => b.type === 'text')?.text ?? 'Sub-agent failed to respond.';
+    const data = await res.json() as { content?: { type: string; text?: string }[] };
+    const usage = extractUsage(data);
+    return { text: data.content?.find(b => b.type === 'text')?.text ?? 'Sub-agent failed to respond.', ...usage };
   }
 
   if (providerId === 'gemini') {
@@ -74,7 +106,8 @@ async function callProviderOnce(providerId: string, prompt: string, systemPrompt
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data: { candidates?: { content?: { parts?: { text?: string }[] } }[] } = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'Sub-agent failed to respond.';
+    const usage = extractUsage(data);
+    return { text: data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'Sub-agent failed to respond.', ...usage };
   }
 
   // OpenAI-compatible providers
@@ -97,8 +130,9 @@ async function callProviderOnce(providerId: string, prompt: string, systemPrompt
     signal
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || data.content || "Sub-agent failed to respond.";
+  const data = await res.json() as { choices?: { message?: { content?: string } }[]; content?: string };
+  const usage = extractUsage(data);
+  return { text: data.choices?.[0]?.message?.content || (data as { content?: string }).content || 'Sub-agent failed to respond.', ...usage };
 }
 
 export async function delegateTask(
@@ -133,9 +167,20 @@ export async function delegateTask(
     triedProviders.push(currentProvider);
     const callStart = performance.now();
     try {
-      const text = await callProviderOnce(currentProvider, prompt, systemPrompt, signal);
+      const result = await callProviderOnce(currentProvider, prompt, systemPrompt, signal);
       ProviderMonitor.recordSuccess(currentProvider, useProviderStore.getState().providers[currentProvider]?.model || '', Math.round(performance.now() - callStart));
-      return attribute(text);
+      // Sub-agent spend is real spend. Without this the Dashboard under-reports
+      // whenever GIA fans work out to Atlas and the rest — which is exactly
+      // the "sub-agents burn my tokens" case cost visibility is for.
+      const model = useProviderStore.getState().providers[currentProvider]?.model || '';
+      costTracker.record(
+        currentProvider,
+        model,
+        result.input,
+        result.output,
+        useGiaStore.getState().activeSessionId || 'unknown',
+      );
+      return attribute(result.text);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message.toLowerCase() : '';
       ProviderMonitor.recordFailure(currentProvider, useProviderStore.getState().providers[currentProvider]?.model || '', msg, Math.round(performance.now() - callStart));

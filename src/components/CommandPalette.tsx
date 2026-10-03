@@ -2,10 +2,11 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   MessageSquare, Search, Globe, Brain, Hand,
   FolderOpen, Download, Upload, Eraser, Terminal, Settings, Wrench,
-  MessageCircle, PenLine, BarChart3, ClipboardList, Wifi, StickyNote, Hammer
+  MessageCircle, PenLine, BarChart3, ClipboardList, Wifi, StickyNote, Hammer, EyeOff, Eye
 } from 'lucide-react';
 import { useGiaStore, type Module } from '../store/useGiaStore';
 import { exportBrainToFile, importBrainFromFile } from '../services/BrainExport';
+import { togglePresenterMode, presenterSupported } from '../services/PresenterMode';
 
 interface Action {
   id: string;
@@ -71,11 +72,16 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
     } },
     { id: 'clear-session', label: 'Clear Current Chat', description: 'Remove all messages from current session', icon: <Eraser {...iconStyle} />, category: 'Chat', execute: () => { const s = useGiaStore.getState(); const sid = s.activeSessionId; if (sid) { s.clearSession(sid); s.addNotification('Session cleared'); } onClose(); } },
     { id: 'mcp-servers', label: 'Manage MCP Servers', description: 'Configure and connect to MCP servers', icon: <Wifi {...iconStyle} />, category: 'System', execute: () => { useGiaStore.getState().setModule('settings'); onClose(); } },
+    { id: 'presenter-mode', label: 'Presenter Mode', description: 'Hide GIA for a screen share — restore from the tray', icon: <EyeOff {...iconStyle} />, category: 'System', execute: () => { void togglePresenterMode(); onClose(); } },
+    { id: 'jarvis-panel', label: 'What GIA Is Seeing', description: 'Live view of the orb\'s observations and where vision ran', icon: <Eye {...iconStyle} />, category: 'System', execute: () => { window.dispatchEvent(new CustomEvent('gia:jarvis-panel')); onClose(); } },
     { id: 'task-board', label: 'Open Task Board', description: 'View and manage your tasks', icon: <ClipboardList {...iconStyle} />, category: 'Co-Work', execute: () => { void onNavigate?.('task-board'); onClose(); } },
     { id: 'notes-panel', label: 'Open Notes', description: 'View and manage your notes', icon: <StickyNote {...iconStyle} />, category: 'Co-Work', execute: () => { void onNavigate?.('notes-panel'); onClose(); } },
   ];
 
   const visibleActions = actions.filter(a => {
+    // Presenter mode hides an OS window, so it is meaningless in a browser
+    // tab — offering it there would be a command that silently does nothing.
+    if (a.id === 'presenter-mode' && !presenterSupported()) return false;
     const mod = MODULE_COMMAND_IDS[a.id];
     return !mod || !hiddenModules.includes(mod);
   });
@@ -150,7 +156,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: 'var(--gia-text)' }}
           />
-          <kbd className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--gia-muted-2)' }}>
+          <kbd className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'var(--gia-overlay-2)', color: 'var(--gia-muted-2)' }}>
             ESC
           </kbd>
         </div>

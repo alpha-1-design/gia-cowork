@@ -78,7 +78,7 @@ export const DiffVisual: React.FC<{ data: Record<string, unknown> }> = ({ data }
           </button>
         ))}
       </div>
-      <div className="overflow-x-auto rounded-lg" style={{ background: '#0d0d14', maxHeight: expanded ? '600px' : '200px', overflowY: 'auto' }}>
+      <div className="overflow-x-auto rounded-lg" style={{ background: 'var(--gia-code-bg)', maxHeight: expanded ? '600px' : '200px', overflowY: 'auto' }}>
         <table className="w-full text-[10px] font-mono leading-relaxed">
           <tbody>
             {diffLines.slice(0, maxLines).map((line, i) => (

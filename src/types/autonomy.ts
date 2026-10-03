@@ -39,6 +39,13 @@ export interface PlanStep {
   result?: string;
   reflectionId?: string;
   assignedTool?: string;
+  /**
+   * When this step entered 'in_progress'. Without a per-step start time the
+   * watchdog has to fall back to the goal's `updated` timestamp, which any
+   * unrelated step change resets — so a genuinely hung step could never be
+   * detected.
+   */
+  startedAt?: number;
 }
 
 export interface Reflection {

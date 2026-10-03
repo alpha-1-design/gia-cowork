@@ -205,7 +205,7 @@ export const SocialSection: React.FC = () => {
                       placeholder={field.placeholder}
                       type={field.type || 'text'}
                       className="w-full text-[10px] px-2.5 py-1.5 rounded-lg outline-none mt-0.5"
-                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }}
+                      style={{ background: 'var(--gia-overlay-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }}
                     />
                   </div>
                 ))}
@@ -272,7 +272,7 @@ const TelegramChatIdInput: React.FC<{ bridge: typeof messagingBridge }> = ({ bri
           onChange={e => setChatId(e.target.value)}
           placeholder="Enter Telegram chat ID (e.g. -1001234567890)"
           className="flex-1 text-[10px] px-2.5 py-1.5 rounded-lg outline-none"
-          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }}
+          style={{ background: 'var(--gia-overlay-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }}
         />
         <button
           onClick={handleSave}

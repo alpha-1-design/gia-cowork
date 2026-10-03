@@ -115,7 +115,7 @@ export const ConnectorsSection: React.FC = () => {
                     placeholder={f.placeholder}
                     type={f.type}
                     className="flex-1 text-[10px] px-2.5 py-1.5 rounded-lg outline-none"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }}
+                    style={{ background: 'var(--gia-overlay-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }}
                     autoFocus={f === (c.fields || [])[0]}
                   />
                 ))}

@@ -240,7 +240,7 @@ export const EngineSheet: React.FC<EngineSheetProps> = ({ open, onClose }) => {
                 ) : (
                   <div className="relative px-4 pb-2">
                     {/* Timeline spine */}
-                    <div className="absolute left-[27px] top-2 bottom-2 w-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
+                    <div className="absolute left-[27px] top-2 bottom-2 w-px" style={{ background: 'var(--gia-overlay-2)' }} />
 
                     {consoleLogs.map((log, i) => {
                       const meta = sectionMeta[log.type];

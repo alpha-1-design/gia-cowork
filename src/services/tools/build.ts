@@ -52,6 +52,10 @@ const buildProject: Tool = {
         type: 'string',
         description: 'Main entry point or file to highlight in build output summary',
       },
+      theme: {
+        type: 'string',
+        description: 'Visual theme/direction for the app, e.g. "dark developer tool with violet accents", "warm editorial light theme". Applied consistently across every file.',
+      },
     },
     required: ['files'],
   },
@@ -65,6 +69,7 @@ const buildProject: Tool = {
       language: z.preprocess(normalizeLanguage, z.enum(['sh', 'python', 'js', 'cpp'])).default('sh'),
       output_filename: z.string().max(200).default('project.zip'),
       entry: z.string().max(500).optional(),
+      theme: z.string().max(500).optional(),
     });
 
     const parsed = schema.safeParse(args);
@@ -76,7 +81,7 @@ const buildProject: Tool = {
       };
     }
 
-    const { files, build_command, language, output_filename, entry } = parsed.data;
+    const { files, build_command, language, output_filename, entry, theme } = parsed.data;
     const outputName = output_filename.endsWith('.zip') ? output_filename : `${output_filename}.zip`;
 
     ctx?.onProgress?.(0.05, `Creating project with ${files.length} files...`);
@@ -139,6 +144,26 @@ const buildProject: Tool = {
       const logPath = 'build-output.log';
       zip.file(logPath, buildOutput);
     }
+
+    // Ship a README so the delivered bundle explains itself, and records the
+    // theme choice so the direction is reproducible.
+    const readme = [
+      `# ${outputName.replace(/\.zip$/i, '')}`,
+      '',
+      `Built by GIA Cowork${theme ? ` — theme: **${theme}**` : ''}`,
+      '',
+      `**Files:** ${files.length}${entry ? `  \n**Entry:** \`${entry}\`` : ''}`,
+      build_command ? `**Build:** \`${build_command}\` — ${buildSuccess ? 'passed' : 'FAILED (see build-output.log)'}` : '',
+      '',
+      '## Run it',
+      '',
+      '```bash',
+      'npm install',
+      'npm run dev',
+      '```',
+      '',
+    ].filter(Boolean).join('\n');
+    zip.file('README.md', readme);
 
     const summary = [
       `Project: ${outputName}`,

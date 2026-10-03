@@ -107,6 +107,45 @@ describe('buildGiaSystem', () => {
     expect(result).toContain('GIA');
   });
 
+  it('tells the model to work inside the active session worktree', () => {
+    // The anti-theater check. A per-session worktree that never reaches the
+    // prompt means GIA still edits the main checkout while the sidebar shows a
+    // reassuring branch name — the exact collision isolation was meant to stop.
+    mockGetState.gia = {
+      ...mockGiaState,
+      sessions: [{
+        id: 's1', title: 'Fix login', messages: [], createdAt: 1, updatedAt: 1, currentBranchId: 'b1',
+        worktree: { path: '/repo/.gia/worktrees/fix-login-abcd', branch: 'gia/fix-login-abcd', repoRoot: '/repo' },
+      }],
+      activeSessionId: 's1',
+    };
+    const result = buildGiaSystem();
+    expect(result).toContain('/repo/.gia/worktrees/fix-login-abcd');
+    expect(result).toContain('gia/fix-login-abcd');
+  });
+
+  it('says nothing about worktrees when the session is not isolated', () => {
+    mockGetState.gia = {
+      ...mockGiaState,
+      sessions: [{ id: 's1', title: 'Fix login', messages: [], createdAt: 1, updatedAt: 1, currentBranchId: 'b1' }],
+      activeSessionId: 's1',
+    };
+    expect(buildGiaSystem()).not.toContain('.gia/worktrees');
+  });
+
+  it('ignores a worktree belonging to a different session', () => {
+    mockGetState.gia = {
+      ...mockGiaState,
+      sessions: [
+        { id: 's1', title: 'a', messages: [], createdAt: 1, updatedAt: 1, currentBranchId: 'b1' },
+        { id: 's2', title: 'b', messages: [], createdAt: 1, updatedAt: 1, currentBranchId: 'b1',
+          worktree: { path: '/repo/.gia/worktrees/other', branch: 'gia/other', repoRoot: '/repo' } },
+      ],
+      activeSessionId: 's1',
+    };
+    expect(buildGiaSystem()).not.toContain('.gia/worktrees');
+  });
+
   it('includes tool table with web_search', () => {
     const result = buildGiaSystem();
     expect(result).toContain('web_search');

@@ -153,7 +153,7 @@ export const HuggingFaceBrowser: React.FC = () => {
             <span className="truncate">{progress.file || 'Downloading…'}</span>
             <span>{progress.percent}%</span>
           </div>
-          <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'var(--gia-overlay-2)' }}>
             <div
               className="h-full rounded-full"
               style={{ width: `${progress.percent}%`, background: 'linear-gradient(90deg, #22c55e, #34d399)' }}

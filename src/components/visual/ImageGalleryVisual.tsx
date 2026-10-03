@@ -41,8 +41,8 @@ export const ImageGalleryVisual: React.FC<{ data: Record<string, unknown> }> = (
             <img src={images[viewerIdx].url || String(images[viewerIdx])} alt="" className="max-w-full max-h-[85vh] rounded-xl" style={{ border: '1px solid var(--gia-border)' }} />
             <div className="flex items-center justify-between mt-2">
               <div className="flex gap-2">
-                <button onClick={() => setViewerIdx(i => Math.max(0, i! - 1))} disabled={viewerIdx === 0} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.1)', color: viewerIdx === 0 ? 'var(--gia-muted-2)' : 'white' }}>← Prev</button>
-                <button onClick={() => setViewerIdx(i => Math.min(images.length - 1, i! + 1))} disabled={viewerIdx >= images.length - 1} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.1)', color: viewerIdx >= images.length - 1 ? 'var(--gia-muted-2)' : 'white' }}>Next →</button>
+                <button onClick={() => setViewerIdx(i => Math.max(0, i! - 1))} disabled={viewerIdx === 0} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'var(--gia-overlay-3)', color: viewerIdx === 0 ? 'var(--gia-muted-2)' : 'white' }}>← Prev</button>
+                <button onClick={() => setViewerIdx(i => Math.min(images.length - 1, i! + 1))} disabled={viewerIdx >= images.length - 1} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'var(--gia-overlay-3)', color: viewerIdx >= images.length - 1 ? 'var(--gia-muted-2)' : 'white' }}>Next →</button>
               </div>
               <span className="text-[10px]" style={{ color: 'var(--gia-muted-2)' }}>{viewerIdx + 1} / {images.length}</span>
             </div>

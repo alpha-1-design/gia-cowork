@@ -46,15 +46,15 @@ export const GatewaySection: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-3 gap-2 mb-3">
-          <div className="p-2 rounded-lg text-center" style={{ background: 'rgba(255,255,255,0.03)' }}>
+          <div className="p-2 rounded-lg text-center" style={{ background: 'var(--gia-overlay)' }}>
             <div className="text-lg font-bold" style={{ color: 'var(--gia-text)' }}>{stats.enabledRoutes}</div>
             <div className="text-[9px]" style={{ color: 'var(--gia-muted)' }}>Active</div>
           </div>
-          <div className="p-2 rounded-lg text-center" style={{ background: 'rgba(255,255,255,0.03)' }}>
+          <div className="p-2 rounded-lg text-center" style={{ background: 'var(--gia-overlay)' }}>
             <div className="text-lg font-bold" style={{ color: 'var(--gia-text)' }}>{stats.totalCalls}</div>
             <div className="text-[9px]" style={{ color: 'var(--gia-muted)' }}>Total Calls</div>
           </div>
-          <div className="p-2 rounded-lg text-center" style={{ background: 'rgba(255,255,255,0.03)' }}>
+          <div className="p-2 rounded-lg text-center" style={{ background: 'var(--gia-overlay)' }}>
             <div className="text-lg font-bold" style={{ color: 'var(--gia-text)' }}>{stats.successRate}%</div>
             <div className="text-[9px]" style={{ color: 'var(--gia-muted)' }}>Success Rate</div>
           </div>
@@ -70,7 +70,7 @@ export const GatewaySection: React.FC = () => {
         <div className="flex items-center gap-2 mb-3">
           <Route size={16} style={{ color: '#f59e0b' }} />
           <span className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Routes</span>
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--gia-muted)' }}>{routes.length}</span>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--gia-overlay-2)', color: 'var(--gia-muted)' }}>{routes.length}</span>
         </div>
 
         {routes.length === 0 ? (

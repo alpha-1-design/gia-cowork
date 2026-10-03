@@ -50,7 +50,7 @@ export const PluginSection: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium" style={{ color: 'var(--gia-text)' }}>{plugin.name}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--gia-muted-2)' }}>v{plugin.version}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--gia-overlay-2)', color: 'var(--gia-muted-2)' }}>v{plugin.version}</span>
                 </div>
                 <p className="text-[10px] mt-0.5" style={{ color: 'var(--gia-muted)' }}>{plugin.description}</p>
               </div>

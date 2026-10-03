@@ -3,11 +3,12 @@ import { useShallow } from 'zustand/react/shallow';
 import {
   BarChart3, MessageCircle, Wrench, AlertTriangle, Clock,
   Brain, Zap, Activity, TrendingUp, Cpu, Terminal,
-  ChevronDown, ChevronUp, ChevronLeft, Calendar,
+  ChevronDown, ChevronUp, ChevronLeft, Calendar, DollarSign, HardDrive,
 } from 'lucide-react';
 import { useGiaStore, type Message } from '../store/useGiaStore';
 import AnalyticsService from '../services/AnalyticsService';
 import AnalyticsTracker from '../services/AnalyticsTracker';
+import { costTracker, formatCost, isLocalProvider } from '../services/CostTracker';
 
 interface FlatMsg {
   role: string;
@@ -51,6 +52,15 @@ export const DashboardModule: React.FC<{ onBack?: () => void }> = ({ onBack }) =
   const [showAllTools, setShowAllTools] = useState(false);
   const [showAllErrors, setShowAllErrors] = useState(false);
   const [showAllRaw, setShowAllRaw] = useState(false);
+
+  // Cost ledger — the thing every competitor hides. Recomputed with the
+  // session list so each completed generation refreshes the panel.
+  const spend = useMemo(() => costTracker.getSummary(), [sessions]);
+  const spendToday = useMemo(() => costTracker.getTodayCost(), [sessions]);
+  const maxModelCost = spend.byModel.length > 0 ? spend.byModel[0].cost : 0;
+  const localSharePct = spend.totalTokens > 0
+    ? Math.round((spend.localTokens / spend.totalTokens) * 100)
+    : 0;
 
   const analytics = useMemo(() => {
     const summary = AnalyticsService.getSummary();
@@ -221,6 +231,86 @@ export const DashboardModule: React.FC<{ onBack?: () => void }> = ({ onBack }) =
         ))}
       </div>
 
+      <div className="gia-card p-4" style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderColor: 'rgba(52,211,153,0.2)' }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <DollarSign size={14} style={{ color: '#34d399' }} />
+            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#34d399' }}>Spend</span>
+          </div>
+          <button
+            onClick={() => { if (confirm('Clear all spend history?')) costTracker.clear(); }}
+            className="text-[9px]"
+            style={{ color: 'var(--gia-muted-2)' }}
+            title="Clear spend history"
+          >
+            Reset
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <span className="text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>Total</span>
+            <p className="text-base font-bold" style={{ color: spend.totalCost > 0 ? '#34d399' : 'var(--gia-text)' }}>
+              {formatCost(spend.totalCost)}
+            </p>
+          </div>
+          <div>
+            <span className="text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>Last 24h</span>
+            <p className="text-base font-bold" style={{ color: spendToday > 0 ? '#f59e0b' : 'var(--gia-text)' }}>
+              {formatCost(spendToday)}
+            </p>
+          </div>
+          <div>
+            <span className="text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>On-device</span>
+            <p className="text-base font-bold" style={{ color: localSharePct > 0 ? '#3b82f6' : 'var(--gia-text)' }}>
+              {localSharePct}%
+            </p>
+          </div>
+        </div>
+
+        {spend.byModel.length === 0 ? (
+          <p className="text-[10px] text-center py-2" style={{ color: 'var(--gia-muted-2)' }}>
+            No billable usage yet. Local models always cost $0.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {spend.byModel.slice(0, 8).map(m => {
+              const pct = maxModelCost > 0 ? Math.round((m.cost / maxModelCost) * 100) : 0;
+              const local = isLocalProvider(m.provider);
+              return (
+                <div key={`${m.provider}:${m.model}`} className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] font-medium truncate" style={{ color: 'var(--gia-text)' }}>
+                        {local && <HardDrive size={8} style={{ display: 'inline', marginRight: 3, color: '#3b82f6' }} />}
+                        {m.model.replace(/^.*\//, '')}
+                      </span>
+                      <span className="text-[9px] font-mono" style={{ color: local ? '#3b82f6' : '#34d399' }}>
+                        {formatCost(m.cost)}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--gia-overlay-2)' }}>
+                      <div className="h-full rounded-full" style={{
+                        width: `${local ? 100 : pct}%`,
+                        background: local ? 'linear-gradient(90deg, #3b82f6, #60a5fa)' : 'linear-gradient(90deg, #34d399, #10b981)',
+                        opacity: local ? 0.5 : 1,
+                      }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {spend.localTokens > 0 && (
+          <p className="text-[9px] leading-relaxed" style={{ color: 'var(--gia-muted-2)' }}>
+            <HardDrive size={8} style={{ display: 'inline', marginRight: 3 }} />
+            {spend.localTokens.toLocaleString()} tokens ran on your hardware across {spend.localCalls} call{spend.localCalls === 1 ? '' : 's'} — $0.00 billed.
+          </p>
+        )}
+      </div>
+
       <div>
         <div className="flex items-center gap-2 mb-3 px-1">
           <TrendingUp size={14} style={{ color: '#34d399' }} />
@@ -264,7 +354,7 @@ export const DashboardModule: React.FC<{ onBack?: () => void }> = ({ onBack }) =
                       <span className="text-[10px] font-medium truncate" style={{ color: 'var(--gia-text)' }}>{tool.name}</span>
                       <span className="text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>{tool.total}x</span>
                     </div>
-                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--gia-overlay-2)' }}>
                       <div className="h-full rounded-full" style={{
                         width: `${pct}%`,
                         background: 'linear-gradient(90deg, #f59e0b, #fbbf24)',
@@ -313,7 +403,7 @@ export const DashboardModule: React.FC<{ onBack?: () => void }> = ({ onBack }) =
                           {tool.executed}/{tool.claimed} executed
                         </span>
                       </div>
-                      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--gia-overlay-2)' }}>
                         <div className="h-full rounded-full" style={{
                           width: `${pctClaimed}%`,
                           background: pctClaimed < 80 ? 'linear-gradient(90deg, #f87171, #f59e0b)' : 'linear-gradient(90deg, #34d399, #10b981)',

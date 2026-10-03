@@ -239,7 +239,7 @@ export const WhatsAppBridgeSection: React.FC = () => {
           <button
             onClick={() => void refresh()}
             className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-lg"
-            style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--gia-muted)' }}
+            style={{ background: 'var(--gia-overlay)', color: 'var(--gia-muted)' }}
           >
             <RefreshCw size={10} /> Refresh
           </button>

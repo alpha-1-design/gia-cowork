@@ -1,6 +1,8 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Send, Loader2, Square, Mic, MicOff } from 'lucide-react';
 import { useGiaStore, IntentState } from '../store/useGiaStore';
+import { SlashCommandMenu, isCommandNameActive } from './SlashCommandMenu';
+import { getCommandSuggestions, getCommandByName, type CommandSpec } from '../services/SlashCommands';
 
 
 interface AmbientInputProps {
@@ -42,6 +44,29 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Slash-command autocomplete. The menu is open only while the composer
+  // holds a bare command name, so `/note my thing` does not get a popup
+  // fighting the text the user is typing.
+  const [commandIndex, setCommandIndex] = useState(0);
+  const commandMenuOpen = isCommandNameActive(value);
+  const commandMatches = useMemo(
+    () => (commandMenuOpen ? getCommandSuggestions(value.trimStart()) : []),
+    [commandMenuOpen, value],
+  );
+  const commandActive = commandMenuOpen && commandMatches.length > 0;
+  // When the text is already an exact command (the user typed `/help`, not a
+  // prefix of it), Enter should run it rather than complete it — otherwise
+  // completing a command you already finished by typing is an extra keypress
+  // that looks like the app ignored you.
+  const commandIsExact = commandMenuOpen && getCommandByName(value.trimStart()) !== undefined;
+
+  const selectCommand = useCallback((c: CommandSpec) => {
+    // Keep the space: a command with no argument can be sent straight away,
+    // and one that takes arguments needs the cursor already in place.
+    onChange(`/${c.name} `);
+    setCommandIndex(0);
+  }, [onChange]);
+
   const color = STATE_GLOW[intentState] ?? STATE_GLOW.idle;
   const isActive = intentState !== 'idle' || value.length > 0;
 
@@ -65,6 +90,39 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (justPastedRef.current) return;
+
+    // While a command name is being typed the arrow keys drive the menu
+    // instead of moving a text cursor that has nothing to move.
+    if (commandActive) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setCommandIndex(i => (i + 1) % commandMatches.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setCommandIndex(i => (i - 1 + commandMatches.length) % commandMatches.length);
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        selectCommand(commandMatches[commandIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        // Escape dismisses the menu without clearing what was typed — the
+        // user may want to keep the text and just get the popup out of the way.
+        e.preventDefault();
+        onChange('');
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey && !commandIsExact) {
+        e.preventDefault();
+        selectCommand(commandMatches[commandIndex]);
+        return;
+      }
+    }
+
     const isCmdEnter = e.key === 'Enter' && (e.metaKey || e.ctrlKey);
     const isPlainEnter = e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey;
     if (isPlainEnter || isCmdEnter) {
@@ -76,7 +134,7 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
 
   const borderColor = isActive
     ? `rgba(${color}, 0.35)`
-    : 'rgba(255,255,255,0.08)';
+    : 'var(--gia-overlay-2)';
 
   const boxShadow = isLoading
     ? `0 0 0 2px rgba(${color}, 0.2), 0 0 20px rgba(${color}, 0.15)`
@@ -86,7 +144,10 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
 
   const sharedInputProps = {
     value,
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value),
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      onChange(e.target.value);
+      setCommandIndex(0);
+    },
     onKeyDown: handleKeyDown,
     onPasteCapture: handlePasteCapture,
     placeholder,
@@ -97,7 +158,7 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
     spellCheck: true,
     inputMode: 'text' as const,
     style: {
-      background: 'rgba(255,255,255,0.04)',
+      background: 'var(--gia-overlay)',
       border: `1px solid ${borderColor}`,
       boxShadow,
       color: 'var(--gia-text)',
@@ -119,6 +180,13 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
       />
 
       <div className="relative flex items-end gap-2">
+        <SlashCommandMenu
+          input={value}
+          activeIndex={commandIndex}
+          onHover={setCommandIndex}
+          onSelect={selectCommand}
+          footer="↑↓ to navigate · Tab to complete · Enter to run"
+        />
         {prefix && (
           <div className="absolute left-3 bottom-2.5 z-10 flex items-center">
             {prefix}
@@ -180,7 +248,7 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
               ? 'rgba(239, 68, 68, 0.8)'
               : value.trim()
               ? `rgb(${color})`
-              : 'rgba(255,255,255,0.08)',
+              : 'var(--gia-overlay-2)',
             transform: value.trim() || isLoading ? 'scale(1)' : 'scale(0.85)',
           }}
         >

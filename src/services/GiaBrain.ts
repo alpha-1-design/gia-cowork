@@ -8,6 +8,7 @@ import { extractMemories } from './brain/memoryExtractor';
 import PluginManager from './PluginManager';
 import ResponseCache from './ResponseCache';
 import AnalyticsTracker from './AnalyticsTracker';
+import { costTracker } from './CostTracker';
 import ProviderService from './ProviderService';
 import ToolExecutionService from './ToolExecutionService';
 import ErrorHandlingService from './ErrorHandlingService';
@@ -109,6 +110,17 @@ class GiaBrain {
         }
         if (res.tokenUsage?.total) {
           useProviderStore.getState().deductTokens(effectiveProvider, res.tokenUsage.total);
+        }
+        // Single accounting choke point: every completed generation lands
+        // here, so no provider path can bypass spend tracking.
+        if (res.tokenUsage) {
+          costTracker.record(
+            effectiveProvider,
+            finalModel,
+            res.tokenUsage.input || 0,
+            res.tokenUsage.output || 0,
+            useGiaStore.getState().activeSessionId || 'unknown',
+          );
         }
         const finalResponse = await PluginManager.runAfterGenerate({ text, provider: effectiveProvider, model: finalModel });
         return { ...finalResponse, provider: effectiveProvider, sources: sourcesAcc.length > 0 ? sourcesAcc : undefined, finishReason: res.finishReason, wasTruncated: res.wasTruncated, tokenUsage: res.tokenUsage };

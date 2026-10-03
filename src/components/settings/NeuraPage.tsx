@@ -728,8 +728,8 @@ export const NeuraPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
           {showSearch && (
             <div className="absolute top-0 left-0 right-0 p-3 z-10">
-              <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(14,14,20,0.96)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 12px 48px rgba(0,0,0,0.5)' }}>
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+              <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(14,14,20,0.96)', border: '1px solid var(--gia-overlay-2)', boxShadow: '0 12px 48px rgba(0,0,0,0.5)' }}>
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b" style={{ borderColor: 'var(--gia-overlay)' }}>
                   <Search size={13} style={{ color: 'rgba(148,163,184,0.5)' }} />
                   <input
                     ref={searchRef}

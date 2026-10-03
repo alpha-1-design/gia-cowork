@@ -1,6 +1,6 @@
 export type ProtocolImpact = 'read' | 'write' | 'destructive' | 'network' | 'location' | 'notification' | 'execution';
 
-export type ProtocolState = 'proposed' | 'confirmed' | 'executing' | 'completed' | 'failed' | 'rejected' | 'modified';
+export type ProtocolState = 'proposed' | 'confirmed' | 'executing' | 'completed' | 'failed' | 'rejected';
 
 export type ProtocolType =
   | 'web_search'
@@ -45,9 +45,8 @@ export interface ProtocolProposal {
 }
 
 export interface ProtocolAction {
-  type: 'confirm' | 'reject' | 'modify';
+  type: 'confirm' | 'reject';
   protocolId: string;
-  modifiedArgs?: Record<string, unknown>;
   timestamp: number;
 }
 

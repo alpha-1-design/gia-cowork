@@ -108,7 +108,7 @@ export const NexusPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               className="rounded-xl overflow-hidden transition-all"
               style={{
                 background: isOn ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.15)',
-                border: `1px solid ${isOn ? `${agent.color}15` : 'rgba(255,255,255,0.03)'}`,
+                border: `1px solid ${isOn ? `${agent.color}15` : 'var(--gia-overlay)'}`,
                 opacity: isOn ? 1 : 0.4,
               }}
             >
@@ -136,8 +136,8 @@ export const NexusPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   onClick={() => setEnabled(p => ({ ...p, [agent.name]: !isOn }))}
                   className="w-10 h-6 rounded-full relative shrink-0 transition-all tap-feedback"
                   style={{
-                    background: isOn ? agent.color : 'rgba(255,255,255,0.08)',
-                    border: `1px solid ${isOn ? 'transparent' : 'rgba(255,255,255,0.1)'}`,
+                    background: isOn ? agent.color : 'var(--gia-overlay-2)',
+                    border: `1px solid ${isOn ? 'transparent' : 'var(--gia-overlay-3)'}`,
                   }}
                 >
                   <div
@@ -178,15 +178,15 @@ export const NexusPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <div className="p-4 space-y-3">
               <div>
                 <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--gia-muted-2)' }}>Name</p>
-                <input value={customName} onChange={e => setCustomName(e.target.value)} placeholder="e.g. Echo" className="w-full bg-transparent text-[13px] px-3 py-2 rounded-lg outline-none" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }} />
+                <input value={customName} onChange={e => setCustomName(e.target.value)} placeholder="e.g. Echo" className="w-full bg-transparent text-[13px] px-3 py-2 rounded-lg outline-none" style={{ background: 'var(--gia-overlay)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }} />
               </div>
               <div>
                 <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--gia-muted-2)' }}>Role</p>
-                <input value={customRole} onChange={e => setCustomRole(e.target.value)} placeholder="e.g. Debugger" className="w-full bg-transparent text-[13px] px-3 py-2 rounded-lg outline-none" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }} />
+                <input value={customRole} onChange={e => setCustomRole(e.target.value)} placeholder="e.g. Debugger" className="w-full bg-transparent text-[13px] px-3 py-2 rounded-lg outline-none" style={{ background: 'var(--gia-overlay)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }} />
               </div>
               <div>
                 <p className="text-[9px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--gia-muted-2)' }}>Thinking Style</p>
-                <textarea value={customStyle} onChange={e => setCustomStyle(e.target.value)} placeholder="Describe how this agent thinks..." rows={2} className="w-full bg-transparent text-[13px] px-3 py-2 rounded-lg outline-none resize-none" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }} />
+                <textarea value={customStyle} onChange={e => setCustomStyle(e.target.value)} placeholder="Describe how this agent thinks..." rows={2} className="w-full bg-transparent text-[13px] px-3 py-2 rounded-lg outline-none resize-none" style={{ background: 'var(--gia-overlay)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }} />
               </div>
               <div className="flex items-center gap-3">
                 <div>

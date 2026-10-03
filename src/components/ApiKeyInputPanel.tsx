@@ -95,7 +95,7 @@ const ApiKeyInputPanel: React.FC = () => {
                 className="w-full px-3 py-2 rounded-xl text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 style={{
                   background: 'var(--gia-surface-2)',
-                  border: '1px solid var(--gia-border, rgba(255,255,255,0.1))',
+                  border: '1px solid var(--gia-border, var(--gia-overlay-3))',
                 }}
                 autoFocus
                 onKeyDown={(e) => { if (e.key === 'Enter' && !saving) handleSave(); }}
@@ -122,7 +122,7 @@ const ApiKeyInputPanel: React.FC = () => {
                   onClick={handleCancel}
                   disabled={saving}
                   className="px-4 py-2 rounded-xl text-[12px] font-medium transition-all active:scale-95 disabled:opacity-40"
-                  style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--gia-muted)' }}
+                  style={{ background: 'var(--gia-overlay-2)', color: 'var(--gia-muted)' }}
                 >
                   Cancel
                 </button>

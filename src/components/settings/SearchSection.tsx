@@ -95,7 +95,7 @@ export const SearchSection: React.FC = () => {
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all"
                 style={{
                   background: activeSearchProvider === 'none' ? 'rgba(113,113,122,0.08)' : 'rgba(255,255,255,0.02)',
-                  border: `1px solid ${activeSearchProvider === 'none' ? 'rgba(113,113,122,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                  border: `1px solid ${activeSearchProvider === 'none' ? 'rgba(113,113,122,0.2)' : 'var(--gia-overlay)'}`,
                 }}
                 onClick={() => setActiveSearchProvider('none')}
               >
@@ -119,7 +119,7 @@ export const SearchSection: React.FC = () => {
               className="rounded-xl px-3 py-2.5"
               style={{
                 background: active ? 'rgba(16,185,129,0.04)' : 'rgba(255,255,255,0.02)',
-                border: `1px solid ${active ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)'}`,
+                border: `1px solid ${active ? 'rgba(16,185,129,0.12)' : 'var(--gia-overlay)'}`,
               }}
             >
               <div className="flex items-center gap-3 mb-2">
@@ -173,7 +173,7 @@ export const SearchSection: React.FC = () => {
                     onClick={() => setActiveSearchProvider(id as SearchProviderId)}
                     className="text-[8px] font-medium px-2 py-1 rounded-lg transition-all"
                     style={{
-                      background: active ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.04)',
+                      background: active ? 'rgba(16,185,129,0.12)' : 'var(--gia-overlay)',
                       color: active ? '#34d399' : 'var(--gia-muted)',
                     }}
                   >

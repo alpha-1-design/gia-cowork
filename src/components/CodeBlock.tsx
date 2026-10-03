@@ -114,7 +114,7 @@ const CodeBlock: React.FC<Props> = ({ lang, code, showRun = true }) => {
         <div className="border-t" style={{ borderColor: 'var(--gia-border)' }}>
           {/* Output */}
           {result.output && (
-            <div className="p-3" style={{ background: '#0d0d14' }}>
+            <div className="p-3" style={{ background: 'var(--gia-code-bg)' }}>
               <div className="flex items-center gap-1.5 mb-1.5">
                 <Play size={9} style={{ color: '#34d399' }} />
                 <span className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: '#34d399' }}>Output</span>
@@ -126,7 +126,7 @@ const CodeBlock: React.FC<Props> = ({ lang, code, showRun = true }) => {
           )}
           {/* Error */}
           {result.error && (
-            <div className="p-3" style={{ background: '#0d0d14', borderTop: '1px solid rgba(239,68,68,0.15)' }}>
+            <div className="p-3" style={{ background: 'var(--gia-code-bg)', borderTop: '1px solid rgba(239,68,68,0.15)' }}>
               <div className="flex items-center gap-1.5 mb-1.5">
                 <AlertCircle size={9} style={{ color: '#f87171' }} />
                 <span className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: '#f87171' }}>Error (Exit {result.exitCode})</span>

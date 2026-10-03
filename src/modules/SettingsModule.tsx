@@ -5,9 +5,10 @@ import {
   Terminal, User, Save, ChevronRight,
   Zap, Smartphone, Sun, Moon, Sparkles,
   UserCircle, PlugZap, Battery, Cpu,   Puzzle, Info,
-  Network, Bot, Activity, Download, CheckCircle, XCircle, Shield, Globe, Brain,
+  Network, Bot, Activity, Download, CheckCircle, XCircle, Shield, Globe, Brain, Undo2, Braces,
 } from 'lucide-react';
 import { useGiaStore } from '../store/useGiaStore';
+import { DESKTOP_THEMES, getDesktopTheme } from '../config/themes';
 import { useProviderStore } from '../store/useProviderStore';
 import { isNativePlatform } from '../utils/helpers';
 import { updateService, formatSize } from '../services/UpdateService';
@@ -23,16 +24,23 @@ import { AppExtensionsPage } from '../components/settings/AppExtensionsPage';
 import { AboutPage } from '../components/settings/AboutPage';
 import { NeuraPage } from '../components/settings/NeuraPage';
 import { NexusPage } from '../components/settings/NexusPage';
-import { MicalPage } from '../components/settings/MicalPage';
+import { SecuritySandboxPage } from '../components/settings/SecuritySandboxPage';
 import { TerminalPage } from '../components/settings/TerminalPage';
 import { UnimindPage } from '../components/settings/UnimindPage';
+import UndoPage from '../components/settings/UndoPage';
+import { AuthoredSkillsSection } from '../components/settings/AuthoredSkillsSection';
+import { SelfImprovementSection } from '../components/settings/SelfImprovementSection';
+import ConfigEditorPage from '../components/settings/ConfigEditorPage';
+import { PresenterModeSection } from '../components/settings/PresenterModeSection';
+import { ProjectNotesSection } from '../components/settings/ProjectNotesSection';
 import { SkillsMarketplaceUI } from '../components/settings/SkillsMarketplaceSection';
 import { DashboardModule } from './DashboardModule';
 import { providerRegistry } from '../services/ProviderRegistry';
 import { getProviderCapabilities, CAPABILITY_LABELS } from '../services/providers/capabilities';
 import type { ProviderCapabilities } from '../services/providers/capabilities';
+import { fileSnapshots } from '../services/FileSnapshots';
 
-type SettingsPage = 'main' | 'profile-identity' | 'connections' | 'system' | 'local-ai' | 'app-extensions' | 'about' | 'dashboard' | 'neura' | 'nexus' | 'mical' | 'skills-marketplace' | 'sandbox' | 'mcp' | 'knowledge' | 'terminal' | 'unimind';
+type SettingsPage = 'main' | 'profile-identity' | 'connections' | 'system' | 'local-ai' | 'app-extensions' | 'about' | 'dashboard' | 'neura' | 'nexus' | 'security' | 'skills-marketplace' | 'sandbox' | 'mcp' | 'knowledge' | 'terminal' | 'unimind' | 'undo' | 'config';
 
 const CATEGORIES: { id: SettingsPage; icon: React.ReactNode; label: string; desc: string; sections: string; color: string }[] = [
   { id: 'profile-identity', icon: <UserCircle size={20} />, label: 'Profile & Identity', desc: 'Your profile, GIA identity, skills, memory & brain export', sections: '5 sections', color: '#a855f7' },
@@ -72,6 +80,12 @@ const SettingsModule: React.FC = () => {
     }
   }, [settingsPage]);
   const [editProfile, setEditProfile] = useState(false);
+  // Only surface the Undo card when GIA has actually changed something —
+  // a permanently visible "0 changes" row is just noise.
+  const [undoableCount, setUndoableCount] = useState(0);
+  useEffect(() => {
+    setUndoableCount(fileSnapshots.listPending().length);
+  }, [settingsPage]);
   const [name, setProfileName] = useState(userProfile.name);
   const [bio, setBio] = useState(userProfile.bio);
   const [goals, setGoals] = useState(userProfile.goals);
@@ -134,7 +148,7 @@ const SettingsModule: React.FC = () => {
   if (settingsPage === 'dashboard') return <DashboardModule onBack={() => setSettingsPage('main')} />;
   if (settingsPage === 'neura') return <NeuraPage onBack={() => setSettingsPage('main')} />;
   if (settingsPage === 'nexus') return <NexusPage onBack={() => setSettingsPage('main')} />;
-  if (settingsPage === 'mical' || settingsPage === 'sandbox') return <MicalPage onBack={() => setSettingsPage('main')} />;
+  if (settingsPage === 'security' || settingsPage === 'sandbox') return <SecuritySandboxPage onBack={() => setSettingsPage('main')} />;
   if (settingsPage === 'skills-marketplace') return (
     <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--gia-bg)', padding: '20px 16px', gap: '16px' }}>
       <div className="flex items-center gap-2">
@@ -151,6 +165,8 @@ const SettingsModule: React.FC = () => {
   if (settingsPage === 'knowledge') return <KnowledgePage onBack={() => setSettingsPage('main')} />;
   if (settingsPage === 'terminal') return <TerminalPage onBack={() => setSettingsPage('main')} />;
   if (settingsPage === 'unimind') return <UnimindPage onBack={() => setSettingsPage('main')} />;
+  if (settingsPage === 'undo') return <UndoPage onBack={() => setSettingsPage('main')} />;
+  if (settingsPage === 'config') return <ConfigEditorPage onBack={() => setSettingsPage('main')} />;
 
   // ── Main page ────────────────────────────────────────────
   return (
@@ -305,7 +321,7 @@ const SettingsModule: React.FC = () => {
         style={{ transition: 'border-color 0.2s' }}
       >
         <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-          style={{ background: '#0d0d14', border: '1px solid rgba(16,185,129,0.2)' }}>
+          style={{ background: 'var(--gia-code-bg)', border: '1px solid rgba(16,185,129,0.2)' }}>
           <Terminal size={18} style={{ color: '#34d399' }} />
         </div>
         <div className="flex-1">
@@ -316,7 +332,7 @@ const SettingsModule: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <span className="gia-pill" style={{
-            background: connectedCount > 0 ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.05)',
+            background: connectedCount > 0 ? 'rgba(16,185,129,0.1)' : 'var(--gia-overlay-2)',
             color: connectedCount > 0 ? '#34d399' : 'var(--gia-muted)',
             border: `1px solid ${connectedCount > 0 ? 'rgba(16,185,129,0.2)' : 'var(--gia-border)'}`,
           }}>
@@ -330,7 +346,7 @@ const SettingsModule: React.FC = () => {
       <button onClick={() => setSettingsPage('terminal')} className="gia-card p-4 flex items-center gap-4 w-full text-left tap-feedback"
         style={{ transition: 'border-color 0.2s' }}>
         <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-          style={{ background: '#0d0d14', border: '1px solid rgba(168,85,247,0.25)' }}>
+          style={{ background: 'var(--gia-code-bg)', border: '1px solid rgba(168,85,247,0.25)' }}>
           <Terminal size={18} style={{ color: '#a855f7' }} />
         </div>
         <div className="flex-1">
@@ -355,6 +371,50 @@ const SettingsModule: React.FC = () => {
         </div>
         <ChevronRight size={16} style={{ color: 'var(--gia-muted)' }} />
       </button>
+
+      {/* Self-improvement ("night shift") + learned skills */}
+      <SelfImprovementSection />
+      <AuthoredSkillsSection />
+      <PresenterModeSection />
+      <ProjectNotesSection />
+
+      {/* Editable JSON config — every setting in one document */}
+      <button onClick={() => setSettingsPage('config')}
+        className="gia-card p-4 flex items-center gap-4 w-full text-left tap-feedback"
+        style={{ transition: 'border-color 0.2s' }}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.25)' }}>
+          <Braces size={18} style={{ color: '#a855f7' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Configuration</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>
+            Edit every setting as JSON — applies live
+          </p>
+        </div>
+        <ChevronRight size={14} style={{ color: 'var(--gia-muted)' }} />
+      </button>
+
+      {/* Undo file changes — only when there's something to restore */}
+      {undoableCount > 0 && (
+        <button onClick={() => setSettingsPage('undo')}
+          className="gia-card p-4 flex items-center gap-4 w-full text-left tap-feedback"
+          style={{ borderColor: 'rgba(245,158,11,0.3)', transition: 'border-color 0.2s' }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)' }}>
+            <Undo2 size={18} style={{ color: '#f59e0b' }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Undo File Changes</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>
+              Restore {undoableCount} file{undoableCount === 1 ? '' : 's'} GIA overwrote
+            </p>
+          </div>
+          <span className="gia-pill shrink-0" style={{
+            background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)',
+          }}>{undoableCount}</span>
+        </button>
+      )}
 
       {/* Provider Capability Matrix */}
       <div className="gia-card p-4">
@@ -413,26 +473,35 @@ const SettingsModule: React.FC = () => {
             </div>
             <div>
               <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Theme</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>{theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : theme === 'obsidian-aurora' ? 'Obsidian Aurora' : 'System default'}</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>{getDesktopTheme(theme).description}</p>
             </div>
           </div>
-          <div className="flex gap-1 flex-wrap justify-end">
-            {(['dark', 'light', 'obsidian-aurora', 'system'] as const).map(t => (
-              <button key={t} onClick={() => setTheme(t)}
-                className="px-3 py-1.5 rounded-lg text-[10px] font-medium transition-all"
-                style={{
-                  background: theme === t
-                    ? t === 'obsidian-aurora' ? 'rgba(6,182,212,0.15)' : 'rgba(168,85,247,0.15)'
-                    : 'rgba(255,255,255,0.04)',
-                  color: theme === t
-                    ? t === 'obsidian-aurora' ? '#06b6d4' : '#a855f7'
-                    : 'var(--gia-muted)',
-                  border: `1px solid ${theme === t
-                    ? t === 'obsidian-aurora' ? 'rgba(6,182,212,0.25)' : 'rgba(168,85,247,0.25)'
-                    : 'transparent'}`,
-                  textTransform: 'capitalize',
-                }}>{t.replace('-', ' ')}</button>
-            ))}
+          <div className="flex gap-1.5 flex-wrap justify-end">
+            {DESKTOP_THEMES.map(t => {
+              const active = theme === t.id;
+              return (
+                <button key={t.id} onClick={() => setTheme(t.id)}
+                  data-testid={`theme-option-${t.id}`}
+                  title={t.description}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all"
+                  style={{
+                    background: active ? `${t.preview.accent}22` : 'var(--gia-overlay)',
+                    color: active ? t.preview.accent : 'var(--gia-muted)',
+                    border: `1px solid ${active ? `${t.preview.accent}44` : 'transparent'}`,
+                  }}
+                >
+                  {/* Real swatch, not a coloured dot — picking a theme you
+                      cannot see is a guess. */}
+                  <span
+                    className="w-4 h-4 rounded shrink-0"
+                    style={{ background: t.preview.bg, border: `1px solid ${t.preview.accent}66` }}
+                  >
+                    <span className="block w-full h-full rounded" style={{ background: `linear-gradient(135deg, ${t.preview.accent}, transparent)` }} />
+                  </span>
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -447,7 +516,7 @@ const SettingsModule: React.FC = () => {
             className="gia-card p-4 flex items-start gap-4 w-full text-left tap-feedback"
             style={{ transition: 'border-color 0.2s' }}>
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: '#0d0d14', border: `1px solid ${cat.color}30` }}>
+              style={{ background: 'var(--gia-code-bg)', border: `1px solid ${cat.color}30` }}>
               <span style={{ color: cat.color }}>{cat.icon}</span>
             </div>
             <div className="flex-1 min-w-0">
@@ -471,7 +540,7 @@ const SettingsModule: React.FC = () => {
           className="gia-card p-4 flex items-start gap-4 w-full text-left tap-feedback"
           style={{ transition: 'border-color 0.2s' }}>
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: '#0d0d14', border: '1px solid #a855f730' }}>
+            style={{ background: 'var(--gia-code-bg)', border: '1px solid #a855f730' }}>
             <Network size={20} style={{ color: '#a855f7' }} />
           </div>
           <div className="flex-1 min-w-0">
@@ -487,7 +556,7 @@ const SettingsModule: React.FC = () => {
           className="gia-card p-4 flex items-start gap-4 w-full text-left tap-feedback"
           style={{ transition: 'border-color 0.2s' }}>
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: '#0d0d14', border: '1px solid #10b98130' }}>
+            style={{ background: 'var(--gia-code-bg)', border: '1px solid #10b98130' }}>
             <Bot size={20} style={{ color: '#10b981' }} />
           </div>
           <div className="flex-1 min-w-0">
@@ -501,20 +570,20 @@ const SettingsModule: React.FC = () => {
         </button>
       </div>
 
-      {/* Mical card */}
+      {/* Security & sandbox */}
       <p className="text-xs font-semibold uppercase tracking-wider px-1" style={{ color: 'var(--gia-muted)' }}>
-        Mical
+        Security &amp; Sandbox
       </p>
       <div className="grid grid-cols-1 gap-3">
-        <button onClick={() => setSettingsPage('mical')}
+        <button onClick={() => setSettingsPage('security')}
           className="gia-card p-4 flex items-start gap-4 w-full text-left tap-feedback"
           style={{ transition: 'border-color 0.2s' }}>
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: '#0d0d14', border: '1px solid #ef444430' }}>
+            style={{ background: 'var(--gia-code-bg)', border: '1px solid #ef444430' }}>
             <Shield size={20} style={{ color: '#ef4444' }} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Mical</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Security &amp; Sandbox</p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>Build environment (host shell on desktop / Alpine sandbox on Android), live security scan, ports, firewall & threat intelligence</p>
             <span className="text-[9px] mt-1 inline-block px-1.5 py-0.5 rounded font-medium" style={{ background: '#34d39915', color: '#34d399' }}>
               Scan · Sandbox · Firewall · Threat

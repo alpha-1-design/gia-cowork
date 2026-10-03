@@ -4,6 +4,7 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { isNativePlatform } from '../../utils/helpers';
 import { isTauri } from '../../platform';
 import DesktopHostFS from '../DesktopHostFS';
+import { fileSnapshots } from '../FileSnapshots';
 import { isPathSafe, blobToBase64, triggerDownload, MAX_FILE_SIZE } from './helpers';
 import { useGiaStore } from '../../store/useGiaStore';
 import type { Tool, ToolContext } from './types';
@@ -117,9 +118,16 @@ const filesystemWrite: Tool = {
     }
 
     if (isTauri()) {
+      // Snapshot the previous content BEFORE overwriting. GIA writes to the
+      // real host filesystem on desktop, so without this an agent mistake is
+      // unrecoverable — there is no sandbox to throw away.
+      const snapshot = await fileSnapshots.capture(path as string, content as string, 'filesystem_write');
       try {
         const size = await DesktopHostFS.writeFile(path as string, content as string);
-        return { success: true, content: `File written to ${path as string} (verified, ${size} bytes)` };
+        const undoHint = snapshot
+          ? ` — undo available in Settings → Undo`
+          : ' (no previous version to restore)';
+        return { success: true, content: `File written to ${path as string} (verified, ${size} bytes)${undoHint}` };
       } catch (e: unknown) {
         return { success: false, content: '', error: (e instanceof Error ? e.message : String(e)) };
       }
@@ -256,4 +264,61 @@ const zipProject: Tool = {
   }
 };
 
-export const filesystemTools: Tool[] = [filesystemRead, filesystemWrite, listFiles, zipProject];
+const undoFileChange: Tool = {
+  id: 'undo_file_change',
+  name: 'undo_file_change',
+  description: 'Restore a file GIA previously overwrote to its earlier contents. Use undo_last_file_change for the most recent change, or pass a snapshot ID to undo a specific one. List available changes with list_file_changes.',
+  schema: {
+    type: 'object',
+    properties: {
+      snapshotId: { type: 'string', description: 'Snapshot ID to restore (omit to undo the most recent change)' },
+    },
+  },
+  execute: async ({ snapshotId }) => {
+    if (!isTauri()) {
+      return { success: false, content: '', error: 'Undo is only available in the GIA Cowork desktop app.' };
+    }
+    const pending = fileSnapshots.listPending();
+    if (pending.length === 0) {
+      return { success: false, content: '', error: 'No file changes available to undo.' };
+    }
+    const target = snapshotId
+      ? pending.find(s => s.id === snapshotId)
+      : pending[0];
+    if (!target) {
+      return { success: false, content: '', error: `No matching change for snapshot ${snapshotId}. Use list_file_changes to see available snapshots.` };
+    }
+    const res = await fileSnapshots.revert(target.id);
+    if (!res.success) return { success: false, content: '', error: res.error || 'Undo failed' };
+    return {
+      success: true,
+      content: `Restored ${target.path} to its previous version.`,
+    };
+  },
+};
+
+const listFileChanges: Tool = {
+  id: 'list_file_changes',
+  name: 'list_file_changes',
+  description: 'List file changes GIA made that can be undone, newest first, with snapshot IDs for undo_file_change.',
+  schema: {
+    type: 'object',
+    properties: {},
+  },
+  execute: async () => {
+    if (!isTauri()) {
+      return { success: false, content: '', error: 'File change history is only available in the GIA Cowork desktop app.' };
+    }
+    const pending = fileSnapshots.listPending();
+    if (pending.length === 0) {
+      return { success: true, content: 'No file changes to undo.' };
+    }
+    const lines = pending.map(s => {
+      const kind = s.previousContent === null ? 'created' : 'overwrote';
+      return `${s.id} | ${kind} | ${s.path} | ${new Date(s.timestamp).toLocaleString()}`;
+    });
+    return { success: true, content: lines.join('\n') };
+  },
+};
+
+export const filesystemTools: Tool[] = [filesystemRead, filesystemWrite, listFiles, zipProject, undoFileChange, listFileChanges];

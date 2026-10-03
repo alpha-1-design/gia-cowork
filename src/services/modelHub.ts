@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import transferProgress from './TransferProgress';
 
 // ── HuggingFace Hub ──────────────────────────────────────────────────
 
@@ -75,6 +76,24 @@ export async function pullOllamaModel(
   onProgress: (p: PullProgress) => void,
   base = 'http://localhost:11434',
 ): Promise<void> {
+  // Multi-gigabyte model pulls are the slowest thing the app does — surface
+  // them on the global transfer indicator so they never look frozen.
+  const transferId = transferProgress.start(`Pulling ${name}`);
+  try {
+    await pullOllamaModelInner(name, onProgress, base, transferId);
+    transferProgress.complete(transferId);
+  } catch (e) {
+    transferProgress.fail(transferId, e instanceof Error ? e.message : String(e));
+    throw e;
+  }
+}
+
+async function pullOllamaModelInner(
+  name: string,
+  onProgress: (p: PullProgress) => void,
+  base: string,
+  transferId: string,
+): Promise<void> {
   const res = await fetch(`${base}/api/pull`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -103,6 +122,12 @@ export async function pullOllamaModel(
           total,
           percent: total ? Math.round((completed / total) * 100) : 0,
         });
+        if (total > 0) {
+          transferProgress.setBytes(transferId, completed, total);
+        } else {
+          // Unknown total — show indeterminate activity rather than a fake 0%.
+          transferProgress.update(transferId, null, j.status || 'downloading');
+        }
       } catch {
         /* ignore malformed keepalive lines */
       }

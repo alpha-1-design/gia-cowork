@@ -308,7 +308,7 @@ export const LocalModelsSection: React.FC = () => {
                     <span className="truncate">{dlProgress.file || 'Downloading...'}</span>
                     <span>{dlProgress.percent}% ({formatBytes(dlProgress.loaded)} / {formatBytes(dlProgress.total)})</span>
                   </div>
-                  <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'var(--gia-overlay-2)' }}>
                     <div className="h-full rounded-full transition-all duration-300 ease-out"
                       style={{
                         width: `${dlProgress.percent}%`,
@@ -324,7 +324,7 @@ export const LocalModelsSection: React.FC = () => {
                     <RefreshCw size={9} className="animate-spin" />
                     <span>Preparing download...</span>
                   </div>
-                  <div className="w-full h-2 rounded-full overflow-hidden mt-1" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  <div className="w-full h-2 rounded-full overflow-hidden mt-1" style={{ background: 'var(--gia-overlay-2)' }}>
                     <div className="h-full rounded-full w-1/3 animate-pulse"
                       style={{ background: 'linear-gradient(90deg, #22c55e, #34d399)' }} />
                   </div>

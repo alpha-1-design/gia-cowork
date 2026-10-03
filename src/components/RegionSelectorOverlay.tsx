@@ -322,7 +322,7 @@ export const RegionSelectorOverlay: React.FC<RegionSelectorOverlayProps> = ({ im
       const cxx = (bb.x0 + bb.x1) / 2, cyy = (bb.y0 + bb.y1) / 2;
       const rad = Math.max(bb.x1 - bb.x0, bb.y1 - bb.y0) * 0.6;
       const grad = ctx.createRadialGradient(cxx, cyy, 0, cxx, cyy, rad);
-      grad.addColorStop(0, 'rgba(255,255,255,0.04)');
+      grad.addColorStop(0, 'var(--gia-overlay)');
       grad.addColorStop(0.5, 'rgba(255,255,255,0.02)');
       grad.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = grad;
@@ -341,7 +341,7 @@ export const RegionSelectorOverlay: React.FC<RegionSelectorOverlayProps> = ({ im
       ctx.stroke();
     } else {
       const centerX = d.cw / 2;
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillStyle = 'var(--gia-overlay-2)';
       ctx.font = '13px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Draw a circle around anything on screen', centerX, d.ch - 24);
@@ -448,7 +448,7 @@ export const RegionSelectorOverlay: React.FC<RegionSelectorOverlayProps> = ({ im
       ctx.drawImage(imgRef.current!, d.ox, d.oy, d.dw, d.dh);
       ctx.filter = 'none';
       const centerX = d.cw / 2;
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillStyle = 'var(--gia-overlay-2)';
       ctx.font = '13px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Draw a circle around anything on screen', centerX, d.ch - 24);
@@ -638,7 +638,7 @@ export const RegionSelectorOverlay: React.FC<RegionSelectorOverlayProps> = ({ im
                   <button onClick={handleUse} className="flex items-center gap-2 px-6 py-2.5 rounded-2xl text-sm font-semibold transition-all shadow-lg" style={{ background: 'linear-gradient(135deg, #a855f7, #7c3aed)', color: 'white' }}>
                     <Sparkles size={16} /> Search this
                   </button>
-                  <button onClick={() => { setShowPreview(false); handleReset(); }} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-medium transition-all" style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--gia-text)' }}>
+                  <button onClick={() => { setShowPreview(false); handleReset(); }} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-medium transition-all" style={{ background: 'var(--gia-overlay-2)', color: 'var(--gia-text)' }}>
                     <RotateCcw size={14} /> Redraw
                   </button>
                 </div>
@@ -650,14 +650,14 @@ export const RegionSelectorOverlay: React.FC<RegionSelectorOverlayProps> = ({ im
         {/* Top bar */}
         <div className="absolute top-0 left-0 right-0 p-3 flex items-center justify-between z-10 pointer-events-none">
           <div className="flex items-center gap-2 pointer-events-auto">
-            <button onClick={onCancel} className="w-8 h-8 rounded-xl flex items-center justify-center transition-all" style={{ background: 'rgba(255,255,255,0.08)', color: '#f87171' }}>
+            <button onClick={onCancel} className="w-8 h-8 rounded-xl flex items-center justify-center transition-all" style={{ background: 'var(--gia-overlay-2)', color: '#f87171' }}>
               <X size={16} />
             </button>
           </div>
           <div className="flex items-center gap-2 pointer-events-auto">
             {hasPath && !showPreview && !snapping && (
               <>
-                <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--gia-muted)' }}>
+                <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all" style={{ background: 'var(--gia-overlay-2)', color: 'var(--gia-muted)' }}>
                   <RotateCcw size={12} /> Redo
                 </button>
                 <button onClick={handleConfirm} className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-all" style={{ background: 'rgba(168,85,247,0.2)', color: '#a855f7' }}>
@@ -671,7 +671,7 @@ export const RegionSelectorOverlay: React.FC<RegionSelectorOverlayProps> = ({ im
         {/* Bottom hint */}
         {!hasPath && !drawing && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
-            <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', border: '1px solid var(--gia-overlay-2)' }}>
               <Scan size={14} className="text-violet-400" />
               <span className="text-xs text-zinc-400 font-medium">Draw a circle around anything — GIA will snap to edges</span>
             </div>
