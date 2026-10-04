@@ -6,6 +6,7 @@ import { setModeForCompliance, resetComplianceOverrides } from '../../system/com
 import { setActiveProject, resetProjectContext } from '../../projects/projectIsolation';
 import { useProjectStore } from '../../../store/useProjectStore';
 import { useProtocolStore } from '../../../store/useProtocolStore';
+import { toolRateLimiter, globalToolLimiter } from '../../ToolRateLimiter';
 
 /**
  * `projectIsolation.test.ts` proves the decision is correct. This proves it is
@@ -69,6 +70,13 @@ beforeEach(() => {
   // that does not exist in a test. The point here is the boundary, and the
   // ingress gate sits above this either way.
   useProtocolStore.getState().setFullAutonomy(true);
+  // The limiters are module-level and shared across tests. `toolRateLimiter`
+  // bursts at 5, and this file lets more than five calls through the gate, so
+  // later "allowed" cases were silently returning RATE LIMITED instead of
+  // reaching the assertion — a failure in the test, not the gate.
+  toolRateLimiter.reset('filesystem_write');
+  toolRateLimiter.reset('terminal_run');
+  globalToolLimiter.reset('global');
 });
 
 afterEach(() => {
@@ -147,5 +155,38 @@ describe('the project boundary is enforced in the real tool path', () => {
     seed('p-alpha');
     await run(toolBlock('terminal_run', { command: 'curl https://example.com/work/beta/x' }));
     expect(executed).toEqual(['terminal_run']);
+  });
+
+  it('STOPS a Windows path into another project', async () => {
+    // The gap that motivated the drive-letter pattern. A POSIX-only extractor
+    // finds nothing in `C:\work\beta\...`, so the gate passes the call through
+    // and reports calm while enforcing nothing — the failure mode is silence,
+    // not an error, which is exactly why it survived a green suite.
+    const winAlpha = { id: 'w-alpha', name: 'Alpha', path: 'C:\\work\\alpha', lastSeenAt: 1, restrictMemory: false };
+    const winBeta = { id: 'w-beta', name: 'Beta', path: 'C:\\work\\beta', lastSeenAt: 1, restrictMemory: false };
+    seed('w-alpha', [winAlpha, winBeta]);
+
+    const { state } = await run(toolBlock('filesystem_write', { path: 'C:\\work\\beta\\src\\index.ts', content: 'x' }));
+    expect(executed).toEqual([]);
+    expect(feedback(state)).toMatch(/PROJECT BOUNDARY/);
+  });
+
+  it('STOPS a Windows path buried in a PowerShell command', async () => {
+    const winAlpha = { id: 'w-alpha', name: 'Alpha', path: 'C:\\work\\alpha', lastSeenAt: 1, restrictMemory: false };
+    const winBeta = { id: 'w-beta', name: 'Beta', path: 'C:\\work\\beta', lastSeenAt: 1, restrictMemory: false };
+    seed('w-alpha', [winAlpha, winBeta]);
+
+    const { state } = await run(toolBlock('terminal_run', { command: 'Get-Content C:\\work\\beta\\secret.env' }));
+    expect(executed).toEqual([]);
+    expect(feedback(state)).toMatch(/PROJECT BOUNDARY/);
+  });
+
+  it('allows Windows work inside the active project', async () => {
+    const winAlpha = { id: 'w-alpha', name: 'Alpha', path: 'C:\\work\\alpha', lastSeenAt: 1, restrictMemory: false };
+    const winBeta = { id: 'w-beta', name: 'Beta', path: 'C:\\work\\beta', lastSeenAt: 1, restrictMemory: false };
+    seed('w-alpha', [winAlpha, winBeta]);
+
+    await run(toolBlock('filesystem_write', { path: 'C:\\work\\alpha\\src\\index.ts', content: 'x' }));
+    expect(executed).toEqual(['filesystem_write']);
   });
 });

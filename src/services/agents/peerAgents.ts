@@ -140,7 +140,25 @@ export function setShell(next: Shell): () => void {
   };
 }
 
-/** What `command -v` prints for a missing binary, which varies by shell. */
+/**
+ * The probe forms to try, in order, for one binary.
+ *
+ * `command -v` is a POSIX shell builtin and has no PowerShell equivalent, so a
+ * Windows install found *nothing at all* — every agent silently read as absent,
+ * and the prompt block stayed empty for a reason that had nothing to do with
+ * whether the tools were installed. `where.exe` is the Windows answer.
+ *
+ * Trying both rather than detecting the OS keeps this honest in one specific
+ * way: there is no place for the platform check to be wrong. On Unix the first
+ * probe answers and the second is never run; on Windows the first errors and
+ * the second answers. The cost is at most one extra shell per missing agent,
+ * once per detection window.
+ */
+export function probeCommands(bin: string): string[] {
+  return [`command -v ${bin}`, `where.exe ${bin}`];
+}
+
+/** What a missing-binary probe prints, which varies by shell. */
 function found(output: string): boolean {
   const out = output.trim();
   if (!out) return false;
@@ -165,13 +183,21 @@ export interface DetectionResult {
 export async function detectPeerAgents(cwd?: string): Promise<DetectionResult[]> {
   const out: DetectionResult[] = [];
   for (const agent of PEER_AGENTS) {
-    try {
-      const res = await shell(`command -v ${agent.bin}`, cwd);
-      const path = res.exitCode === 0 && found(res.output) ? res.output.trim().split('\n')[0].trim() : null;
-      out.push({ agent, installed: !!path, path });
-    } catch {
-      out.push({ agent, installed: false, path: null });
+    let path: string | null = null;
+    // `bin` comes from the static catalog, never from the model, so these
+    // probes carry no caller-supplied text.
+    for (const probe of probeCommands(agent.bin)) {
+      try {
+        const res = await shell(probe, cwd);
+        if (res.exitCode === 0 && found(res.output)) {
+          path = res.output.trim().split('\n')[0].trim();
+          break;
+        }
+      } catch {
+        // Wrong shell for this platform — try the next form.
+      }
     }
+    out.push({ agent, installed: !!path, path });
   }
   return out;
 }
@@ -186,15 +212,69 @@ export function installedAgentIds(results: DetectionResult[]): string[] {
 }
 
 /**
+ * Which quoting dialect the host shell expects.
+ *
+ * Both shells treat a single-quoted string as fully literal, which is why the
+ * obvious implementation looked portable. The escape is where it stops being
+ * portable, and that difference is not cosmetic:
+ *
+ *  - `sh` closes the string, escapes the quote, reopens: `'it'\''s'`
+ *  - PowerShell doubles it inside the string: `'it''s'`
+ *
+ * Feeding the POSIX form to PowerShell does not merely look wrong. The
+ * `'\'` reads as an escaped backslash followed by an unterminated quote, so
+ * the command is re-split and everything after the apostrophe becomes a new
+ * argument — which means a peer-agent prompt containing one apostrophe could
+ * change what the delegated command actually runs.
+ */
+export type QuoteStyle = 'posix' | 'powershell';
+
+/**
+ * Sniffed from the webview's user agent.
+ *
+ * Not the OS reporting itself — there is no OS plugin dependency here — but the
+ * webview's navigator, which does reflect the host on every platform GIA ships
+ * to. It is overridable via `setQuoteStyle` so the behaviour can be pinned in
+ * tests without a Windows machine.
+ */
+function sniffQuoteStyle(): QuoteStyle {
+  try {
+    const nav = globalThis.navigator as { platform?: string; userAgent?: string } | undefined;
+    const hint = `${nav?.platform ?? ''} ${nav?.userAgent ?? ''}`.toLowerCase();
+    if (hint.includes('win')) return 'powershell';
+  } catch {
+    // No navigator — fall through to the safer default.
+  }
+  return 'posix';
+}
+
+let quoteStyle: QuoteStyle = sniffQuoteStyle();
+
+export function currentQuoteStyle(): QuoteStyle {
+  return quoteStyle;
+}
+
+/** Pin the quoting dialect. Returns a restore function. */
+export function setQuoteStyle(next: QuoteStyle): () => void {
+  const prev = quoteStyle;
+  quoteStyle = next;
+  return () => { quoteStyle = prev; };
+}
+
+/**
  * Single-quote for the host shell.
  *
- * Same POSIX reasoning as the worktree service: an allowlist would have to
- * either reject legitimate paths or stop being an allowlist. `terminal_exec`
- * spawns `sh -c` on Unix and `powershell -Command` on Windows, and both treat a
- * single-quoted string literally.
+ * Same reasoning as the worktree service: an allowlist would have to either
+ * reject legitimate prompts or stop being an allowlist. `terminal_exec` spawns
+ * `sh -c` on Unix and `powershell -Command` on Windows, and both treat a
+ * single-quoted string literally — but they escape an embedded quote
+ * differently, so the dialect has to be matched to the shell.
  */
 export function shellQuote(value: string): string {
   if (value.includes('\0')) throw new Error('Shell value contains a NUL byte');
+  if (quoteStyle === 'powershell') {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 

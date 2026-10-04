@@ -91,9 +91,16 @@ const DANGEROUS = /[;&|`$(){}<>\\'"\n\r*?[\]!#]/;
  * single quote itself, which is why the string is closed, escaped, and reopened
  * — `'\''` is the standard idiom and is correct for every byte except NUL.
  *
- * The desktop backend spawns `sh -c` on Unix and `powershell -Command` on
- * Windows. PowerShell treats a single-quoted string the same way, so one
- * function is correct for both backends.
+ * A note on Windows, because the obvious reasoning here is wrong: PowerShell
+ * also treats a single-quoted string as literal, but it escapes an embedded
+ * quote by *doubling* it, not by the close-escape-reopen idiom above. So this
+ * function is not portable as written.
+ *
+ * It is safe for this service specifically because callers run every segment
+ * through `assertSafeSegment` first, which rejects `'` and `\` outright — so
+ * the escape branch below is unreachable here. That is a property of the
+ * callers, not of this function. Anything that quotes free-form text (a model
+ * prompt, say) needs the platform-aware version in `services/agents/peerAgents`.
  */
 export function shellQuote(value: string): string {
   if (value.includes('\0')) throw new Error('Shell value contains a NUL byte');

@@ -204,12 +204,36 @@ const PATH_ARG_KEYS = [
 ];
 
 /**
+ * An absolute path token inside a shell command.
+ *
+ * Three shapes have to match, or the boundary silently stops holding on the
+ * platform the user is actually on:
+ *
+ *  - POSIX: `/work/beta/x`
+ *  - Windows drive: `C:\work\beta\x` and `C:/work/beta/x`
+ *  - UNC: `\\server\share\x`
+ *
+ * A POSIX-only pattern is the worst kind of gap here, because it fails *open*:
+ * the gate simply never sees the path, so it reports nothing and looks calm
+ * while the boundary is not being enforced.
+ *
+ * The leading boundary keeps `https://example.com` from reading as a path —
+ * in `https:` the colon precedes the slashes and is not a boundary character,
+ * so the drive-letter alternative cannot match either.
+ *
+ * `)` terminates the token so a subshell cannot smuggle a path past the scan.
+ */
+const ABS_PATH_TOKEN = /(?:^|[\s'"=;])((?:[A-Za-z]:[\\/]|[\\/]{2}|\/)[^\s'";|&)]*)/g;
+
+/**
  * Every path a tool call is trying to touch.
  *
  * `command` is scanned for absolute tokens so `cat /work/other/secret` is caught
- * even though the path is buried in a shell string. The regex requires the
- * token to start at a boundary or after an `=`, so `https://example.com` does not
- * read as a filesystem path.
+ * even though the path is buried in a shell string.
+ *
+ * Note the `PATH_ARG_KEYS` path above needs no platform handling: it reads the
+ * argument's value directly, so `C:\\work\\beta\\x` is already captured. Only
+ * command scanning had to learn about drive letters.
  */
 export function pathArgsOf(args: unknown): string[] {
   if (!args || typeof args !== 'object') return [];
@@ -223,7 +247,7 @@ export function pathArgsOf(args: unknown): string[] {
 
   const cmd = rec.command;
   if (typeof cmd === 'string') {
-    for (const m of cmd.matchAll(/(?:^|[\s'"=;])(\/[^\s'";|&]*)/g)) {
+    for (const m of cmd.matchAll(ABS_PATH_TOKEN)) {
       if (m[1]) out.push(m[1]);
     }
   }
