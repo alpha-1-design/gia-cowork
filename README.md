@@ -15,7 +15,7 @@
 Real terminal. Real files. Real control of your machine.
 The same brain as [GIA](https://github.com/alpha-1-design/gia-app) on Android — but where the phone app runs in a sandbox, Cowork *is* the machine.
 
-![version](https://img.shields.io/badge/version-0.1.0-8b5cf6?style=for-the-badge)
+![version](https://img.shields.io/badge/version-0.2.0-8b5cf6?style=for-the-badge)
 ![Tauri](https://img.shields.io/badge/Tauri%202-6a5acd?style=for-the-badge&logo=tauri&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-e07a5f?style=for-the-badge&logo=rust&logoColor=white)
 ![React](https://img.shields.io/badge/React%2019-0ea5e9?style=for-the-badge&logo=react&logoColor=white)
@@ -102,9 +102,9 @@ A glass orb lives on your screen. It's GIA's attention made visible.
 
 | Package | For | Install |
 |---|---|---|
-| 📦 `.deb` | Debian · Ubuntu · Linux Mint | `sudo apt install ./GIA.Cowork_0.1.0_amd64.deb` |
-| 🌀 `.rpm` | Fedora · RHEL · openSUSE | `sudo dnf install ./GIA.Cowork-0.1.0-1.x86_64.rpm` |
-| 🧵 `.AppImage` | Any Linux | `chmod +x GIA.Cowork_0.1.0_amd64.AppImage && ./GIA.Cowork_0.1.0_amd64.AppImage` |
+| 📦 `.deb` | Debian · Ubuntu · Linux Mint | `sudo apt install ./GIA.Cowork_0.2.0_amd64.deb` |
+| 🌀 `.rpm` | Fedora · RHEL · openSUSE | `sudo dnf install ./GIA.Cowork-0.2.0-1.x86_64.rpm` |
+| 🧵 `.AppImage` | Any Linux | `chmod +x GIA.Cowork_0.2.0_amd64.AppImage && ./GIA.Cowork_0.2.0_amd64.AppImage` |
 | 🪟 `.msi` / `.exe` | Windows 10/11 x64 | Download the Windows installer and follow the setup wizard |
 
 Grab the latest from the **[Releases](https://github.com/alpha-1-design/gia-cowork/releases)** page. Linux packages are built on Ubuntu; Windows installers are built by the Windows release workflow.
