@@ -190,6 +190,46 @@ function normalise(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+$/, '');
 }
 
+/**
+ * Argument names that carry a filesystem path.
+ *
+ * The gate has to read paths out of arbitrary tool arguments, and it cannot
+ * treat every string as one — a description, a prompt, or a search term that
+ * happens to contain a slash would then be resolved as a location. So it reads
+ * the known path keys, plus any absolute-looking token inside a shell command.
+ */
+const PATH_ARG_KEYS = [
+  'path', 'file_path', 'filePath', 'file', 'cwd', 'dir', 'directory',
+  'target', 'targetPath', 'target_path', 'source', 'dest', 'destination',
+];
+
+/**
+ * Every path a tool call is trying to touch.
+ *
+ * `command` is scanned for absolute tokens so `cat /work/other/secret` is caught
+ * even though the path is buried in a shell string. The regex requires the
+ * token to start at a boundary or after an `=`, so `https://example.com` does not
+ * read as a filesystem path.
+ */
+export function pathArgsOf(args: unknown): string[] {
+  if (!args || typeof args !== 'object') return [];
+  const rec = args as Record<string, unknown>;
+  const out: string[] = [];
+
+  for (const key of PATH_ARG_KEYS) {
+    const v = rec[key];
+    if (typeof v === 'string' && v.trim()) out.push(v.trim());
+  }
+
+  const cmd = rec.command;
+  if (typeof cmd === 'string') {
+    for (const m of cmd.matchAll(/(?:^|[\s'"=;])(\/[^\s'";|&]*)/g)) {
+      if (m[1]) out.push(m[1]);
+    }
+  }
+  return out;
+}
+
 /** The prompt block describing the boundary. */
 export function projectIsolationPromptBlock(
   project: ProjectRecord | null,

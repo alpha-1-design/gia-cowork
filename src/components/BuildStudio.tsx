@@ -8,7 +8,8 @@ import { useProviderStore } from '../store/useProviderStore';
 import { DESKTOP_THEMES, DEFAULT_THEME, type ThemeId } from '../config/themes';
 import { buildBlockedReason } from '../services/build/builderPrompt';
 import { BUILD_STYLES, DEFAULT_BUILD_STYLE_ID, getBuildStyle } from '../services/build/giaThemes';
-import { PEER_AGENTS, detectPeerAgents, type DetectionResult } from '../services/agents/peerAgents';
+import { PEER_AGENTS, type DetectionResult } from '../services/agents/peerAgents';
+import { warmPeerAgentDetection } from '../services/buildGiaSystem';
 
 /**
  * Build studio — the front door to BUILD mode.
@@ -60,9 +61,18 @@ export function BuildStudio({ onClose, onStart }: Props) {
 
   // Warm peer detection so the panel can say what is on this machine without
   // blocking the rest of the UI on six subprocesses.
+  //
+  // This has to go through `warmPeerAgentDetection`, not `detectPeerAgents`.
+  // The panel listing agents is not the same thing as the model knowing them:
+  // the prompt builder reads a short-lived cache that only the warm function
+  // populates. Calling the raw detector here populated the panel while leaving
+  // the cache cold, so opening Build Studio — the one moment the user is most
+  // likely to delegate — was exactly when the prompt still said nothing.
   useEffect(() => {
     let cancelled = false;
-    detectPeerAgents().then(r => { if (!cancelled) setPeers(r); }).catch(() => { if (!cancelled) setPeers([]); });
+    warmPeerAgentDetection()
+      .then(r => { if (!cancelled) setPeers(r); })
+      .catch(() => { if (!cancelled) setPeers([]); });
     return () => { cancelled = true; };
   }, []);
 

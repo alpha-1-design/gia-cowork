@@ -115,10 +115,29 @@ const defaultShell: Shell = async (command, cwd) => {
 
 let shell: Shell = defaultShell;
 
+/**
+ * Bumped whenever the detection shell is replaced.
+ *
+ * Detection results are cached by callers because probing shells out six
+ * binaries. But a cached answer describes the shell that produced it, so
+ * swapping the shell must invalidate those caches — otherwise the first probe
+ * after a swap reports the previous mechanism's findings, which is a stale
+ * answer presented as a fresh one.
+ */
+let shellGeneration = 0;
+
+export function currentShellGeneration(): number {
+  return shellGeneration;
+}
+
 export function setShell(next: Shell): () => void {
   const prev = shell;
   shell = next;
-  return () => { shell = prev; };
+  shellGeneration++;
+  return () => {
+    shell = prev;
+    shellGeneration++;
+  };
 }
 
 /** What `command -v` prints for a missing binary, which varies by shell. */

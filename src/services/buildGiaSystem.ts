@@ -25,9 +25,9 @@ import { modePromptFor } from './system/modePrompts';
 import {
   projectIsolationPromptBlock,
   getActiveProjectId,
-  type ProjectRecord,
 } from './projects/projectIsolation';
-import { detectPeerAgents, peerAgentPromptBlock, type DetectionResult } from './agents/peerAgents';
+import { knownProjects } from '../store/useProjectStore';
+import { detectPeerAgents, peerAgentPromptBlock, currentShellGeneration, type DetectionResult } from './agents/peerAgents';
 import type { ThemeId } from '../config/themes';
 import { useProjectMemoryStore, renderMemoryForPrompt } from './ProjectMemory';
 import { resolveCapabilities, describeCapabilities } from './ModelCapabilities';
@@ -67,11 +67,11 @@ function getContextBlobs(query?: string): { memory: string; neuraCtx: string } {
  * because the answer only changes when the user installs something, and a
  * stale "you have no agents" for a minute is not worth six shells per turn.
  */
-let _peerCache: { results: DetectionResult[]; ts: number } | null = null;
+let _peerCache: { results: DetectionResult[]; ts: number; generation: number } | null = null;
 const PEER_CACHE_MS = 60_000;
 
 /**
- * Populate the cache. Called when the build studio opens and at startup.
+ * Populate the cache. Called at startup and when the build studio opens.
  *
  * Separate from prompt building on purpose: `buildGiaSystem` is synchronous and
  * has to stay that way, so it reads whatever detection has already found
@@ -79,10 +79,14 @@ const PEER_CACHE_MS = 60_000;
  * one turn — acceptable, because detection is warmed long before a build starts.
  */
 export async function warmPeerAgentDetection(): Promise<DetectionResult[]> {
-  if (_peerCache && Date.now() - _peerCache.ts < PEER_CACHE_MS) return _peerCache.results;
+  // Valid only for the shell that produced it — see `currentShellGeneration`.
+  const generation = currentShellGeneration();
+  if (_peerCache && _peerCache.generation === generation && Date.now() - _peerCache.ts < PEER_CACHE_MS) {
+    return _peerCache.results;
+  }
   try {
     const results = await detectPeerAgents();
-    _peerCache = { results, ts: Date.now() };
+    _peerCache = { results, ts: Date.now(), generation };
     return results;
   } catch {
     // Detection failing must never break anything that depends on it.
@@ -95,8 +99,20 @@ export function peekPeerAgents(): DetectionResult[] | null {
   return _peerCache?.results ?? null;
 }
 
-/** The prompt block. Empty until detection has run at least once. */
-const peerAgentBlock = peerAgentPromptBlock(peekPeerAgents() ?? []);
+/**
+ * The peer-agent prompt block for this turn.
+ *
+ * This has to be computed per call. It used to be a module-level `const`,
+ * evaluated once when this module was first imported — which is *before* any
+ * detection could have run, so it was permanently the empty string. The
+ * `delegate_to_agent` and `list_peer_agents` tools were registered and
+ * described to the model, but the model was never told which agent ids existed
+ * on this machine, so it could only guess. The tools looked present in the
+ * registry and were invisible in the prompt.
+ */
+function peerAgentBlock(): string {
+  return peerAgentPromptBlock(peekPeerAgents() ?? []);
+}
 
 export const buildGiaSystem = (query?: string) => {
     const { userProfile, activeSkillId, skills, customInstructions, pinnedMemories, handsOff, localTranslate } = useGiaStore.getState();
@@ -124,8 +140,18 @@ const worktreeCtx = activeWorktree?.path
   : '';
 // Her own accumulated notes on this project — the gotchas and decisions that
 // re-reading the code cannot recover.
+// Her own accumulated notes on THIS project.
+//
+// Scoped deliberately. `useProjectMemoryStore` keys entries by project and
+// already exposes `list(project)`, but this was passing `entries.slice(0, 40)` —
+// an arbitrary prefix of every project's notes — under a heading reading
+// "What I have learned about this project". Switching projects therefore
+// blended two codebases' gotchas together and mislabelled the result, which is
+// worse than showing nothing: a note from the last project would be acted on as
+// if it were true here.
+const activeProjectName = useProjectContextStore.getState().entry?.projectName || 'current';
 const projectMemory = renderMemoryForPrompt(
-  useProjectMemoryStore.getState().entries.slice(0, 40),
+  useProjectMemoryStore.getState().list(activeProjectName).slice(0, 40),
 );
   const memoryCount = memStore.memories.length;
   const pinnedMems = pinnedMemories.length > 0
@@ -207,7 +233,7 @@ ${(() => {
   // reads as boilerplate the model learns to skip.
   const pid = getActiveProjectId();
   if (!pid) return '';
-  const projects = (useGiaStore.getState().sharedData as { projects?: ProjectRecord[] } | undefined)?.projects ?? [];
+  const projects = knownProjects();
   if (projects.length < 2) return '';
   return projectIsolationPromptBlock(projects.find(p => p.id === pid) ?? null, projects);
 })()}
@@ -220,7 +246,7 @@ ${projectCtx}
 
 ${worktreeCtx}
 
-${peerAgentBlock}
+${peerAgentBlock()}
 
 ${projectMemory}
 

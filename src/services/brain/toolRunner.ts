@@ -7,6 +7,9 @@ import { ProtocolProposal } from '../../types/protocol';
 import { validateToolArgs, toolToProtocolType, toolToImpact } from './toolSchemas';
 import { checkAction } from '../system/compliance';
 import { isComplianceEnabled, currentMode } from '../system/complianceRuntime';
+import { checkProjectIngress, pathArgsOf } from '../projects/projectIsolation';
+import { knownProjects } from '../../store/useProjectStore';
+import { getActiveProjectId } from '../projects/projectIsolation';
 import { delegateTask } from './subAgent';
 import { SubAgentManager } from './SubAgentManager';
 import { extractToolCalls, hasTruncatedToolCall, ToolCall } from '../../utils/jsonRepair';
@@ -149,6 +152,10 @@ async function executeSingleTool(
 ): Promise<{ result?: string; observations: string[] }> {
   const observations: string[] = [];
 
+  // Read the registry once per tool call rather than per candidate path.
+  const projects = knownProjects();
+  const activeProjectId = getActiveProjectId();
+
   // System-prompt compliance — checked BEFORE the tool runs.
   //
   // Placement is the whole point. Checking after would mean telling GIA she
@@ -162,6 +169,22 @@ async function executeSingleTool(
       onThought?.(`🛑 Blocked: ${toolCall.id} breaks ${mode} mode rules`);
       observations.push(`COMPLIANCE BLOCK: ${check.corrections.join(' ')}`);
       return { result: 'compliance_blocked', observations };
+    }
+  }
+
+  // Project boundary — also checked BEFORE the tool runs, for the same reason.
+  //
+  // `checkProjectIngress` existed with a careful policy and no caller, so GIA
+  // was told in prose not to touch other projects and was never stopped when
+  // she did. A boundary enforced only in the prompt is a suggestion.
+  if (projects.length >= 2 && activeProjectId) {
+    for (const candidate of pathArgsOf(toolCall.args)) {
+      const decision = checkProjectIngress(candidate, projects, { activeProjectId });
+      if (!decision.allowed) {
+        onThought?.(`🚧 Blocked: ${toolCall.id} reaches into another project`);
+        observations.push(`PROJECT BOUNDARY: ${decision.reason}`);
+        return { result: 'project_blocked', observations };
+      }
     }
   }
 

@@ -45,6 +45,8 @@ import CapabilityService from './services/CapabilityService';
 import { useProviderStore } from './store/useProviderStore';
 import { logger } from './utils/logger';
 import { togglePresenterMode, attachTrayBridge } from './services/PresenterMode';
+import { useProjectContextStore } from './store/useProjectContextStore';
+import { syncActiveProject, welcomeForSwitch } from './services/projects/projectSync';
 import TTSService from './services/TTSService';
 import { useClipboardMonitor } from './hooks/useClipboardMonitor';
 import { useAutomationBridge } from './hooks/useAutomationBridge';
@@ -218,6 +220,48 @@ const App: React.FC = () => {
       jarvisOrbService.setSpeaking(speaking);
     });
     return detach;
+  }, []);
+
+  // Peer-agent detection — warm the cache the system prompt reads.
+  //
+  // `buildGiaSystem` is synchronous and cannot await a probe, so it only ever
+  // reports agents that were detected *before* the turn. Nothing used to call
+  // the warm function, so the cache stayed cold forever and the prompt's
+  // "other agents installed on this machine" block was permanently empty —
+  // leaving `delegate_to_agent` registered with a description but no list of
+  // ids the model could pass. Detection is cheap and cached for a minute, so
+  // this costs one probe per launch.
+  useEffect(() => {
+    void import('./services/buildGiaSystem')
+      .then(m => m.warmPeerAgentDetection())
+      .catch(e => logger.warn('[App] Peer agent detection failed:', e));
+  }, []);
+
+  // Project isolation — keep the registry in step with the open project.
+  //
+  // Without this the registry was never written and the active project was
+  // never set, so the boundary paragraph, the memory scoping, and the ingress
+  // gate all had nothing to act on. Subscribing means `/init` in a second
+  // repository registers it and activates it, which is what makes the boundary
+  // appear at all.
+  useEffect(() => {
+    let lastGreeted: string | null = null;
+    const sync = () => {
+      const record = syncActiveProject();
+      if (!record) return;
+      // Only greet on a genuine switch to a different project, and only once
+      // per project per session, so re-renders stay quiet.
+      if (lastGreeted === record.id) return;
+      const previous = lastGreeted;
+      lastGreeted = record.id;
+      if (!previous) return;
+      const greeting = welcomeForSwitch();
+      if (greeting) {
+        useGiaStore.getState().addNotification(greeting.message);
+      }
+    };
+    sync();
+    return useProjectContextStore.subscribe(sync);
   }, []);
 
   // Presenter mode — attach the tray escape hatch. Once the window is hidden
