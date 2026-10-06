@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { RadioTower, Power, PowerOff, Activity, RefreshCw, Route, BarChart3 } from 'lucide-react';
 import gatewayManager from '../../services/gateway/GatewayManager';
+import { isCapacitorNative } from '../../platform';
+
+// PRoot is an Android-only userspace chroot, so this sentence must not
+// advertise it to the desktop app or a browser tab.
+const isAndroid = isCapacitorNative();
 
 export const GatewaySection: React.FC = () => {
   const [routes, setRoutes] = useState(gatewayManager.getAllRoutes());
@@ -61,7 +66,7 @@ export const GatewaySection: React.FC = () => {
         </div>
 
         <p className="text-[10px]" style={{ color: 'var(--gia-muted)' }}>
-          Gateway routes external messages to GIA. Runs in-app now — for 24/7 operation start the gateway daemon in a background terminal (Terminal on desktop / proot sandbox on Android).
+          Gateway routes external messages to GIA. Runs in-app now — for 24/7 operation start the gateway daemon in a background terminal ({isAndroid ? 'proot sandbox on Android' : 'Terminal on desktop'}).
         </p>
       </div>
 

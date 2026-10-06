@@ -545,6 +545,7 @@ const REGISTRY: CommandSpec[] = [
   },
   {
     name: 'provider',
+    aliases: ['providers'],
     category: 'Models & Providers',
     description: 'Show or switch the active provider',
     usage: '/provider [id]',
@@ -1769,10 +1770,43 @@ export function getCommandList(): string[] {
   return getCommands().map(c => c.name);
 }
 
-/** Commands matching a `/partial` prefix, for the composer autocomplete menu. */
+/**
+ * What a bare `/` shows.
+ *
+ * This used to be `getCommands().slice(0, limit)`, i.e. the first N entries in
+ * registry order. Those all lived under "Chat & Sessions", so `/init`, `/mcp`,
+ * `/model` and `/provider` were never shown unless you already typed their
+ * name — 47 of 55 commands were undiscoverable from the menu itself.
+ *
+ * Round-robin across categories instead, so one `/` gives a cross-section of
+ * every category and the menu is a browsing surface rather than a fragment.
+ */
+function browseCommands(limit: number): CommandSpec[] {
+  const byCategory = new Map<CommandCategory, CommandSpec[]>();
+  for (const c of getCommands()) {
+    const bucket = byCategory.get(c.category);
+    if (bucket) bucket.push(c);
+    else byCategory.set(c.category, [c]);
+  }
+
+  const buckets = [...byCategory.values()];
+  const rounds = Math.max(0, ...buckets.map(b => b.length));
+  const out: CommandSpec[] = [];
+  for (let i = 0; i < rounds && out.length < limit; i++) {
+    for (const bucket of buckets) {
+      if (out.length >= limit) break;
+      if (bucket[i]) out.push(bucket[i]);
+    }
+  }
+  return out;
+}
+
+/**
+ * Commands matching a `/partial` prefix, for the composer autocomplete menu.
+ */
 export function getCommandSuggestions(prefix: string, limit = 8): CommandSpec[] {
   const p = prefix.replace(/^\//, '').toLowerCase();
-  if (!p) return getCommands().slice(0, limit);
+  if (!p) return browseCommands(limit);
   return getCommands()
     .map(c => {
       // The canonical name outranks an alias: typing "/sess" should surface

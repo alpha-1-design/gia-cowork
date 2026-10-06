@@ -22,6 +22,7 @@ import { getBuildStyle } from './build/giaThemes';
 import { thinkingPromptBlock } from './system/thinkingLevels';
 import { compliancePromptBlock } from './system/compliance';
 import { modePromptFor } from './system/modePrompts';
+import { builtinSkillHighlights } from './SkillsMarketplace';
 import {
   projectIsolationPromptBlock,
   getActiveProjectId,
@@ -185,6 +186,11 @@ const projectMemory = renderMemoryForPrompt(
   // actually match this request — dumping every skill into every prompt
   // dilutes attention and inflates cost on every message.
   const authoredSkillsBlock = skillAuthor.getPromptBlock(query);
+  // Derived from the live registry rather than a hand-copied subset, so the
+  // prompt cannot list one set of skills while the marketplace holds another.
+  const skillHighlightsBlock = builtinSkillHighlights()
+    .map(s => `- **${s.name}** → ${s.description}`)
+    .join('\n');
 
   const moduleCtx = identity.personalityStyle === 'direct' ? 'debugging'
     : identity.personalityStyle === 'professional' ? 'planning'
@@ -886,14 +892,7 @@ ${skillPrompt === 'Be concise, direct, and helpful. Use your tools when they add
 
 ## Skill matching — ALWAYS check first
 Before doing ANYTHING, check if the user's request matches an installed skill. Your skills define specialized behavior patterns:
-- **Developer** → coding tasks, debugging, code review, architecture
-- **Research Analyst** → deep research, analysis, reports, data gathering
-- **Security Auditor** → security reviews, vulnerability analysis, threat detection
-- **DevOps Engineer** → infrastructure, CI/CD, deployment, monitoring
-- **Technical Writer** → documentation, README, guides, API docs
-- **Data Analyst** → data analysis, visualization, statistics, insights
-- **Mobile Developer** → mobile app development, Capacitor, React Native
-- **ML Engineer** → machine learning, model training, data pipelines
+${skillHighlightsBlock}
 
 When a skill matches, follow its specialized instructions precisely. The skill's system prompt defines HOW you approach the task — your tone, the tools you prefer, the structure of your output. Do not genericize when a skill applies.
 

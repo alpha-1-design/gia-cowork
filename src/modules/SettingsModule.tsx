@@ -37,6 +37,7 @@ import { SkillsMarketplaceUI } from '../components/settings/SkillsMarketplaceSec
 import { DashboardModule } from './DashboardModule';
 import { providerRegistry } from '../services/ProviderRegistry';
 import { getProviderCapabilities, CAPABILITY_LABELS } from '../services/providers/capabilities';
+import { companyFor, docsUrlFor } from '../services/providerInfo';
 import type { ProviderCapabilities } from '../services/providers/capabilities';
 import { fileSnapshots } from '../services/FileSnapshots';
 
@@ -447,6 +448,21 @@ const SettingsModule: React.FC = () => {
                     <td className="py-2 pr-3">
                       <span className="block font-medium" style={{ color: 'var(--gia-text)' }}>{providerRegistry.getLabel(id)}</span>
                       <span className="block text-[9px] max-w-[140px] truncate" style={{ color: 'var(--gia-muted-2)' }} title={model}>{model}</span>
+                      {/* Who runs it and where to get a key. Without the link
+                          this matrix lists 71 providers with no way to act on
+                          the 70 that are not connected. */}
+                      {docsUrlFor(id) && (
+                        <a
+                          href={docsUrlFor(id)}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="block text-[9px] mt-0.5 hover:underline"
+                          style={{ color: '#a855f7' }}
+                          title={`Get an API key from ${companyFor(id)}`}
+                        >
+                          Get key ↗
+                        </a>
+                      )}
                     </td>
                     {(Object.keys(CAPABILITY_LABELS) as Array<keyof ProviderCapabilities>).map(key => (
                       <td key={key} className="px-2 py-2 text-center">

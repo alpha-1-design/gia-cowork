@@ -11,7 +11,7 @@ vi.mock('../CorsProxy', () => ({
   corsProxy: { fetch: mockFetch },
 }));
 
-const { providerRegistry } = await import('../ProviderRegistry');
+const { providerRegistry, FALLBACK_PROVIDERS } = await import('../ProviderRegistry');
 
 describe('ProviderRegistry', () => {
   beforeEach(async () => {
@@ -32,7 +32,22 @@ describe('ProviderRegistry', () => {
       expect(providerRegistry.getAllIds()).toContain('ollama');
       expect(providerRegistry.getAllIds()).toContain('openai');
       expect(providerRegistry.getAllIds()).toContain('nvidia');
-      expect(providerRegistry.getAllProviders()).toHaveLength(22);
+      // The registry must seed exactly its fallback list. Asserting against
+      // FALLBACK_PROVIDERS keeps this tied to the source of truth instead of a
+      // snapshot count that breaks every time a provider is added.
+      expect(providerRegistry.getAllProviders()).toHaveLength(FALLBACK_PROVIDERS.length);
+      expect(FALLBACK_PROVIDERS.length).toBeGreaterThanOrEqual(71);
+      // No provider may ship without a usable model, or it appears in the
+      // picker as a dead entry.
+      for (const def of FALLBACK_PROVIDERS) {
+        expect(def.defaultModel.length, `${def.id} has no default model`).toBeGreaterThan(0);
+        expect(providerRegistry.getModels(def.id).length).toBeGreaterThan(0);
+      }
+      // The six added for opencode parity must be reachable, not just present
+      // in the array.
+      for (const id of ['zai', 'zhipuai', 'moonshotai', 'minimax', 'alibaba', 'siliconflow']) {
+        expect(providerRegistry.getProvider(id)).toBeDefined();
+      }
     });
 
     it('loads fallback models', () => {

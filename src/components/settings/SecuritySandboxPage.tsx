@@ -14,9 +14,15 @@ import SandboxService from '../../services/SandboxService';
 import SandboxEnvService, { type SandboxStatus } from '../../services/SandboxEnvService';
 import { SubPageHeader } from './SubPageHeader';
 import ConfirmDialog from '../ConfirmDialog';
-import { isTauri } from '../../platform';
+import { isTauri, isCapacitorNative } from '../../platform';
 
 const isDesktop = isTauri();
+// PRoot is an Android-only userspace chroot. The previous two-way
+// desktop/Android split meant the plain *web* build (not Tauri, not Capacitor)
+// fell into the Android branch and advertised "proot + Alpine Linux" and a
+// "proot chroot" to someone running it in a desktop browser. Gate the Android
+// copy on the actual Android shell so it only ever appears on Android.
+const isAndroid = isCapacitorNative();
 
 interface ScanResult {
   severity: 'ok' | 'warning' | 'critical';
@@ -333,9 +339,11 @@ const SecuritySandboxPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               <p className="text-[10px] mt-0.5" style={{ color: 'var(--gia-muted)' }}>
                 {isDesktop
                   ? 'Build environment active on the host shell (GIA Desktop)'
-                  : SandboxService.isUsingNativeFallback()
-                    ? 'Active on native on-device terminal (proot + Alpine Linux)'
-                    : 'Active on Sandbox Server (port 3081) — proot chroot ready'}
+                  : isAndroid
+                    ? SandboxService.isUsingNativeFallback()
+                      ? 'Active on native on-device terminal (proot + Alpine Linux)'
+                      : 'Active on Sandbox Server (port 3081) — proot chroot ready'
+                    : 'Build environment not available in a browser tab — open the GIA Cowork desktop app'}
               </p>
             </div>
           </div>

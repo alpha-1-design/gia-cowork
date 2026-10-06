@@ -2,6 +2,13 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import { readFileSync } from 'node:fs'
+
+// Single source of truth for the version the UI reports. Previously this came
+// from `import.meta.env.VITE_APP_VERSION`, which nothing ever set, so the app
+// hardcoded itself to 0.1.0 and the update banner told every user on every
+// launch that they were permanently out of date.
+const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')) as { version: string }
 
 // https://tauri.app/start/frontend/vite/
 const host = process.env.TAURI_DEV_HOST
@@ -35,6 +42,9 @@ export default defineConfig({
       // Don't reload the frontend when Rust files change under src-tauri.
       ignored: ['**/src-tauri/**'],
     },
+  },
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   resolve: {
     alias: {

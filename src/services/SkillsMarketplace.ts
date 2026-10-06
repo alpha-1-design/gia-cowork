@@ -71,10 +71,13 @@ const GIA_BUILTIN_REGISTRY: RegistryEntry[] = [
     author: 'GIA',
     version: '1.0.0',
     category: 'security',
-    tags: ['security', 'audit', 'vulnerability', 'owasp'],
+    tags: ['security', 'audit', 'vulnerability', 'owasp', 'compliance'],
     tools: ['terminal_run', 'filesystem_read', 'web_search'],
     sourceUrl: '',
-    systemPrompt: 'You are a security expert. Audit code for OWASP Top 10 vulnerabilities. Provide clear mitigation steps. Prioritize least privilege.',
+    // Merged from the duplicate `gia-sec-audit` entry so its coverage (SQLi,
+    // XSS, CSRF, dependency risks, compliance) is not lost when the
+    // duplicate-named skill is removed.
+    systemPrompt: 'You are a security expert. Audit code for OWASP Top 10 vulnerabilities: SQL injection, XSS, CSRF, auth flaws, secrets in code, dependency risks, and misconfigurations. Provide clear mitigation and remediation steps. Prioritize least privilege and compliance.',
   },
   {
     id: 'gia-devops',
@@ -467,17 +470,6 @@ description: Use when asked to generate art—SVG, canvas, or p5.js generative p
     systemPrompt: 'You are a database designer. Design normalized schemas, write migrations, and optimize queries. Support PostgreSQL, MySQL, SQLite, and MongoDB. Include indexes and constraints.',
   },
   {
-    id: 'gia-sec-audit',
-    name: 'Security Auditor',
-    description: 'Audit code and systems for security vulnerabilities and compliance.',
-    author: 'GIA',
-    version: '1.0.0',
-    category: 'security',
-    tags: ['security', 'audit', 'vulnerability', 'compliance'],
-    tools: ['terminal_run', 'filesystem_read', 'web_search'],
-    systemPrompt: 'You are a security auditor. Check for OWASP Top 10 vulnerabilities: SQL injection, XSS, CSRF, auth flaws, secrets in code, dependency risks, misconfigurations. Provide clear remediation steps.',
-  },
-  {
     id: 'gia-perf',
     name: 'Performance Optimizer',
     description: 'Profile and optimize code for speed, memory, and scalability.',
@@ -643,6 +635,18 @@ description: Use when asked to generate art—SVG, canvas, or p5.js generative p
     systemPrompt: 'You are a data visualization specialist. Create clean, accessible charts using Recharts, SVG, or Canvas. Prefer semantic markup, proper colors, and responsive design.',
   },
 ];
+
+/**
+ * The builtin skills, for building the system prompt's skill-matching block.
+ *
+ * That block used to be a hand-written copy of the first 8 entries in this
+ * registry, which duplicated the data *and* silently missed the other 35. The
+ * prompt now derives from here so the two cannot drift apart: adding a builtin
+ * skill makes it matchable without touching buildGiaSystem.
+ */
+export function builtinSkillHighlights(): { name: string; description: string }[] {
+  return GIA_BUILTIN_REGISTRY.map(s => ({ name: s.name, description: s.description }));
+}
 
 // External registries to fetch skills from
 const EXTERNAL_REGISTRIES = [

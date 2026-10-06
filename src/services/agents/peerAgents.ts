@@ -158,6 +158,50 @@ export function probeCommands(bin: string): string[] {
   return [`command -v ${bin}`, `where.exe ${bin}`];
 }
 
+/**
+ * One shell round-trip that answers for every agent at once.
+ *
+ * `where.exe a b c` and `command -v a b c` both accept a list and print one
+ * line per binary that exists, skipping the rest. That matters because on
+ * Windows the per-binary loop costs TWO spawns per agent (`command -v` always
+ * fails in PowerShell, so `where.exe` always has to run too) -- twelve
+ * PowerShell launches at startup for six agents, each one a visible
+ * console window before CREATE_NO_WINDOW landed, which is what made the app
+ * look like it was running background scripts.
+ *
+ * The batch is still probed in both forms, and the per-binary loop remains the
+ * fallback: a single batched call cannot report *why* one binary was missing,
+ * so anything the batch leaves unanswered is re-probed individually.
+ */
+export function batchProbeCommand(bins: string[]): string[] {
+  if (bins.length === 0) return [];
+  const list = bins.join(' ');
+  return [`command -v ${list}`, `where.exe ${list}`];
+}
+
+/**
+ * Pull resolved paths out of a batched probe.
+ *
+ * `where.exe` prints full paths (`C:\...\claude.cmd`); `command -v` may print a
+ * bare name. Both are keyed off the last path segment, matched
+ * case-insensitively because Windows paths are not case-stable.
+ */
+export function parseBatchProbe(output: string, bins: string[]): Map<string, string> {
+  const foundPaths = new Map<string, string>();
+  for (const rawLine of output.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (/not found/i.test(line)) continue;
+    // A "not found" diagnostic can carry the name on the same line on some
+    // shells; only accept a line that names a binary we asked about.
+    const segment = line.split(/[\\/]/).pop() ?? line;
+    const bare = segment.replace(/\.(exe|cmd|bat|ps1)$/i, '').toLowerCase();
+    const match = bins.find(b => b.toLowerCase() === bare);
+    if (match && !foundPaths.has(match)) foundPaths.set(match, line);
+  }
+  return foundPaths;
+}
+
 /** What a missing-binary probe prints, which varies by shell. */
 function found(output: string): boolean {
   const out = output.trim();
@@ -181,25 +225,61 @@ export interface DetectionResult {
  * killing the batch.
  */
 export async function detectPeerAgents(cwd?: string): Promise<DetectionResult[]> {
-  const out: DetectionResult[] = [];
+  const bins = PEER_AGENTS.map(a => a.bin);
+  const resolved = new Map<string, string>();
+  // Probe forms the batch already used and got a clean answer from. Once a
+  // form has answered "none of these exist", re-asking it one binary at a time
+  // cannot produce a different answer -- it is the same question with more
+  // round-trips. Recording them is what keeps the common Windows case (none of
+  // the peer CLIs installed) at two spawns instead of fourteen.
+  const exhaustedForms = new Set<string>();
+
+  // Pass 1: one batched call per probe form. `bin` values come from the static
+  // catalog, never from the model, so these probes carry no caller text.
+  for (const form of batchProbeCommand(bins)) {
+    if (resolved.size === bins.length) break;
+    try {
+      const res = await shell(form, cwd);
+      const output = res.output ?? '';
+      const usable = res.exitCode === 0 || (output.trim() && !/not found/i.test(output));
+      if (usable) {
+        for (const [bin, path] of parseBatchProbe(output, bins)) {
+          if (!resolved.has(bin)) resolved.set(bin, path);
+        }
+      }
+      // A clean, complete answer from this form -- including "none of them" --
+      // settles it for every binary at once.
+      if (!usable || resolved.size > 0) exhaustedForms.add(form.split(/\s+/)[0]);
+    } catch {
+      // Wrong shell form for this platform -- fall through to the next.
+    }
+    // A usable answer from one form means the platform is settled; only a
+    // completely empty result justifies paying for the second form.
+    if (resolved.size > 0) break;
+  }
+
+  // Pass 2: individual probes for anything the batch could not answer, using
+  // only the forms that have not already given a clean answer.
   for (const agent of PEER_AGENTS) {
-    let path: string | null = null;
-    // `bin` comes from the static catalog, never from the model, so these
-    // probes carry no caller-supplied text.
+    if (resolved.has(agent.bin)) continue;
     for (const probe of probeCommands(agent.bin)) {
+      if (exhaustedForms.has(probe.split(/\s+/)[0])) continue;
       try {
         const res = await shell(probe, cwd);
         if (res.exitCode === 0 && found(res.output)) {
-          path = res.output.trim().split('\n')[0].trim();
+          resolved.set(agent.bin, res.output.trim().split('\n')[0].trim());
           break;
         }
       } catch {
-        // Wrong shell for this platform — try the next form.
+        // Wrong shell for this platform -- try the next form.
       }
     }
-    out.push({ agent, installed: !!path, path });
   }
-  return out;
+
+  return PEER_AGENTS.map(agent => {
+    const path = resolved.get(agent.bin) ?? null;
+    return { agent, installed: !!path, path };
+  });
 }
 
 export function installedAgents(results: DetectionResult[]): PeerAgent[] {

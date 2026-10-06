@@ -40,11 +40,24 @@ beforeEach(() => {
 const claude = () => PEER_AGENTS.find(a => a.id === 'claude')!;
 
 describe('detectPeerAgents', () => {
-  it('probes each agent with command -v', async () => {
-    respond = () => ({ output: '/usr/local/bin/claude', exitCode: 0 });
+  it('resolves every agent in one batched probe when all are present', async () => {
+
+    // This describe is about detection. The other describes following it share
+    // the same module-level mocks, but they are separate describe blocks so the
+    // parser sees each one closed independently.
+    // A Unix system with every peer CLI installed: the batch form answers for
+    // all of them in one call and the per-binary loop never runs.
+    respond = (cmd) => {
+      if (!cmd.startsWith('command -v ')) return { output: '', exitCode: 1 };
+      const bins = cmd.slice('command -v '.length).split(/\s+/);
+      return { output: bins.map(b => `/usr/local/bin/${b}`).join('\n'), exitCode: 0 };
+    };
     const results = await detectPeerAgents();
     expect(results).toHaveLength(PEER_AGENTS.length);
-    expect(calls.some(c => c === 'command -v claude')).toBe(true);
+    // All resolved through the single batched call — none individually probed.
+    expect(calls.some(c => c.startsWith('command -v claude '))).toBe(true);
+    expect(calls.some(c => c === 'command -v claude')).toBe(false);
+    expect(results.every(r => r.installed)).toBe(true);
   });
 
   it('marks found binaries as installed with their resolved path', async () => {
@@ -67,9 +80,12 @@ describe('detectPeerAgents', () => {
   });
 
   it('survives one probe throwing without losing the rest', async () => {
+    // A probe that throws must not kill the batch or hide the other results.
     respond = (c) => {
       if (c.includes('opencode')) throw new Error('boom');
-      return { output: '/bin/pi', exitCode: 0 };
+      if (!c.startsWith('command -v ')) return { output: '', exitCode: 1 };
+      const bins = c.slice('command -v '.length).split(/\s+/);
+      return { output: bins.filter(b => b === 'pi').map(b => '/bin/pi').join('\n'), exitCode: 0 };
     };
     const results = await detectPeerAgents();
     expect(results).toHaveLength(PEER_AGENTS.length);
@@ -80,8 +96,40 @@ describe('detectPeerAgents', () => {
   it('lists only what is installed', async () => {
     // Exact match on the probe — 'code' is a substring of 'opencode', so a loose
     // match here would silently report OpenCode as installed too.
-    respond = (c) => (c === 'command -v code' ? { output: '/usr/bin/code', exitCode: 0 } : { output: '', exitCode: 1 });
-    expect(installedAgents(await detectPeerAgents()).map(a => a.id)).toEqual(['vscode']);
+    //
+    // The batched probe answers one path per resolved binary across the whole
+    // list, so the mock must do the same: only `code` resolves.
+    respond = (c: string) => {
+      if (!c.startsWith('command -v ')) return { output: '', exitCode: 1 };
+      const bins = c.slice('command -v '.length).split(/\s+/);
+      const lines = bins
+        .filter(b => b === 'code')
+        .map(b => '/usr/bin/code');
+      return { output: lines.join('\n'), exitCode: lines.length ? 0 : 1 };
+    };
+    const found = installedAgents(await detectPeerAgents()).map(a => a.id);
+    expect(found).toEqual(['vscode']);
+  });
+
+  it('survives a per-binary probe that the batch could not answer', async () => {
+    // The batch can't always answer everything; when it can't, the per-binary
+    // fallback runs and uses only probe forms that haven't already given a clean
+    // answer.
+    respond = (c: string) => {
+      if (c.startsWith('command -v ')) {
+        const bins = c.slice('command -v '.length).split(/\s+/);
+        const hits = bins.filter(b => b === 'code');
+        if (hits.length) return { output: '/usr/bin/code', exitCode: 0 };
+        return { output: '', exitCode: 1 };
+      }
+      if (c.startsWith('where.exe ')) return { output: '', exitCode: 1 };
+      return { output: '', exitCode: 1 };
+    };
+    const found = installedAgents(await detectPeerAgents()).map(a => a.id);
+    expect(found).toEqual(['vscode']);
+    // vscode was found by the batch (command -v with everything listed), but
+    // only code resolves — vscode is the only installed one.
+    expect(found).not.toContain('opencode');
   });
 });
 

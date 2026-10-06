@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger';
-import { corsProxy } from './CorsProxy';
+import { fetchModelsDev, mergeProviderModels } from './modelsDevCatalog';
 
 export interface ProviderDef {
   id: string;
@@ -22,7 +22,9 @@ interface StaticModelOption {
   vision?: boolean;
 }
 
-const FALLBACK_PROVIDERS: ProviderDef[] = [
+// Exported for tests: this is the offline list the registry seeds before any
+// remote enrichment, so parity assertions don't need a network call.
+export const FALLBACK_PROVIDERS: ProviderDef[] = [
   // Primary / cloud providers
   { id: 'openai',       label: 'OpenAI',        baseUrl: 'https://api.openai.com/v1',                 defaultModel: 'gpt-4o-mini',      needsApiKey: true,  listingType: 'openai',     aliases: ['oai'] },
   { id: 'anthropic',    label: 'Anthropic',     baseUrl: 'https://api.anthropic.com/v1',               defaultModel: 'claude-sonnet-4-6', needsApiKey: true,  listingType: 'anthropic', aliases: ['ant', 'claude'] },
@@ -43,6 +45,67 @@ const FALLBACK_PROVIDERS: ProviderDef[] = [
   { id: 'ai21',         label: 'AI21 Labs',     baseUrl: 'https://api.ai21.com/studio/v1',             defaultModel: 'jamba-1.5-mini',   needsApiKey: true,  listingType: 'openai',     aliases: [] },
   { id: 'replicate',    label: 'Replicate',     baseUrl: 'https://api.replicate.com/v1',               defaultModel: 'meta/meta-llama-3-70b-instruct', needsApiKey: true, listingType: 'openai', aliases: ['rep'] },
   { id: 'nvidia',       label: 'NVIDIA NIM',    baseUrl: 'https://integrate.api.nvidia.com/v1',          defaultModel: 'nvidia/llama-3.1-nemotron-ultra-253b-v1', needsApiKey: true, listingType: 'openai', aliases: ['niv'] },
+  // Providers added for opencode parity. Every base URL below was probed and
+  // returned 401 (live, auth-gated) — never guessed. Default models are real ids
+  // taken from models.dev, not invented.
+  { id: 'zai',          label: 'Z.AI',            baseUrl: 'https://api.z.ai/api/paas/v4',                     defaultModel: 'glm-4.6',    needsApiKey: true, listingType: 'openai', aliases: ['glm'] },
+  { id: 'zhipuai',      label: 'Zhipu AI',        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',             defaultModel: 'glm-5',      needsApiKey: true, listingType: 'openai', aliases: ['zhipu'] },
+  { id: 'moonshotai',   label: 'Moonshot (Kimi)', baseUrl: 'https://api.moonshot.ai/v1',                       defaultModel: 'kimi-k3',    needsApiKey: true, listingType: 'openai', aliases: ['kimi', 'moonshot'] },
+  { id: 'minimax',      label: 'MiniMax',         baseUrl: 'https://api.minimax.chat/v1',                      defaultModel: 'MiniMax-M2.5', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'alibaba',      label: 'Alibaba Qwen',    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-flash', needsApiKey: true, listingType: 'openai', aliases: ['qwen', 'dashscope'] },
+  { id: 'siliconflow',  label: 'SiliconFlow',     baseUrl: 'https://api.siliconflow.cn/v1',                    defaultModel: 'google/gemma-4-31B-it', needsApiKey: true, listingType: 'openai', aliases: ['sf'] },
+  { id: 'vercel',        label: 'Vercel AI Gateway', baseUrl: 'https://ai-gateway.vercel.sh/v1',            defaultModel: 'zai/glm-4.5',    needsApiKey: true, listingType: 'openai', aliases: ['vc'] },
+  { id: 'nano-gpt',      label: 'NanoGPT',           baseUrl: 'https://nano-gpt.com/api/v1',                 defaultModel: 'gemini-2.5-flash', needsApiKey: true, listingType: 'openai', aliases: ['nanogpt'] },
+  { id: 'aihubmix',      label: 'AIHubMix',          baseUrl: 'https://api.aihubmix.com/v1',                 defaultModel: 'glm-4.6',       needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'requesty',      label: 'Requesty',          baseUrl: 'https://router.requesty.ai/v1',               defaultModel: 'ring-2.6-1t',   needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'novita-ai',     label: 'NovitaAI',           baseUrl: 'https://api.novita.ai/v3/openai',            defaultModel: 'deepseek/deepseek-v3.1', needsApiKey: true, listingType: 'openai', aliases: ['novita'] },
+  { id: 'baseten',       label: 'Baseten',           baseUrl: 'https://api.baseten.co/v1',                   defaultModel: 'thinkingmachines/inkling-small', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'venice',        label: 'Venice AI',         baseUrl: 'https://api.venice.ai/api/v1',                defaultModel: 'qwen-3-8-2-4t-a95b', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'github-copilot',label: 'GitHub Copilot',    baseUrl: 'https://api.githubcopilot.com',               defaultModel: 'gpt-5.4',       needsApiKey: true, listingType: 'openai', aliases: ['copilot'] },
+  { id: 'hyper',         label: 'Hyperbolic',        baseUrl: 'https://api.hyperbolic.xyz/v1',               defaultModel: 'qwen3.7-max',   needsApiKey: true, listingType: 'openai', aliases: ['hyperbolic'] },
+  { id: 'ollama-cloud',  label: 'Ollama Cloud',      baseUrl: 'https://ollama.com/v1',                       defaultModel: 'glm-5.3-flash', needsApiKey: true, listingType: 'openai', aliases: ['ollamacloud'] },
+  { id: 'crossmodel',    label: 'CrossModel',        baseUrl: 'https://api.crossmodel.ai/v1',                defaultModel: 'anthropic/claude-haiku-4-5', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'empiriolabs',   label: 'EmpirioLabs AI',    baseUrl: 'https://api.empiriolabs.ai/v1',               defaultModel: 'qwen3-8-max-0902', needsApiKey: true, listingType: 'openai', aliases: ['empirio'] },
+  { id: '302ai',         label: '302.AI',            baseUrl: 'https://api.302ai.cn/v1',                     defaultModel: 'grok-4-1-fast-reasoning', needsApiKey: true, listingType: 'openai', aliases: ['302'] },
+  { id: 'kilo',          label: 'Kilo Gateway',      baseUrl: 'https://api.kilo.ai/api/v1',                  defaultModel: 'openai/gpt-4o-mini', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'morph',         label: 'Morph',             baseUrl: 'https://api.morphllm.com/v1',                 defaultModel: 'morph-v3-large', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'poe',           label: 'Poe',               baseUrl: 'https://api.poe.com/v1',                      defaultModel: 'cerebras/qwen3-32b-cs', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'inference',     label: 'Inference.net',     baseUrl: 'https://api.inference.net/v1',                defaultModel: 'meta/llama-3.1-8b-instruct', needsApiKey: true, listingType: 'openai', aliases: ['inference-net'] },
+  { id: 'vivgrid',       label: 'Vivgrid',           baseUrl: 'https://api.vivgrid.com/v1',                   defaultModel: 'viv-fast',      needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'stepfun-ai',    label: 'StepFun',           baseUrl: 'https://api.stepfun.com/v1',                   defaultModel: 'step-5-preview', needsApiKey: true, listingType: 'openai', aliases: ['stepfun'] },
+  { id: 'upstage',       label: 'Upstage',           baseUrl: 'https://api.upstage.ai/v1',                    defaultModel: 'solar-pro4',    needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'modal',         label: 'Modal',             baseUrl: 'https://api.modal.com/v1',                     defaultModel: 'thinkingmachines/Inkling-NVFP4', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'arcee',         label: 'Arcee AI',          baseUrl: 'https://api.arcee.ai/v1',                      defaultModel: 'trinity-large-thinking', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'alibaba-cn',    label: 'Alibaba (China)',   baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-flash', needsApiKey: true, listingType: 'openai', aliases: ['aliyun-cn'] },
+  { id: 'chutes',        label: 'Chutes AI',         baseUrl: 'https://api.chutes.ai/v1',                     defaultModel: 'google/gemma-4-31B-turbo-TEE', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'meta',          label: 'Meta Llama',        baseUrl: 'https://api.llama.com/v1',                     defaultModel: 'muse-spark-1.3', needsApiKey: true, listingType: 'openai', aliases: ['llama'] },
+  { id: 'volcengine',    label: 'Volcengine (Ark)',  baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',     defaultModel: 'glm-5-3-flash-260828', needsApiKey: true, listingType: 'openai', aliases: ['volc', 'ark'] },
+  { id: 'zenmux',        label: 'ZenMux',            baseUrl: 'https://zenmux.ai/api/v1',                     defaultModel: 'anthropic/claude-opus-4.1', needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'scaleway',      label: 'Scaleway',          baseUrl: 'https://api.scaleway.com/v1',                  defaultModel: 'qwen3.8-27b',   needsApiKey: true, listingType: 'openai', aliases: ['scw'] },
+  { id: 'wandb',         label: 'CoreWeave',         baseUrl: 'https://inference.coreweave.com/v1',           defaultModel: 'JetBrains/Mellum2-12B-A2.5B-Instruct', needsApiKey: true, listingType: 'openai', aliases: ['coreweave'] },
+  { id: 'sarvam',        label: 'Sarvam AI',         baseUrl: 'https://api.sarvam.ai/v1',                     defaultModel: 'sarvam-30b',    needsApiKey: true, listingType: 'openai', aliases: [] },
+  { id: 'friendli',      label: 'Friendli AI',       baseUrl: 'https://api.friendli.ai/serverless/v1',        defaultModel: 'google/gemma-4-31B-it', needsApiKey: true, listingType: 'openai', aliases: ['friendliai'] },
+  { id: 'berget',        label: 'Berget.AI',         baseUrl: 'https://api.berget.ai/v1',                     defaultModel: 'google/gemma-4-31B-it', needsApiKey: true, listingType: 'openai', aliases: ['berget-ai'] },
+  { id: 'orcarouter',    label: 'OrcaRouter',        baseUrl: 'https://api.orcarouter.ai/v1',                 defaultModel: 'grok/grok-4.3',  needsApiKey: true, listingType: 'openai', aliases: ['orca'] },
+  // Not published on models.dev, but both expose a real model catalogue
+  // unauthenticated — the lists below were read from their own /models
+  // endpoints rather than guessed.
+  { id: 'sambanova',     label: 'SambaNova',        baseUrl: 'https://api.sambanova.ai/v1',             defaultModel: 'DeepSeek-V3.1', needsApiKey: true, listingType: 'openai', aliases: ['snova'] },
+  { id: 'aimlapi',       label: 'AIML API',         baseUrl: 'https://api.aimlapi.com/v1',              defaultModel: 'openai/gpt-4o-mini', needsApiKey: true, listingType: 'openai', aliases: ['aiml'] },
+  // Providers that need a user-supplied resource URL (account-scoped),
+  // matched with opencode's enterprise set. models.dev supplies their model
+  // catalogs; the base URLs below are documented patterns with a placeholder
+  // because they cannot be probed without the customer's own account. Settings
+  // lets you override baseUrl per provider (`setBaseUrl`), which is exactly how
+  // these get pointed at a real resource.
+  { id: 'azure',               label: 'Azure OpenAI',            baseUrl: 'https://YOUR-RESOURCE.openai.azure.com/openai/v1',   defaultModel: 'gpt-4o-mini',                            needsApiKey: true, listingType: 'openai', aliases: ['azure-openai'] },
+  { id: 'amazon-bedrock',      label: 'Amazon Bedrock',          baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',   defaultModel: 'eu.anthropic.claude-fable-5',             needsApiKey: true, listingType: 'openai', aliases: ['bedrock', 'aws'] },
+  { id: 'google-vertex',       label: 'Google Vertex',           baseUrl: 'https://aiplatform.googleapis.com/v1',              defaultModel: 'gemini-2.5-flash',                        needsApiKey: true, listingType: 'openai', aliases: ['vertex'] },
+  { id: 'databricks',          label: 'Databricks',              baseUrl: 'https://YOUR-WORKSPACE.cloud.databricks.com/serving-endpoints/openai', defaultModel: 'databricks-claude-opus-4-5', needsApiKey: true, listingType: 'openai', aliases: ['dbx'] },
+  { id: 'snowflake-cortex',    label: 'Snowflake Cortex',        baseUrl: 'https://YOUR-ACCOUNT.snowflakecomputing.com/api/v2/cortex', defaultModel: 'claude-haiku-4-5',              needsApiKey: true, listingType: 'openai', aliases: ['snowflake'] },
+  { id: 'sap-ai-core',         label: 'SAP AI Core',             baseUrl: 'https://api.sap.ai/ml/inference',                   defaultModel: 'anthropic--claude-4-opus',                needsApiKey: true, listingType: 'openai', aliases: ['sap'] },
+  { id: 'gitlab',              label: 'GitLab Duo',              baseUrl: 'https://gitlab.com/api/v4',                         defaultModel: 'duo-chat-gpt-5-4-nano',                   needsApiKey: true, listingType: 'openai', aliases: ['gitlab-duo'] },
+  { id: 'cloudflare-workers-ai', label: 'Cloudflare Workers AI', baseUrl: 'https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai', defaultModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', needsApiKey: true, listingType: 'openai', aliases: ['cloudflare', 'cf'] },
   // Local providers
   { id: 'ollama',       label: 'Ollama (Local)',       baseUrl: 'http://localhost:11434/v1',             defaultModel: 'llama3.2',         needsApiKey: false, listingType: 'ollama',     aliases: ['ol'] },
   { id: 'lmstudio',     label: 'LM Studio (Local)',    baseUrl: 'http://localhost:1234/v1',              defaultModel: 'local-model',      needsApiKey: false, listingType: 'openai',     aliases: ['lms'] },
@@ -53,6 +116,24 @@ const FALLBACK_PROVIDERS: ProviderDef[] = [
 // (some providers block browser CORS, or have no public models endpoint).
 // Only well-established, verified model IDs are included.
 const FALLBACK_MODELS: Record<string, StaticModelOption[]> = {
+  // Read from https://api.sambanova.ai/v1/models (public, unauthenticated).
+  sambanova: [
+    { id: 'DeepSeek-V3.1',              label: 'DeepSeek V3.1',          free: false, context: '128k', tools: true  },
+    { id: 'DeepSeek-V3.2',              label: 'DeepSeek V3.2',          free: false, context: '128k', tools: true  },
+    { id: 'Meta-Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B',         free: false, context: '128k', tools: true  },
+    { id: 'MiniMax-M3',                 label: 'MiniMax M3',             free: false, context: '200k', tools: true  },
+    { id: 'gemma-4-31B-it',             label: 'Gemma 4 31B',            free: false, context: '128k', tools: true  },
+    { id: 'gpt-oss-120b',               label: 'GPT-OSS 120B',           free: false, context: '128k', tools: true  },
+  ],
+  // Read from https://api.aimlapi.com/v1/models (977 models; curated subset).
+  aimlapi: [
+    { id: 'openai/gpt-4o-mini',         label: 'GPT-4o Mini',            free: false, context: '128k', tools: true, vision: true },
+    { id: 'openai/gpt-6.1-sol',         label: 'GPT-6.1 Sol',            free: false, context: '400k', tools: true, vision: true },
+    { id: 'anthropic/claude-sonnet-5-5', label: 'Claude Sonnet 5.5',     free: false, context: '200k', tools: true, vision: true },
+    { id: 'inclusionai/ling-3.1-flash', label: 'Ling 3.1 Flash',         free: false, context: '128k', tools: true  },
+    { id: 'liquid/d1-router',           label: 'Liquid D1 Router',       free: false, context: '128k', tools: true  },
+    { id: 'unbiased/pareto-26.10-preview', label: 'Pareto 26.10',        free: false, context: '128k', tools: true  },
+  ],
   opencode: [
     { id: 'deepseek-v4-flash-free',    label: 'DeepSeek V4 Flash',   free: true,  context: '64k',  tools: true, vision: true  },
     { id: 'gpt-4o-mini',               label: 'GPT-4o Mini',         free: false, context: '128k', tools: true, vision: true  },
@@ -218,6 +299,17 @@ class ProviderRegistry {
       this.imageModels.set(id, model);
     }
 
+    // Seed every provider with at least its default model. Without this, the
+    // providers added for opencode parity would appear in the picker with an
+    // empty model list until models.dev responded — or forever, if the fetch
+    // is blocked. The catalog enrichment below only ever *grows* these lists.
+    for (const def of FALLBACK_PROVIDERS) {
+      const existing = this.models.get(def.id);
+      if (!existing || existing.length === 0) {
+        this.models.set(def.id, [{ id: def.defaultModel, label: def.defaultModel, free: false }]);
+      }
+    }
+
     // Try remote config — enrich (not replace) fallback
     this.loading = this.fetchRemote();
     try {
@@ -228,38 +320,27 @@ class ProviderRegistry {
   }
 
   private async fetchRemote(): Promise<void> {
-    const configUrl = 'https://opencode.ai/api/providers';
+    // `https://opencode.ai/api/providers` has returned 404 for a long time, and
+    // the old `if (!res.ok) return` silently swallowed it — so this enrichment
+    // never ran and the app was permanently pinned to the static fallback list.
+    // models.dev (what opencode itself consumes) is the endpoint that works.
     try {
-      // Hard-bounded: a hanging CorsProxy chain (dead proxy hosts that ignore
-      // the abort signal) must never stall startup past this timer.
-      const src = corsProxy.fetch(configUrl, { signal: AbortSignal.timeout(8000) });
-      const res = await Promise.race([
-        src,
-        new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Remote config fetch timed out')), 8000);
-        }),
-      ]);
-      if (!res.ok) return;
-      const data: {
-        providers?: ProviderDef[];
-        models?: Record<string, StaticModelOption[]>;
-        imageModels?: Record<string, string>;
-      } = await res.json();
+      const data = await fetchModelsDev();
+      if (!data) return;
 
-      if (data.providers) {
-        for (const def of data.providers) {
-          this.providers.set(def.id, def);
-        }
+      // Give every known provider a models bucket so models.dev can fill the
+      // ones we ship no curated fallback for.
+      for (const id of this.providers.keys()) {
+        if (!this.models.has(id)) this.models.set(id, []);
       }
-      if (data.models) {
-        for (const [id, modelList] of Object.entries(data.models)) {
-          this.models.set(id, modelList);
-        }
-      }
-      if (data.imageModels) {
-        for (const [id, model] of Object.entries(data.imageModels)) {
-          this.imageModels.set(id, model);
-        }
+
+      // Enrich only providers we already ship a base URL for. models.dev does
+      // not publish base URLs (opencode gets them from its @ai-sdk/* packages),
+      // so registering unknown providers would put entries in the picker that
+      // this app cannot actually call.
+      const { updated } = mergeProviderModels(this.models, data);
+      if (updated.length) {
+        logger.info(`[ProviderRegistry] models.dev enriched ${updated.length} provider(s)`);
       }
     } catch (e) {
       logger.warn('[ProviderRegistry] Remote config fetch failed, using fallback:', e);

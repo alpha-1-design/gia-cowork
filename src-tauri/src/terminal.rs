@@ -21,6 +21,45 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::process::CommandExt;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+/// Suppress the console window Windows would otherwise flash on screen.
+///
+/// A Tauri build is a GUI-subsystem binary. When a GUI process spawns a
+/// console-subsystem child (`powershell.exe`, `taskkill`) with no console of
+/// its own, Windows allocates a brand-new console window for that child and
+/// paints it on screen for the lifetime of the process. The user sees a black
+/// terminal window blink open and closed on every single internal command --
+/// which reads as "the app is running scripts in the background".
+///
+/// CREATE_NO_WINDOW (0x08000000) gives the child a console that is never
+/// displayed. Stdout/stderr are already piped, so nothing is lost: this only
+/// stops the window from being shown, it does not change what the child can
+/// write.
+///
+/// This is the single most important line for how the app *feels* on Windows.
+/// It must be applied to EVERY spawn, including the short-lived helpers in
+/// `kill_process_tree` and the fs-info probe, because one un-flagged spawn is
+/// one visible flash.
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Build a `Command` that will never flash a console window on Windows.
+///
+/// On non-Windows this is the identity function, so call sites stay
+/// platform-agnostic and cannot forget the flag on one branch.
+fn quiet_command(program: &str) -> Command {
+    // `creation_flags` takes &mut self and returns &mut Command, so it has to be
+    // called as a statement and the owned `Command` returned at the end --
+    // returning its result directly would be a type error.
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+    let mut cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
+
 const DEFAULT_TIMEOUT_MS: u64 = 60_000;
 const MAX_TIMEOUT_MS: u64 = 10 * 60_000;
 const MAX_OUTPUT_BYTES: usize = 10 * 1024 * 1024;
@@ -91,7 +130,7 @@ fn kill_process_tree(child: &mut Child) {
         // /T = tree (children too), /F = force. taskkill ships with every
         // Windows install; the direct child may already be gone, in which
         // case taskkill just fails harmlessly against the survivors.
-        let _ = Command::new("taskkill")
+        let _ = quiet_command("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -146,7 +185,7 @@ pub async fn terminal_exec(
 
     #[cfg(target_os = "windows")]
     let mut cmd = {
-        let mut command_builder = Command::new("powershell.exe");
+        let mut command_builder = quiet_command("powershell.exe");
         command_builder
             .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"])
             .arg(&command);
@@ -310,7 +349,7 @@ pub fn terminal_list_sessions(
 pub fn terminal_get_fs_info() -> Result<FsInfo, String> {
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("powershell.exe")
+        let output = quiet_command("powershell.exe")
             .args(["-NoProfile", "-NonInteractive", "-Command", "(Get-PSDrive -Name (Split-Path $HOME -Qualifier).TrimEnd(':')).Free"])
             .output()
             .map_err(|e| format!("PowerShell disk query failed: {e}"))?;

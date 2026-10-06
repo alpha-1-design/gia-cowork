@@ -29,3 +29,8 @@ src-tauri/Cargo.lock
 
 # Built installer artifacts (release outputs, never source)
 windows-artifacts/
+
+# openWakeWord ONNX assets, staged out of node_modules by
+# scripts/copy-wakeword-assets.mjs on predev/prebuild. ~5.5MB of binaries that
+# would otherwise be committed; never source.
+public/openwakeword/

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { idbStorage } from '../store/idb-storage';
 import { providerRegistry } from '../services/ProviderRegistry';
+import { companyFor, descriptionFor, docsUrlFor } from '../services/providerInfo';
 import { useProviderStore, type ModelOption } from '../store/useProviderStore';
 import { corsProxy } from '../services/CorsProxy';
 import { useCustomProviderStore, validateCustomProvider, getAllProvidersWithCustom } from '../services/providers/customProviders';
@@ -440,6 +441,26 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
           <p className="text-sm text-zinc-400 text-center">
             Enter your API key for <span className="text-zinc-200 font-medium">{providerRegistry.getLabel(wizard.provider)}</span>
           </p>
+
+          {/* First-run is exactly where someone who has never heard of the
+              provider needs the link -- without it the wizard dead-ends on a
+              key field with no way to obtain a key. */}
+          <div className="flex flex-col items-center gap-1.5 text-center -mt-1">
+            <p className="text-[11px] text-zinc-500 leading-snug">
+              <span className="text-zinc-400">{companyFor(wizard.provider)}</span>
+              {descriptionFor(wizard.provider) ? <> — {descriptionFor(wizard.provider)}</> : null}
+            </p>
+            {docsUrlFor(wizard.provider) && (
+              <a
+                href={docsUrlFor(wizard.provider)}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-[11px] font-medium text-indigo-400 hover:underline"
+              >
+                Get an API key from {companyFor(wizard.provider)} ↗
+              </a>
+            )}
+          </div>
 
           <div className="relative">
             <input

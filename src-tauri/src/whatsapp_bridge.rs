@@ -13,6 +13,9 @@
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
+
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
@@ -70,7 +73,15 @@ pub fn whatsapp_bridge_start(
         .map_err(|e| format!("could not resolve sidecar path: {e}"))?;
 
     let token = random_token();
-    let mut child = Command::new("node")
+    // Same reason as terminal.rs: without CREATE_NO_WINDOW a GUI-subsystem
+    // Tauri process spawning `node` makes Windows paint a console window that
+    // then sits there for the whole life of the bridge.
+    // `creation_flags` returns &mut Command, so it is called as a statement.
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+    let mut node_cmd = Command::new("node");
+    #[cfg(target_os = "windows")]
+    node_cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let mut child = node_cmd
         .arg("src/server.js")
         .current_dir(&sidecar_dir)
         .env("GIA_WA_BRIDGE_PORT", BRIDGE_PORT.to_string())

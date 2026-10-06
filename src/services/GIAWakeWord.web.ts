@@ -1,31 +1,47 @@
-import type { GIAWakeWordPlugin } from './GIAWakeWord';
 import type { PluginListenerHandle } from '@capacitor/core';
+import { createOpenWakeWordPlugin, type StartOptions } from './wakeWord/openWakeWordPlugin';
 
-export class GIAWakeWordWeb implements GIAWakeWordPlugin {
-  async startListening(): Promise<void> {
-    console.warn('[GIAWakeWord] Native wake word not available on web');
+/**
+ * Browser wake word. This used to be a stub that only logged a warning, which
+ * meant the wake-word toggle did nothing at all on the web build. It is now the
+ * same local openWakeWord engine the desktop app uses -- no cloud access key,
+ * no speech recogniser, no audio leaving the machine.
+ */
+export class GIAWakeWordWeb {
+  private readonly inner = createOpenWakeWordPlugin('hey gia', (msg) => console.warn(msg));
+
+  startListening(options?: StartOptions): Promise<void> {
+    return this.inner.startListening(options);
   }
 
-  async stopListening(): Promise<void> {
+  stopListening(): Promise<void> {
+    return this.inner.stopListening();
   }
 
-  async isListening(): Promise<{ listening: boolean }> {
-    return { listening: false };
+  isListening(): Promise<{ listening: boolean }> {
+    return this.inner.isListening();
   }
 
-  async getPendingWakeWord(): Promise<{ detected: boolean; keyword: string }> {
-    return { detected: false, keyword: '' };
+  getPendingWakeWord(): Promise<{ detected: boolean; keyword: string }> {
+    return this.inner.getPendingWakeWord();
   }
 
-  async addListener(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  addListener(
     _eventName: 'wakeWordDetected',
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _handler: (result: { keyword: string }) => void
+    handler: (result: { keyword: string }) => void,
   ): Promise<PluginListenerHandle> {
-    return { remove: async () => {} };
+    return this.inner.addListener('wakeWordDetected', handler);
   }
 
-  async removeAllListeners(): Promise<void> {
+  removeAllListeners(): Promise<void> {
+    return this.inner.removeAllListeners();
+  }
+
+  lastError(): string | null {
+    return this.inner.lastError();
+  }
+
+  lastScore(): number {
+    return this.inner.lastScore();
   }
 }

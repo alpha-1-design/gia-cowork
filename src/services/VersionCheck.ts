@@ -91,11 +91,19 @@ export class VersionCheck {
   }
 
   get currentVersion(): string {
+    // Replaced with a string literal at build time by vite.config.ts `define`.
+    // The previous `import.meta.env.VITE_APP_VERSION` was never set by anyone,
+    // so this always resolved to a hardcoded 0.1.0 fallback and the banner told
+    // every user -- including those already on the newest build -- that they
+    // were permanently out of date.
+    //
+    // Note this must be a bare identifier: Vite's `define` substitutes
+    // identifiers, not property accesses, so `globalThis.__APP_VERSION__`
+    // would silently stay undefined at runtime.
     try {
-      return (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_APP_VERSION ?? '0.1.0';
-    } catch {
-      return '0.1.0';
-    }
+      if (typeof __APP_VERSION__ === 'string' && __APP_VERSION__) return __APP_VERSION__;
+    } catch { /* not defined (e.g. plain test run) -- fall through */ }
+    return '0.0.0';
   }
 
   /** Cached result, or null if never checked. Never triggers a fetch. */
@@ -173,6 +181,29 @@ export class VersionCheck {
     this.inFlight = null;
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   }
+}
+
+const DISMISS_KEY = 'gia-version-dismissed-v1';
+
+/**
+ * Which release the user has already dismissed.
+ *
+ * Dismissal used to be plain component state, so the banner came back on every
+ * reload and every remount -- an update notice you cannot get rid of is worse
+ * than no notice at all. Recording the dismissed *version* (rather than a
+ * boolean) means it stays gone until a genuinely newer release appears, which
+ * is the only time the message is worth showing again.
+ */
+export function dismissedVersion(): string | null {
+  try { return localStorage.getItem(DISMISS_KEY); } catch { return null; }
+}
+
+export function dismissVersion(latest: string) {
+  try { localStorage.setItem(DISMISS_KEY, latest); } catch { /* ignore */ }
+}
+
+export function clearDismissedVersion() {
+  try { localStorage.removeItem(DISMISS_KEY); } catch { /* ignore */ }
 }
 
 export const versionCheck = new VersionCheck();

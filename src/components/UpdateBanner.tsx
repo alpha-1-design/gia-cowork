@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowUpCircle, X } from 'lucide-react';
-import { versionCheck, type VersionInfo } from '../services/VersionCheck';
+import { versionCheck, dismissVersion, dismissedVersion, type VersionInfo } from '../services/VersionCheck';
 
 /**
  * Update banner.
@@ -16,6 +16,12 @@ import { versionCheck, type VersionInfo } from '../services/VersionCheck';
 export function UpdateBanner() {
   const [info, setInfo] = useState<VersionInfo | null>(null);
   const [dismissed, setDismissed] = useState(false);
+
+  // A dismissal is remembered per release, so it survives reloads and remounts
+  // but still reappears when something newer than what was dismissed ships.
+  useEffect(() => {
+    if (info?.latest && dismissedVersion() === info.latest) setDismissed(true);
+  }, [info?.latest]);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +61,14 @@ export function UpdateBanner() {
           Release notes
         </a>
       )}
-      <button onClick={() => setDismissed(true)} aria-label="Dismiss update notice" className="shrink-0 p-0.5 rounded">
+      <button
+        onClick={() => {
+          setDismissed(true);
+          if (info.latest) dismissVersion(info.latest);
+        }}
+        aria-label="Dismiss update notice"
+        className="shrink-0 p-0.5 rounded"
+      >
         <X size={11} style={{ color: 'var(--gia-muted-2)' }} />
       </button>
     </div>

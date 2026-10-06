@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Check, ChevronRight, KeyRound, Settings2, Zap, Eye, Wrench, Cpu, RefreshCw, Film, AudioLines, Image as ImageIcon, Brain, Info } from 'lucide-react';
 import { useProviderStore } from '../../store/useProviderStore';
 import { providerRegistry } from '../../services/ProviderRegistry';
+import { companyFor, descriptionFor, docsUrlFor } from '../../services/providerInfo';
 import { useShallow } from 'zustand/react/shallow';
 import ProviderIcon from '../ProviderIcon';
 import BottomSheet from '../ui/BottomSheet';
@@ -222,6 +223,24 @@ const ModelSwitcherSheet: React.FC<ModelSwitcherSheetProps> = ({ open, onClose, 
                     <p className="text-[11px] leading-relaxed" style={{ color: 'var(--gia-muted)' }}>
                       Connect a <span className="font-semibold" style={{ color: 'var(--gia-text)' }}>{providerRegistry.getLabel(selected)}</span> API key to use its models.
                     </p>
+                    {/* What it is, who runs it, and a direct link to get a key —
+                        without the last part this prompt is a dead end for
+                        anyone who has never heard of the provider. */}
+                    <p className="text-[10px] leading-snug" style={{ color: 'var(--gia-muted-2)' }}>
+                      <span className="font-medium" style={{ color: 'var(--gia-muted)' }}>{companyFor(selected)}</span>
+                      {descriptionFor(selected) ? <> — {descriptionFor(selected)}</> : null}
+                    </p>
+                    {docsUrlFor(selected) && (
+                      <a
+                        href={docsUrlFor(selected)}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="w-fit inline-flex items-center gap-1 text-[11px] font-medium transition-colors hover:opacity-80"
+                        style={{ color: '#a855f7' }}
+                      >
+                        Get an API key from {companyFor(selected)} ↗
+                      </a>
+                    )}
                     <div className="flex items-center gap-2">
                       <input
                         type="password"

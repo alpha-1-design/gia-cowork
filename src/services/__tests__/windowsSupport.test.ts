@@ -73,11 +73,19 @@ describe('peer detection works on Windows', () => {
 
   it('falls back to where.exe when command -v is not a PowerShell cmdlet', async () => {
     const seen: string[] = [];
+    // Answers per binary, the way a real probe does. The earlier version of
+    // this test returned the same claude path for *every* command, which
+    // happened to pass against the old per-binary loop and hid the batching.
+    const INSTALLED: Record<string, string> = { claude: 'C:\\Program Files\\Claude\\claude.exe' };
     const restore = setShell(async (cmd: string): Promise<ShellResult> => {
       seen.push(cmd);
-      // PowerShell rejects `command -v` but resolves `where.exe`.
+      // PowerShell rejects `command -v`; only `where.exe` resolves.
       if (cmd.startsWith('command -v')) return { output: '', exitCode: 1 };
-      return { output: 'C:\\Program Files\\Claude\\claude.exe', exitCode: 0 };
+      const bins = cmd.replace(/^where\.exe\s+/, '').split(/\s+/);
+      const lines = bins.filter(b => INSTALLED[b]).map(b => INSTALLED[b]);
+      return lines.length
+        ? { output: lines.join('\n'), exitCode: 0 }
+        : { output: '', exitCode: 1 };
     });
 
     try {
@@ -86,23 +94,63 @@ describe('peer detection works on Windows', () => {
         installed: true,
         path: 'C:\\Program Files\\Claude\\claude.exe',
       });
-      expect(seen).toContain('where.exe claude');
+      // Only claude exists, and the batched probe must have resolved it.
+      expect(seen.some(c => c.startsWith('where.exe'))).toBe(true);
     } finally {
       restore();
     }
   });
 
-  it('does not run the second probe once the first succeeds', async () => {
+  it('resolves every installed agent in one batched call per probe form', async () => {
+    const seen: string[] = [];
+    const INSTALLED: Record<string, string> = {
+      claude: '/usr/local/bin/claude',
+      opencode: '/usr/local/bin/opencode',
+    };
+    const restore = setShell(async (cmd: string): Promise<ShellResult> => {
+      seen.push(cmd);
+      if (cmd.startsWith('where.exe')) return { output: '', exitCode: 1 };
+      const bins = cmd.replace(/^command -v\s+/, '').split(/\s+/);
+      const lines = bins.filter(b => INSTALLED[b]).map(b => INSTALLED[b]);
+      return lines.length
+        ? { output: lines.join('\n'), exitCode: 0 }
+        : { output: '', exitCode: 1 };
+    });
+
+    try {
+      const results = await detectPeerAgents();
+      // Both found binaries resolved by the single batched `command -v`.
+      expect(results.find(r => r.agent.bin === 'claude')?.installed).toBe(true);
+      expect(results.find(r => r.agent.bin === 'opencode')?.installed).toBe(true);
+      // The batch already answered for these two, so they are never re-probed
+      // one at a time. (The agents the batch could NOT find legitimately fall
+      // through to individual probes, so `where.exe` may still appear for
+      // them -- asserting its total absence here would be wrong.)
+      expect(seen.some(c => c === 'command -v claude')).toBe(false);
+      expect(seen.some(c => c === 'command -v opencode')).toBe(false);
+      // The Windows form is not spent re-asking about a binary Unix already
+      // resolved.
+      expect(seen.some(c => c === 'where.exe claude')).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('does not spawn a subprocess per agent when the batch answers for all', async () => {
     const seen: string[] = [];
     const restore = setShell(async (cmd: string): Promise<ShellResult> => {
       seen.push(cmd);
-      return { output: '/usr/bin/claude', exitCode: 0 };
+      const bins = cmd.replace(/^(command -v|where\.exe)\s+/, '').split(/\s+/);
+      const lines = bins.map(b => `/usr/local/bin/${b}`);
+      return { output: lines.join('\n'), exitCode: 0 };
     });
 
     try {
       await detectPeerAgents();
-      // No wasted subprocess on the platform where the first form works.
-      expect(seen.some(c => c.startsWith('where.exe'))).toBe(false);
+      // Six agents used to cost up to twelve spawns. All-present must now cost
+      // exactly one, which is what stopped the app looking like it was running
+      // background scripts on Windows.
+      expect(seen.length).toBe(1);
     } finally {
       restore();
     }

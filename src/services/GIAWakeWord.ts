@@ -1,5 +1,6 @@
 import { registerPlugin, PluginListenerHandle } from '@capacitor/core';
 import { isTauri } from '../platform';
+import { createOpenWakeWordPlugin } from './wakeWord/openWakeWordPlugin';
 
 export interface GIAWakeWordPlugin {
   startListening(options?: {
@@ -21,72 +22,47 @@ export interface GIAWakeWordPlugin {
   ): Promise<PluginListenerHandle>;
 
   removeAllListeners(): Promise<void>;
+
+  /** Last failure reason (e.g. 'wake-word-unavailable:no-wasm'), or null. */
+  lastError(): string | null;
+
+  /** Most recent ONNX keyword score, for diagnostics in the settings UI. */
+  lastScore(): number;
 }
 
-// Desktop alternative to a native Porcupine wake-word engine: continuous Web
-// Speech recognition that watches for a keyword. Requires the SpeechRecognition
-// API (Chromium-based webviews) and microphone permission. If unavailable, the
-// plugin simply no-ops — the wake word is optional, never fatal.
-function desktopWakeWordPlugin(defaultKeyword = 'gia'): GIAWakeWordPlugin {
-  const SR: any =
-    (typeof window !== 'undefined' && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) || null;
-  const handlers = new Set<(r: { keyword: string }) => void>();
-  let listening = false;
-  let recognition: any = null;
-
+// Desktop wake word. This used to run continuous `SpeechRecognition` and
+// substring-match the transcript for "gia" -- which needed a full speech
+// recogniser running forever, fired on the word appearing anywhere in any
+// sentence, and handed raw microphone audio to a speech service. It is now the
+// local openWakeWord ONNX engine, shared with the browser build. If the
+// environment cannot run it the plugin no-ops; the wake word is optional,
+// never fatal, and the failure reason is available via lastError().
+function desktopWakeWordPlugin(defaultKeyword = 'hey gia'): GIAWakeWordPlugin {
+  const impl = createOpenWakeWordPlugin(defaultKeyword, (msg) => console.warn(msg));
   return {
     async startListening(opts) {
-      if (!SR) return;
-      const keyword = (opts?.keyword || defaultKeyword).toLowerCase();
-      recognition = new SR();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-      recognition.onresult = (e: any) => {
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const transcript = String(e.results[i][0].transcript).toLowerCase();
-          if (transcript.includes(keyword)) {
-            handlers.forEach((h) => h({ keyword }));
-          }
-        }
-      };
-      recognition.onerror = () => {};
-      recognition.onend = () => {
-        if (listening && recognition) {
-          try {
-            recognition.start();
-          } catch {
-            /* ignore restart failures */
-          }
-        }
-      };
-      listening = true;
-      try {
-        recognition.start();
-      } catch {
-        /* already started */
-      }
+      await impl.startListening(opts);
     },
     async stopListening() {
-      listening = false;
-      try {
-        recognition?.stop();
-      } catch {
-        /* ignore */
-      }
+      await impl.stopListening();
     },
     async isListening() {
-      return { listening };
+      return impl.isListening();
     },
     async getPendingWakeWord() {
-      return { detected: false, keyword: '' };
+      return impl.getPendingWakeWord();
     },
-    async addListener(_event, handler) {
-      handlers.add(handler);
-      return { remove: () => { handlers.delete(handler); return Promise.resolve(); } };
+    async addListener(event, handler) {
+      return impl.addListener(event, handler);
     },
     async removeAllListeners() {
-      handlers.clear();
+      await impl.removeAllListeners();
+    },
+    lastError() {
+      return impl.lastError();
+    },
+    lastScore() {
+      return impl.lastScore();
     },
   };
 }

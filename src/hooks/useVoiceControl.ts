@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { SpeechRecognition } from '@capgo/capacitor-speech-recognition';
 import type { SpeechRecognitionPartialResultEvent, SpeechRecognitionListeningEvent } from '@capgo/capacitor-speech-recognition';
 import { Capacitor } from '@capacitor/core';
+import { wakeWordUnavailableReason } from '../services/wakeWord/openWakeWord';
 
 interface BrowserSpeechRecognition extends EventTarget {
   continuous: boolean;
@@ -540,7 +541,10 @@ export function useVoiceControl(config: VoiceControlConfig = {}) {
   }, [isCapacitor, processTranscript, stopListening]);
 
   const startNativeWakeWord = useCallback(async () => {
-    if (!activeRef.current || !isNative) return;
+    // openWakeWord covers desktop and browser too, so this must not be gated on
+    // the Capacitor-only `isNative` flag.
+    if (!activeRef.current) return;
+    if (!isCapacitor && wakeWordUnavailableReason() !== null) return;
     try {
       const { GIAWakeWord } = await import('../services/GIAWakeWord');
       const nativeKeyword = mapWakeWordToBuiltin(wakeWordRef.current);
@@ -583,13 +587,23 @@ export function useVoiceControl(config: VoiceControlConfig = {}) {
 
     activeRef.current = true;
 
-    // Native Porcupine needs an access key. Without one the plugin starts but
-    // silently never detects — the old code sent the user into a dead end they
-    // couldn't see. Only take the native path when a key is actually set;
-    // otherwise use the keyless on-device recognizer (regex wake word over
-    // continuous transcription) which genuinely works in-app.
-    const canUseNative = isNative && nativeWakeWord && !!accessKeyRef.current;
-    if (manual || !canUseNative) {
+    // Two distinct engines, gated by what each one actually requires:
+    //
+    //  - openWakeWord: a local ONNX keyword model. Runs on the desktop app AND
+    //    in the browser, and needs no access key. This is the only path that
+    //    was genuinely usable outside Android.
+    //  - Porcupine: still used by the Capacitor Android build, and it does
+    //    require an access key. Without one the plugin starts but silently
+    //    never detects, so only take that path when a key is actually set.
+    //
+    // Previously `canUseNative` was `isNative && ...`, and `isNative` is only
+    // true on Capacitor -- so the desktop app and the browser always fell
+    // through to continuous SpeechRecognition instead, and the wake-word
+    // plugin was dead code on both.
+    const useOpenWakeWord = !isCapacitor && nativeWakeWord && wakeWordUnavailableReason() === null;
+    const canUseNative = isCapacitor && isNative && nativeWakeWord && !!accessKeyRef.current;
+
+    if (manual || (!useOpenWakeWord && !canUseNative)) {
       if (isCapacitor) {
         setIsListening(true);
         listenOnce();
