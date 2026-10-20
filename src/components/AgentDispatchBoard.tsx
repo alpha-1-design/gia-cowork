@@ -13,6 +13,7 @@ import { useGiaStore } from '../store/useGiaStore';
 import { genId } from '../utils/id';
 import MarkdownRenderer from './MarkdownRenderer';
 import OrbAvatar from './OrbAvatar';
+import { systemPromptFor } from '../services/studio/devAgents';
 import { resolveAgentIcon } from '../utils/agentIcons';
 
 // ── Provider selector for an agent ────────────────────────────────────────
@@ -340,10 +341,9 @@ export default function AgentDispatchBoard() {
     const providerId = resolveProvider(taskId);
     const providerConfig = providerId ? providers[providerId] : null;
 
-    // Build enriched prompt
-    const enrichedPrompt = `You are a sub-agent named ${agentDef.name} with the role of ${agentDef.role}.\n\nYour task:\n${taskPrompt}\n\nProvide your findings. Be thorough and direct.`;
-
-    const systemPrompt = `You are GIA, a highly capable AI assistant. You are currently operating as the sub-agent "${agentDef.name}" (role: ${agentDef.role}). Be helpful, thorough, and direct.`;
+    const custom = agentDef.type === 'custom' ? customAgents.find(a => a.id === agentDef.id) : undefined;
+    const systemPrompt = systemPromptFor(agentDef, custom);
+    const enrichedPrompt = `${systemPrompt}\n\nTask:\n${taskPrompt}`;
 
     markRunning(taskId);
     setActivity(taskId, `Using ${providerId || 'auto'}…`);
@@ -376,7 +376,7 @@ export default function AgentDispatchBoard() {
     } finally {
       abortRefs.current.delete(taskId);
     }
-  }, [dispatch, markRunning, setActivity, appendResult, setResult, setFailed, resolveProvider, providers, subAgentProviders, agentProviders]);
+  }, [dispatch, markRunning, setActivity, appendResult, setResult, setFailed, resolveProvider, providers, subAgentProviders, agentProviders, customAgents]);
 
   // Handle dispatch button / Enter
   const handleDispatch = useCallback(() => {

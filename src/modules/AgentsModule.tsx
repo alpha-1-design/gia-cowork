@@ -18,6 +18,7 @@ import { resolveAgentIcon } from '../utils/agentIcons';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 import OrbAvatar from '../components/OrbAvatar';
 import { GIA_BOTS, botPortrait } from '../components/GiaBots';
+import DevStudio from '../components/DevStudio';
 import AgentDispatchBoard from '../components/AgentDispatchBoard';
 import { useAgentTaskStore } from '../store/useAgentTaskStore';
 
@@ -367,6 +368,7 @@ const AgentListView: React.FC<{
           ))}
         </div>
       </div>
+      <DevStudio />
       <div className="flex items-center justify-between px-5 pt-3 pb-1 shrink-0">
         <p className="text-[11px] tracking-wide uppercase" style={{ color: 'var(--gia-muted-2)' }}>
           Yours · {agents.length}
