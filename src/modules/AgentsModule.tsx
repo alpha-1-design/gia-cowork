@@ -17,6 +17,7 @@ import { genId } from '../utils/id';
 import { resolveAgentIcon } from '../utils/agentIcons';
 import MarkdownRenderer from '../components/MarkdownRenderer';
 import OrbAvatar from '../components/OrbAvatar';
+import { GIA_BOTS, botPortrait } from '../components/GiaBots';
 import AgentDispatchBoard from '../components/AgentDispatchBoard';
 import { useAgentTaskStore } from '../store/useAgentTaskStore';
 
@@ -328,32 +329,49 @@ const AgentListView: React.FC<{
   }, [agents]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden agent-cosmic-bg">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0">
-        <div>
-          <h1 className="text-lg font-bold" style={{ color: 'var(--gia-text)' }}>Agents</h1>
-          <p className="text-[11px] mt-0.5" style={{ color: 'var(--gia-muted-2)' }}>
-            {agents.length} {agents.length === 1 ? 'custom agent' : 'custom agents'} · {totalToolsCount} tools · {totalFilesCount} files
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onOpenDispatch}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-semibold tap-feedback transition-all"
-            style={{ background: 'rgba(52,211,153,0.1)', color: '#34d399', border: '1px solid rgba(52,211,153,0.2)' }}
-          >
-            <Zap size={12} />
-            Dispatch
-          </button>
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--gia-bg)' }}>
+      <div className="px-5 pt-4 pb-3 shrink-0" style={{ borderBottom: '1px solid var(--gia-border)' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[15px] font-medium" style={{ color: 'var(--gia-text)' }}>Agents</h1>
+            <p className="text-[12px] mt-0.5" style={{ color: 'var(--gia-muted)' }}>House bots answer in chat. Yours keep their own files.</p>
+          </div>
           <button
             onClick={onCreateNew}
-            className="w-9 h-9 rounded-xl flex items-center justify-center tap-feedback transition-transform hover:scale-105"
-            style={{ background: 'var(--gia-accent)', color: 'white', boxShadow: '0 4px 14px rgba(168,85,247,0.35)' }}
+            className="h-8 px-3 rounded-full text-[12px] font-medium"
+            style={{ background: '#f4efe4', color: '#1a1610' }}
           >
-            <Plus size={18} />
+            New
           </button>
         </div>
+        <div className="grid grid-cols-3 gap-3 mt-4">
+          {GIA_BOTS.map(bot => (
+            <button
+              key={bot.id}
+              type="button"
+              onClick={() => {
+                const s = useGiaStore.getState();
+                const sess = s.sessions.find(x => x.id === s.activeSessionId);
+                let id = s.activeSessionId;
+                if (!sess || sess.messages.length > 0) id = s.createSession();
+                if (id) s.updateSessionTitle(id, bot.name);
+                s.setSkill(bot.id);
+                s.setModule('chat');
+              }}
+              className="flex flex-col items-center text-center"
+            >
+              <img src={botPortrait(bot.id)} alt="" className="w-16 h-16 rounded-full object-cover" style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.1)' }} />
+              <span className="mt-1.5 text-[12px] font-medium" style={{ color: 'var(--gia-text)' }}>{bot.name}</span>
+              <span className="text-[10px] leading-snug" style={{ color: 'var(--gia-muted)' }}>{bot.role}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center justify-between px-5 pt-3 pb-1 shrink-0">
+        <p className="text-[11px] tracking-wide uppercase" style={{ color: 'var(--gia-muted-2)' }}>
+          Yours · {agents.length}
+        </p>
+        <button onClick={onOpenDispatch} className="text-[11px]" style={{ color: 'var(--gia-muted)' }}>Dispatch</button>
       </div>
 
       {agents.length > 0 && (

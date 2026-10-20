@@ -226,7 +226,6 @@ export const WorkLog: React.FC<WorkLogProps> = ({
   thoughts, isLive, isExpanded, onToggle, currentTool, thinkingPhase, startTime,
 }) => {
   const extThinking = useGiaStore(s => s.extThinking);
-  const buildMode = useGiaStore(s => s.buildMode);
   const scrollRef = useRef<HTMLDivElement>(null);
   const steps = useMemo(() => buildStepsFromThoughts(thoughts, currentTool), [thoughts, currentTool]);
   const completedCount = steps.filter(s => s.status === 'done').length;
@@ -244,57 +243,14 @@ export const WorkLog: React.FC<WorkLogProps> = ({
 
   const phaseLabel = (() => {
     const labels: Record<string, string> = {
-      gathering: 'Sniffing around', analyzing: 'Squinting at it', coding: 'Cooking',
-      writing: 'Spilling ink', searching: 'Googling stuff', planning: 'Drawing maps',
-      reasoning: 'Big brain time', processing: 'Crunching bytes', idle: 'Ready',
+      gathering: 'Reading context', analyzing: 'Checking the facts', coding: 'Writing the change',
+      writing: 'Drafting the answer', searching: 'Searching', planning: 'Planning the move',
+      reasoning: 'Thinking it through', processing: 'Running a tool', idle: 'Ready',
     };
     return labels[thinkingPhase || ''] || 'Processing';
   })();
 
-  const PHASE_EXTRAS = [
-    'Doing stuff or something',
-    'I think I know what I\'m doing',
-    'Pretending to know things',
-    'Following the breadcrumbs',
-    'Thinking hard about thinking',
-    'Loading... just kidding, working',
-    'Convincing the electrons',
-    'Asking the right questions',
-    'Making it up as I go',
-    'Trusting the process',
-    'Vibing and coding',
-    'One sec, almost there',
-    'Consulting the void',
-    'Doing my best impression of useful',
-    'Winging it (successfully)',
-  ];
-
-  const BUILD_EXTRAS = [
-    'Shipping it',
-    'No pressure, just building an app',
-    'Crafting digital excellence',
-    'This is fine',
-    'Building something cool',
-    'Hopefully this works',
-    'Making it rain code',
-    'Engineering (kind of)',
-    'Trust me, I\'m an AI',
-    'Hack hack hack',
-    'Turning caffeine into code (metaphorically)',
-    'Building the future (or at least a webpage)',
-    'Deploying good vibes',
-    'Compiling happiness',
-    '10x developer moment',
-  ];
-
-  const displayPhaseLabel = (() => {
-    const cycle = Math.floor(Date.now() / 1800);
-    if (cycle % 3 === 0) {
-      const extras = buildMode ? BUILD_EXTRAS : PHASE_EXTRAS;
-      return extras[cycle % extras.length];
-    }
-    return phaseLabel;
-  })();
+  const displayPhaseLabel = runningStep?.label || phaseLabel;
 
   return (
     <motion.div

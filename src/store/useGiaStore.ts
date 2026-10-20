@@ -610,9 +610,9 @@ export const useGiaStore = create<GiaState>()(
       skills: [
         {
           id: 'core-general',
-          name: 'General Assistant',
-          description: 'Balanced assistance for general tasks.',
-          systemPrompt: 'You are GIA, a highly capable AI assistant. Be concise, helpful, and professional.',
+          name: 'GIA',
+          description: 'Principal agent. Decides, acts, and asks before risk.',
+          systemPrompt: 'You are GIA, the principal agent in this room. Speak once, clearly, and then act. Lead with the result. Name the tool and what it returned. Ask before anything destructive.',
           tools: ['web_search', 'terminal_run', 'filesystem_read', 'filesystem_write'],
           category: 'core'
         },

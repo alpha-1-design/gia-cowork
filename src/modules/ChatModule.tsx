@@ -37,6 +37,7 @@ import { ClarificationBottomSheet } from '../components/chat/ClarificationBottom
 import { EngineSheet } from '../components/chat/EngineSheet';
 import ModelSwitcherSheet from '../components/chat/ModelSwitcherSheet';
 import ToolsCatalogSheet from '../components/chat/ToolsCatalogSheet';
+import { GiaBotRoster, GIA_BOTS, botPortrait } from '../components/GiaBots';
 import ProviderIcon from '../components/ProviderIcon';
 import { BranchView } from '../components/chat/BranchView';
 import { SummaryBanner } from '../components/chat/SummaryBanner';
@@ -196,7 +197,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
     addFiles([new File([buf], name, { type: mime })], true);
   }, [addFiles]);
 
-  const { greeting, tip } = useProactiveMessage();
+  useProactiveMessage();
 
   if (showHistory) {
     return (
@@ -307,92 +308,57 @@ const [dockOpen, setDockOpen] = React.useState(false);
           }} />
         </div>
       )}
-      <div className="flex items-center justify-between px-4 py-2.5 shrink-0" style={{ borderBottom: '1px solid var(--gia-border)' }}>
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <button onClick={() => setShowHistory(true)} className="p-1.5 rounded-lg transition-colors tap-feedback shrink-0" style={{ color: 'var(--gia-muted)' }}>
-            <History size={15} />
+      <div className="flex items-center justify-between px-3 h-12 shrink-0" style={{ borderBottom: '1px solid var(--gia-border)' }}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <button onClick={() => setShowHistory(true)} className="shrink-0" title="Chats" aria-label="Chats">
+            <img
+              src={botPortrait(activeSkillId || 'core-general')}
+              alt=""
+              className="w-8 h-8 rounded-full object-cover"
+            />
           </button>
-          <span className="text-xs font-medium truncate" style={{ color: 'var(--gia-muted)' }}>{activeSession?.title ?? 'New Chat'}</span>
-          {activeSession && activeSession.branches && Object.keys(activeSession.branches).length > 0 && (
-            <button onClick={() => setShowBranchView(true)} className="p-1 rounded-lg transition-colors tap-feedback shrink-0" style={{ color: '#a855f7' }} title="Branches">
-              <GitBranch size={12} />
-            </button>
-          )}
+          <div className="min-w-0 text-left">
+            <p className="text-[13px] font-medium leading-none truncate" style={{ color: 'var(--gia-text)' }}>
+              {(GIA_BOTS.find(b => b.id === (activeSkillId || 'core-general')) ?? GIA_BOTS[0]).name}
+            </p>
+            <p className="text-[11px] mt-1 truncate" style={{ color: 'var(--gia-muted)' }}>{activeSession?.title ?? 'New chat'}</p>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
-          {voiceEnabled && (
-            <div className="flex items-center gap-1 px-2 py-1 rounded-lg shrink-0" style={{ background: 'rgba(236,72,153,0.15)' }}>
-              <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#ec4899' }} />
-              <span className="text-[8px] font-medium" style={{ color: '#ec4899' }}>LIVE</span>
-            </div>
-          )}
+        <div className="flex items-center gap-0.5 shrink-0">
           <button
             onClick={() => setShowModelSwitcher(true)}
-            className="gia-pill flex items-center gap-1.5 flex-1 min-w-0 max-w-[180px] tap-feedback transition-all"
-            style={{
-              background: providerConnected ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-              color: providerConnected ? '#34d399' : '#f87171',
-              border: `1px solid ${providerConnected ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`,
-            }}
-            title="Switch model & provider"
+            className="px-2 py-1 rounded-lg text-[11px] truncate max-w-[120px]"
+            style={{ color: 'var(--gia-muted)' }}
+            title="Model"
           >
-            <ProviderIcon provider={activeProvider} size={18} bare />
-            <span className="truncate max-w-[70px]">{providerLabel}</span>
-            {activeModel && providerConnected && (
-              <span className="text-[7px] opacity-50 truncate max-w-[54px] hidden sm:inline">{activeModel.split('/').pop()}</span>
-            )}
-            <ChevronDown size={11} className="shrink-0 opacity-70" />
+            {providerConnected ? (activeModel?.split('/').pop() || providerLabel) : 'No model'}
           </button>
-          <button onClick={() => setShowFileManager(true)} className="p-1.5 rounded-lg tap-feedback shrink-0" style={{ color: 'var(--gia-muted)' }} aria-label="File Manager" title="File Manager"><Upload size={13} /></button>
-          <button
-            onClick={() => { setDockOpen(o => !o); setSidePanelOpen(!sidePanelOpen); }}
-            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg tap-feedback shrink-0 transition-colors"
-            style={{ color: sidePanelOpen ? 'var(--gia-accent)' : 'var(--gia-muted)', background: sidePanelOpen ? 'var(--gia-accent-dim)' : 'transparent' }}
-            aria-label="Toggle workspace panel"
-            aria-pressed={sidePanelOpen}
-            data-testid="toggle-side-panel"
-            title="Workspace panel (Terminal, Files, Browser, Preview) — Ctrl+B"
-          >
-            <PanelRight size={13} />
-            <span className="hidden md:inline text-[10px] font-medium">Panel</span>
-          </button>
-          <SearchActivityButton />
-          <button onClick={createSession} className="p-1.5 rounded-lg tap-feedback shrink-0" style={{ color: 'var(--gia-muted)' }} aria-label="New chat" title="New chat"><Plus size={13} /></button>
-
-          {/* Overflow — the header was carrying seven undifferentiated icon
-              buttons, which made the chat feel cluttered and gave every
-              action equal visual weight. Secondary actions live here now. */}
-          <div className="relative shrink-0">
+          <button onClick={createSession} className="p-1.5 rounded-lg" style={{ color: 'var(--gia-muted)' }} aria-label="New chat" title="New chat"><Plus size={15} /></button>
+          <div className="relative">
             <button
               onClick={() => setShowMoreMenu(o => !o)}
-              className="p-1.5 rounded-lg tap-feedback transition-colors"
-              style={{ color: showMoreMenu ? '#a855f7' : 'var(--gia-muted)', background: showMoreMenu ? 'rgba(168,85,247,0.12)' : 'transparent' }}
-              aria-label="More actions"
-              title="More"
+              className="p-1.5 rounded-lg"
+              style={{ color: 'var(--gia-muted)' }}
+              aria-label="More"
             >
-              <MoreHorizontal size={14} />
+              <MoreHorizontal size={15} />
             </button>
             {showMoreMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
-                <div
-                  className="absolute right-0 top-9 z-50 w-52 rounded-xl py-1 shadow-xl"
-                  style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border)' }}
-                >
+                <div className="absolute right-0 top-9 z-50 w-52 rounded-xl py-1 shadow-xl" style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border)' }}>
                   {[
-                    { icon: <Brain size={13} />, label: 'Knowledge base', onClick: () => { setShowKnowledge(true); setShowMoreMenu(false); } },
+                    { icon: <PanelRight size={13} />, label: 'Workspace panel', onClick: () => { setDockOpen(o => !o); setSidePanelOpen(!sidePanelOpen); setShowMoreMenu(false); } },
+                    { icon: <Upload size={13} />, label: 'Files', onClick: () => { setShowFileManager(true); setShowMoreMenu(false); } },
+                    { icon: <Brain size={13} />, label: 'Knowledge', onClick: () => { setShowKnowledge(true); setShowMoreMenu(false); } },
                     { icon: <Download size={13} />, label: 'Export chat', onClick: () => { exportChat(); setShowMoreMenu(false); } },
-                    { icon: <Terminal size={13} />, label: 'Open fullscreen terminal', onClick: () => { window.dispatchEvent(new CustomEvent('gia:open-fullscreen-terminal')); setShowMoreMenu(false); } },
-                    { icon: <Eye size={13} />, label: 'Toggle thoughts', onClick: () => { setShowThoughts(v => v.size > 0 ? new Set() : new Set(['all'])); setShowMoreMenu(false); } },
                     { icon: <History size={13} />, label: 'Chat history', onClick: () => { setShowHistory(true); setShowMoreMenu(false); } },
                   ].map(item => (
                     <button
                       key={item.label}
                       onClick={item.onClick}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-[11px] transition-colors"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px]"
                       style={{ color: 'var(--gia-text)' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--gia-surface-2)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                     >
                       <span style={{ color: 'var(--gia-muted)' }}>{item.icon}</span>
                       {item.label}
@@ -433,78 +399,34 @@ const [dockOpen, setDockOpen] = React.useState(false);
           </div>
         )}
         {messages.length === 0 && !buildMode && (
-<div className="relative flex flex-col items-center justify-center h-full gap-4 text-center pt-12 sm:pt-16 pb-24 sm:pb-40 animate-fade-in px-6 overflow-hidden">
-              {/* Ambient aurora — a soft breathing glow behind the AI core,
-                  matching the Obsidian Aurora theme (Lumen-style: the gradient
-                  belongs to the avatar, the primary action, and active states). */}
-              <div aria-hidden className="absolute left-1/2 top-[16%] -translate-x-1/2 w-64 h-64 rounded-full blur-3xl pointer-events-none"
-                style={{ background: 'radial-gradient(circle at 30% 30%, rgba(6,182,212,0.28), rgba(139,92,246,0.24) 45%, rgba(236,72,153,0.16) 100%)' }} />
-              <div className="relative">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                  style={{ background: 'linear-gradient(135deg, rgba(6,182,212,0.18), rgba(139,92,246,0.16), rgba(236,72,153,0.14))', border: '1px solid rgba(139,92,246,0.28)', boxShadow: '0 0 26px rgba(139,92,246,0.18), inset 0 0 18px rgba(6,182,212,0.08)' }}>
-                  <GiaIcon size={30} animate={false} color="#8b5cf6" />
-                </div>
-              </div>
-              <div className="relative space-y-1.5">
-                <p className="text-lg font-semibold" style={{ color: 'var(--gia-text)' }}>
-                  {userProfile.name ? `Hey ${userProfile.name}` : greeting.emoji + ' ' + greeting.text}
-                  {!providerConnected && " — I'm ready when you are."}
-                </p>
-                <p className="text-xs max-w-[280px] leading-relaxed" style={{ color: 'var(--gia-muted)' }}>
-                  {providerConnected
-                    ? 'Your personal AI workspace. Ask anything, attach files, or pick a quick start below.'
-                    : 'Connect a provider to unlock the full workspace — or use the free on-device local AI right now.'}
-                </p>
-              </div>
-            {!providerConnected && (
-            <div className="grid grid-cols-1 gap-2 w-full max-w-xs mt-1">
-              <button onClick={() => setShowModelSwitcher(true)}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold transition-all tap-feedback hover:opacity-90"
-                style={{ background: 'var(--aurora-gradient)', color: '#0b0b10', boxShadow: '0 0 24px rgba(139,92,246,0.35)' }}>
-                <PlugZap size={15} /> Connect an AI Provider
-              </button>
-              <button onClick={() => { useProviderStore.getState().setProviderKey('local-llm', ''); }}
-                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[10px] transition-all tap-feedback hover:border-violet-400/40"
-                style={{ border: '1px dashed rgba(139,92,246,0.35)', color: 'var(--gia-muted)' }}>
-                <Zap size={12} color="#a855f7" /> Try Local AI — works offline, no keys
-              </button>
-              <div className="flex items-center justify-center gap-2 text-[9px] mt-0.5" style={{ color: 'var(--gia-muted-2)' }}>
-                <span className="flex items-center gap-1"><Plug size={10} color="#06b6d4" />Provider</span>
-                <span className="opacity-40">→</span>
-                <span className="flex items-center gap-1"><KeyRound size={10} color="#8b5cf6" />Your key</span>
-                <span className="opacity-40">→</span>
-                <span className="flex items-center gap-1"><MessagesSquare size={10} color="#ec4899" />Chat</span>
-              </div>
-              {!messages.length && (
-                <p className="text-[10px] mt-0.5 animate-fade-in truncate" style={{ color: 'var(--gia-muted-2)' }}>
-                  {tip.emoji} {tip.text}
-                </p>
-              )}
+          <div className="relative flex flex-col items-center justify-center h-full gap-6 text-center px-5 pt-8 pb-36">
+            <div className="space-y-1.5">
+              <p className="text-[22px] font-medium tracking-tight" style={{ color: 'var(--gia-text)' }}>
+                {userProfile.name ? userProfile.name : 'GIA'}
+              </p>
+              <p className="text-[13px] max-w-sm leading-relaxed" style={{ color: 'var(--gia-muted)' }}>
+                Pick who you are talking to. Each bot keeps its own chat.
+              </p>
             </div>
-            )}
-            {providerConnected && (
-            <div className="grid grid-cols-1 gap-3 w-full max-w-xs mt-1 max-h-[52vh] overflow-y-auto pb-1 pr-0.5">
-              {QUICK_STARTS.map((qs, i) => (
-                  <motion.button
-                    key={qs.label}
-                    onClick={() => setInput(qs.prompt)}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.07, type: 'spring', stiffness: 200, damping: 20 }}
-                    whileHover={{ scale: 1.02, borderColor: `${qs.color}60`, boxShadow: `0 0 20px ${qs.color}15` }}
-                    whileTap={{ scale: 0.97 }}
-                    className="flex items-center gap-3 px-4 py-3.5 rounded-2xl text-left transition-all shrink-0"
-                    style={{ background: `linear-gradient(135deg, ${qs.color}0a, ${qs.color}03)`, border: `1px solid ${qs.color}20`, backdropFilter: 'blur(8px)', boxShadow: `0 4px 16px -4px ${qs.color}12` }}
-                  >
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${qs.color}20`, border: `1px solid ${qs.color}30`, backdropFilter: 'blur(4px)' }}><qs.icon size={15} style={{ color: qs.color }} /></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold" style={{ color: 'var(--gia-text)' }}>{qs.label}</p>
-                      <p className="text-[10px] truncate mt-0.5" style={{ color: qs.color, opacity: 0.7 }}>{qs.prompt}</p>
-                    </div>
-                  </motion.button>
-                ))}
+            {!providerConnected && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowModelSwitcher(true)}
+                  className="px-4 py-2 rounded-full text-[12px] font-medium"
+                  style={{ background: '#f4efe4', color: '#1a1610' }}
+                >
+                  Connect a provider
+                </button>
+                <button
+                  onClick={() => { useProviderStore.getState().setProviderKey('local-llm', ''); }}
+                  className="px-4 py-2 rounded-full text-[12px]"
+                  style={{ border: '1px solid rgba(255,255,255,0.12)', color: 'var(--gia-muted)' }}
+                >
+                  Use local
+                </button>
               </div>
             )}
+            <GiaBotRoster />
           </div>
         )}
 
@@ -829,7 +751,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
           />
         </div>
 
-        <AmbientInput value={input} onChange={handleInputChange} onSubmit={handleSend} onStop={loading ? handleStop : undefined} isLoading={loading} onVoiceToggle={openVoice} isVoiceListening={voiceEnabled} placeholder={buildMode ? 'Describe what to build…' : webSearch ? 'Ask anything — I\'ll search the web…' : handsOff ? 'GIA has control — ask and it acts…' : 'Message GIA…'} prefix={buildMode ? <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-medium shrink-0 mr-1"><Hammer size={10} />Build</span> : undefined} />
+        <AmbientInput value={input} onChange={handleInputChange} onSubmit={handleSend} onStop={loading ? handleStop : undefined} isLoading={loading} onVoiceToggle={openVoice} isVoiceListening={voiceEnabled} placeholder={buildMode ? 'Describe the app. She scaffolds, runs it, and shows a preview.' : webSearch ? 'Ask. She searches, then answers with the source.' : handsOff ? 'She acts. Risky steps still stop for your yes.' : 'Tell her the outcome. She picks the tools.'} prefix={buildMode ? <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-medium shrink-0 mr-1"><Hammer size={10} />Build</span> : undefined} />
       </div>
 
       <AnimatePresence>
