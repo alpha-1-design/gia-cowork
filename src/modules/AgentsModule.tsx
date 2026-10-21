@@ -19,13 +19,14 @@ import MarkdownRenderer from '../components/MarkdownRenderer';
 import OrbAvatar from '../components/OrbAvatar';
 import { GIA_BOTS, botPortrait } from '../components/GiaBots';
 import DevStudio from '../components/DevStudio';
+import Council from '../components/Council';
 import AgentDispatchBoard from '../components/AgentDispatchBoard';
 import { useAgentTaskStore } from '../store/useAgentTaskStore';
 
 // ── Max messages per agent chat session stored in IDB ──────────────────────
 const MAX_MESSAGES_PER_SESSION = 100;
 
-type ViewState = 'list' | 'chat' | 'dispatch';
+type ViewState = 'list' | 'chat' | 'dispatch' | 'council';
 type SortOption = 'newest' | 'alphabetical' | 'tools' | 'files';
 
 const AGENT_ICONS: { name: string; color: string }[] = [
@@ -219,10 +220,21 @@ const AgentsModule: React.FC = () => {
             agents={safeAgents}
             onOpenChat={openChat}
             onOpenDispatch={() => setView('dispatch')}
+            onOpenCouncil={() => setView('council')}
             onCreateNew={() => setShowCreate(true)}
             onEdit={(id) => setEditAgentId(id)}
             onDelete={removeAgent}
           />
+        )}
+        {view === 'council' && (
+          <div className="flex flex-col h-full">
+            <div className="px-3 py-1.5 shrink-0" style={{ borderBottom: '1px solid var(--gia-border)' }}>
+              <button onClick={() => setView('list')} className="text-[11px] px-2 py-1" style={{ color: 'var(--gia-muted)' }}>← Agents</button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <Council />
+            </div>
+          </div>
         )}
         {view === 'dispatch' && (
           <AgentErrorBoundary onReset={() => setView('list')}>
@@ -277,10 +289,11 @@ const AgentListView: React.FC<{
   agents: CustomAgent[];
   onOpenChat: (id: string) => void;
   onOpenDispatch: () => void;
+  onOpenCouncil: () => void;
   onCreateNew: () => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-}> = ({ agents, onOpenChat, onOpenDispatch, onCreateNew, onEdit, onDelete }) => {
+}> = ({ agents, onOpenChat, onOpenDispatch, onOpenCouncil, onCreateNew, onEdit, onDelete }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
@@ -337,13 +350,22 @@ const AgentListView: React.FC<{
             <h1 className="text-[15px] font-medium" style={{ color: 'var(--gia-text)' }}>Agents</h1>
             <p className="text-[12px] mt-0.5" style={{ color: 'var(--gia-muted)' }}>House bots answer in chat. Yours keep their own files.</p>
           </div>
-          <button
-            onClick={onCreateNew}
-            className="h-8 px-3 rounded-full text-[12px] font-medium"
-            style={{ background: '#f4efe4', color: '#1a1610' }}
-          >
-            New
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenCouncil}
+              className="h-8 px-3 rounded-full text-[12px]"
+              style={{ border: '1px solid rgba(244,239,228,0.35)', color: '#f4efe4' }}
+            >
+              Council
+            </button>
+            <button
+              onClick={onCreateNew}
+              className="h-8 px-3 rounded-full text-[12px] font-medium"
+              style={{ background: '#f4efe4', color: '#1a1610' }}
+            >
+              New
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-3 mt-4">
           {GIA_BOTS.map(bot => (

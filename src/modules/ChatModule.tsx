@@ -38,6 +38,7 @@ import { EngineSheet } from '../components/chat/EngineSheet';
 import ModelSwitcherSheet from '../components/chat/ModelSwitcherSheet';
 import ToolsCatalogSheet from '../components/chat/ToolsCatalogSheet';
 import { GiaBotRoster, botPortrait, agentName } from '../components/GiaBots';
+import Council from '../components/Council';
 import ProviderIcon from '../components/ProviderIcon';
 import { BranchView } from '../components/chat/BranchView';
 import { SummaryBanner } from '../components/chat/SummaryBanner';
@@ -167,6 +168,7 @@ const sidePanelOpen = useGiaStore(s => s.sidePanelOpen);
 const setSidePanelOpen = useGiaStore(s => s.setSidePanelOpen);
 const [dockOpen, setDockOpen] = React.useState(false);
   const [showMoreMenu, setShowMoreMenu] = React.useState(false);
+  const [showCouncil, setShowCouncil] = React.useState(false);
   const toggleFullScreenMode = useGiaStore((s) => s.toggleFullScreenMode);
   const openVoice = React.useCallback(() => { setShowVoiceMode(true); toggleFullScreenMode(); }, [toggleFullScreenMode]);
 
@@ -354,6 +356,18 @@ const [dockOpen, setDockOpen] = React.useState(false);
           >
             {providerConnected ? (activeModel?.split('/').pop() || providerLabel) : 'No model'}
           </button>
+          <button
+            onClick={() => setShowCouncil(v => !v)}
+            className="h-7 px-2.5 rounded-full text-[11px]"
+            style={{
+              border: '1px solid rgba(244,239,228,0.35)',
+              color: showCouncil ? '#1a1610' : '#f4efe4',
+              background: showCouncil ? '#f4efe4' : 'transparent',
+            }}
+            aria-pressed={showCouncil}
+          >
+            Council
+          </button>
           <button onClick={startFreshChat} className="p-1.5 rounded-lg" style={{ color: 'var(--gia-muted)' }} aria-label="New chat" title="New chat"><Plus size={15} /></button>
           <div className="relative">
             <button
@@ -431,6 +445,11 @@ const [dockOpen, setDockOpen] = React.useState(false);
           </div>
         </div>
       </div>
+      {showCouncil && (
+        <div className="absolute inset-0 top-12 z-20" style={{ background: 'var(--gia-bg)' }}>
+          <Council initialPrompt={input} />
+        </div>
+      )}
 
       <div ref={scrollRef} onScroll={handleScroll} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop} className="flex-1 overflow-y-auto pt-4 relative z-0" style={{ paddingBottom: `${inputContainerHeight + 120}px` }}>
         {messages.length === 0 && buildMode && (
