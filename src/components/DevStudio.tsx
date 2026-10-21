@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAgentStore } from '../store/useAgentStore';
 import { useGiaStore } from '../store/useGiaStore';
-import { STUDIO_AGENTS, studioBrief, systemPromptFor } from '../services/studio/devAgents';
+import { STUDIO_AGENTS, studioBrief, systemPromptFor, livePrompt } from '../services/studio/devAgents';
 import { runStudioLane } from '../services/studio/runLane';
 
 const READ_LANES = ['studio-scout', 'studio-lens', 'studio-proof'] as const;
@@ -31,7 +31,7 @@ export default function DevStudio() {
     for (const id of ids) {
       const agent = STUDIO_AGENTS.find(a => a.id === id);
       if (!agent || agent.writes) continue;
-      runStudioLane(agent, brief, agent.systemPrompt);
+      runStudioLane(agent, brief, livePrompt(agent.id, agent.systemPrompt));
     }
     setNote(`${ids.length} lanes running. They only read.`);
   };
@@ -60,14 +60,14 @@ export default function DevStudio() {
     if (!ready) return;
     const forge = STUDIO_AGENTS.find(a => a.id === 'studio-forge')!;
     runParallel(['studio-scout']);
-    sendToChat(`${forge.systemPrompt}\n\n${studioBrief(repo, task)}`);
+    sendToChat(`${livePrompt(forge.id, forge.systemPrompt)}\n\n${studioBrief(repo, task)}`);
   };
 
   const openPr = () => {
     if (!ready) return;
     const harbor = STUDIO_AGENTS.find(a => a.id === 'studio-harbor')!;
     runParallel(['studio-lens', 'studio-proof']);
-    sendToChat(`${harbor.systemPrompt}\n\n${studioBrief(repo, task)}\n\nOpen the pull request only for this task.`);
+    sendToChat(`${livePrompt(harbor.id, harbor.systemPrompt)}\n\n${studioBrief(repo, task)}\n\nOpen the pull request only for this task.`);
   };
 
   return (

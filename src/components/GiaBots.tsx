@@ -90,9 +90,9 @@ export function syncGiaBots() {
   const next = skills.map(s => {
     const bot = GIA_BOTS.find(b => b.id === s.id);
     if (!bot) return s;
-    if (s.systemPrompt === bot.systemPrompt && s.name === bot.name && s.description === bot.role) return s;
+    if (s.name === bot.name && s.description === bot.role) return s;
     changed = true;
-    return { ...s, name: bot.name, description: bot.role, systemPrompt: bot.systemPrompt, icon: bot.mark };
+    return { ...s, name: bot.name, description: bot.role };
   });
   for (const bot of GIA_BOTS) {
     if (!byId.has(bot.id)) {

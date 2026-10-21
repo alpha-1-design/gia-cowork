@@ -551,6 +551,7 @@ interface GiaState {
   restoreSession: (id: string) => void;
   setSkill: (id: string | null) => void;
   addSkill: (skill: Skill) => void;
+  updateSkill: (id: string, patch: Partial<Pick<Skill, 'name' | 'description' | 'systemPrompt' | 'tools'>>) => void;
   removeSkill: (id: string) => void;
   setCustomInstructions: (text: string) => void;
   togglePinnedMemory: (id: string) => void;
@@ -1237,6 +1238,9 @@ export const useGiaStore = create<GiaState>()(
       },
       setSkill: (id) => set({ activeSkillId: id }),
       addSkill: (skill) => set((s) => ({ skills: s.skills.find(sk => sk.id === skill.id) ? s.skills : [...s.skills, skill] })),
+      updateSkill: (id, patch) => set((s) => ({
+        skills: s.skills.map(sk => (sk.id === id ? { ...sk, ...patch } : sk)),
+      })),
       removeSkill: (id) => set((s) => ({ skills: s.skills.filter(sk => sk.id !== id) })),
       addConsoleLog: (log) => set((s) => ({
         consoleLogs: [...s.consoleLogs, { ...log, id: Math.random().toString(36).slice(2), timestamp: Date.now() }].slice(-100)

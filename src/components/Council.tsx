@@ -1,55 +1,86 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import GiaBrain from '../services/GiaBrain';
+import { useGiaStore } from '../store/useGiaStore';
+import { livePrompt } from '../services/studio/devAgents';
 
 type Phase = 'idle' | 'sitting' | 'verdict' | 'done';
 type SeatStatus = 'waiting' | 'speaking' | 'done' | 'failed';
 
-interface Seat {
-  id: string;
-  name: string;
-  role: string;
-  brief: string;
-  text: string;
-  status: SeatStatus;
-}
-
-const SEATS: Omit<Seat, 'text' | 'status'>[] = [
+export const COUNCIL_SEATS = [
   {
-    id: 'scout',
+    id: 'council-scout',
     name: 'Scout',
     role: 'Facts',
-    brief: 'State only what can be checked. Name the assumption you are making. Three sentences at most. Do not recommend.',
+    systemPrompt: `You are Scout, one seat on GIA's council. Your only job is facts.
+State only what can be checked. Name the assumption you are making. Three sentences at most. Do not recommend.`,
   },
   {
-    id: 'lens',
+    id: 'council-lens',
     name: 'Lens',
     role: 'Objection',
-    brief: 'Name the strongest reason not to do this. One concrete failure, not a list. Three sentences at most.',
+    systemPrompt: `You are Lens, one seat on GIA's council. Your only job is the objection.
+Name the strongest reason not to do this. One concrete failure, not a list. Three sentences at most.`,
   },
   {
-    id: 'proof',
+    id: 'council-proof',
     name: 'Proof',
     role: 'Test',
-    brief: 'Say how the user will know the decision was right. One check. Three sentences at most.',
+    systemPrompt: `You are Proof, one seat on GIA's council. Your only job is the test.
+Say how the user will know the decision was right. One check. Three sentences at most.`,
   },
   {
-    id: 'forge',
+    id: 'council-forge',
     name: 'Forge',
     role: 'Move',
-    brief: 'Name the smallest action that changes the outcome. Not a plan. Three sentences at most.',
+    systemPrompt: `You are Forge, one seat on GIA's council. Your only job is the move.
+Name the smallest action that changes the outcome. Not a plan. Three sentences at most.`,
   },
-];
+] as const;
 
-const HEAD = `You are GIA, head of this council. The seats have already spoken. You did not.
+export const COUNCIL_HEAD = {
+  id: 'council-head',
+  name: 'GIA',
+  role: 'Verdict',
+  systemPrompt: `You are GIA, head of this council. The seats have already spoken. You did not.
 Do not repeat their notes. Do not average them.
 Write a verdict in three short parts:
 1. The decision, in one sentence.
 2. The risk you are accepting, and whose objection you are setting aside.
 3. The single next action.
-If a seat failed or said nothing useful, ignore it and say so in one clause.`;
+If a seat failed or said nothing useful, ignore it and say so in one clause.`,
+};
+
+export function syncCouncilSkills() {
+  const { skills } = useGiaStore.getState();
+  const have = new Set(skills.map(s => s.id));
+  const missing = [...COUNCIL_SEATS, COUNCIL_HEAD].filter(s => !have.has(s.id));
+  if (missing.length === 0) return;
+  useGiaStore.setState({
+    skills: [
+      ...skills,
+      ...missing.map(s => ({
+        id: s.id,
+        name: s.name,
+        description: s.role,
+        systemPrompt: s.systemPrompt,
+        tools: [] as string[],
+        category: 'core' as const,
+      })),
+    ],
+  });
+}
+
+interface Seat {
+  id: string;
+  name: string;
+  role: string;
+  systemPrompt: string;
+  text: string;
+  status: SeatStatus;
+}
 
 function freshSeats(): Seat[] {
-  return SEATS.map(s => ({ ...s, text: '', status: 'waiting' }));
+  return COUNCIL_SEATS.map(s => ({ ...s, text: '', status: 'waiting' }));
 }
 
 async function speak(
@@ -74,6 +105,7 @@ export default function Council({ initialPrompt = '' }: { initialPrompt?: string
   const [verdict, setVerdict] = useState('');
   const [error, setError] = useState('');
   const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => { syncCouncilSkills(); }, []);
 
   const patch = (id: string, next: Partial<Seat>) => {
     setSeats(prev => prev.map(s => (s.id === id ? { ...s, ...next } : s)));
@@ -88,6 +120,7 @@ export default function Council({ initialPrompt = '' }: { initialPrompt?: string
   const convene = async () => {
     const ask = prompt.trim();
     if (ask.length < 8 || phase === 'sitting' || phase === 'verdict') return;
+    syncCouncilSkills();
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -96,12 +129,12 @@ export default function Council({ initialPrompt = '' }: { initialPrompt?: string
     setSeats(freshSeats());
     setPhase('sitting');
 
-    const spoken = await Promise.all(SEATS.map(async (seat) => {
+    const spoken = await Promise.all(COUNCIL_SEATS.map(async (seat) => {
       patch(seat.id, { status: 'speaking', text: '' });
       try {
         let text = '';
         const full = await speak(
-          `You are ${seat.name}, one seat on GIA's council. Your only job: ${seat.role}. ${seat.brief}`,
+          livePrompt(seat.id, seat.systemPrompt),
           ask,
           (chunk) => {
             text += chunk;
@@ -134,7 +167,7 @@ export default function Council({ initialPrompt = '' }: { initialPrompt?: string
     try {
       let text = '';
       const full = await speak(
-        HEAD,
+        livePrompt(COUNCIL_HEAD.id, COUNCIL_HEAD.systemPrompt),
         `The question:\n${ask}\n\nWhat the seats said:\n${packet}`,
         (chunk) => {
           text += chunk;
@@ -209,7 +242,7 @@ export default function Council({ initialPrompt = '' }: { initialPrompt?: string
                 </p>
               </div>
               <p className="mt-2 text-[12px] leading-relaxed whitespace-pre-wrap" style={{ color: seat.text ? 'var(--gia-text)' : 'var(--gia-muted)' }}>
-                {seat.text || seat.brief}
+                {seat.text || 'Waiting to speak.'}
               </p>
             </article>
           ))}

@@ -97,10 +97,15 @@ export function studioBrief(repo: string, task: string): string {
   ].join('\n');
 }
 
-export function systemPromptFor(agent: { name: string; role: string }, custom?: CustomAgent | null): string {
+export function livePrompt(id: string, fallback: string): string {
+  const saved = useGiaStore.getState().skills.find(s => s.id === id)?.systemPrompt?.trim();
+  return saved || fallback;
+}
+
+export function systemPromptFor(agent: { id?: string; name: string; role: string }, custom?: CustomAgent | null): string {
   if (custom?.systemPrompt?.trim()) return custom.systemPrompt.trim();
-  const studio = STUDIO_AGENTS.find(a => a.name === agent.name || a.role === agent.role);
-  if (studio) return studio.systemPrompt;
+  const studio = STUDIO_AGENTS.find(a => a.id === agent.id || a.name === agent.name);
+  if (studio) return livePrompt(studio.id, studio.systemPrompt);
   return `You are ${agent.name}, a ${agent.role} working inside GIA Studio.
 Do only the task you were given. Lead with the result. Name files and commands. Do not edit the repository unless your role is Implementer or Pull requests. Never force-push. Never commit on main.`;
 }

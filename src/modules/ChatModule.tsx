@@ -39,6 +39,7 @@ import ModelSwitcherSheet from '../components/chat/ModelSwitcherSheet';
 import ToolsCatalogSheet from '../components/chat/ToolsCatalogSheet';
 import { GiaBotRoster, botPortrait, agentName } from '../components/GiaBots';
 import Council from '../components/Council';
+import AgentPrompts from '../components/AgentPrompts';
 import ProviderIcon from '../components/ProviderIcon';
 import { BranchView } from '../components/chat/BranchView';
 import { SummaryBanner } from '../components/chat/SummaryBanner';
@@ -169,6 +170,7 @@ const setSidePanelOpen = useGiaStore(s => s.setSidePanelOpen);
 const [dockOpen, setDockOpen] = React.useState(false);
   const [showMoreMenu, setShowMoreMenu] = React.useState(false);
   const [showCouncil, setShowCouncil] = React.useState(false);
+  const [showPrompts, setShowPrompts] = React.useState(false);
   const toggleFullScreenMode = useGiaStore((s) => s.toggleFullScreenMode);
   const openVoice = React.useCallback(() => { setShowVoiceMode(true); toggleFullScreenMode(); }, [toggleFullScreenMode]);
 
@@ -357,7 +359,19 @@ const [dockOpen, setDockOpen] = React.useState(false);
             {providerConnected ? (activeModel?.split('/').pop() || providerLabel) : 'No model'}
           </button>
           <button
-            onClick={() => setShowCouncil(v => !v)}
+            onClick={() => { setShowPrompts(v => !v); setShowCouncil(false); }}
+            className="h-7 px-2.5 rounded-full text-[11px]"
+            style={{
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: showPrompts ? '#1a1610' : 'var(--gia-text)',
+              background: showPrompts ? '#f4efe4' : 'transparent',
+            }}
+            aria-pressed={showPrompts}
+          >
+            Prompts
+          </button>
+          <button
+            onClick={() => { setShowCouncil(v => !v); setShowPrompts(false); }}
             className="h-7 px-2.5 rounded-full text-[11px]"
             style={{
               border: '1px solid rgba(244,239,228,0.35)',
@@ -445,7 +459,12 @@ const [dockOpen, setDockOpen] = React.useState(false);
           </div>
         </div>
       </div>
-      {showCouncil && (
+      {showPrompts && (
+        <div className="absolute inset-0 top-12 z-20" style={{ background: 'var(--gia-bg)' }}>
+          <AgentPrompts />
+        </div>
+      )}
+      {showCouncil && !showPrompts && (
         <div className="absolute inset-0 top-12 z-20" style={{ background: 'var(--gia-bg)' }}>
           <Council initialPrompt={input} />
         </div>
