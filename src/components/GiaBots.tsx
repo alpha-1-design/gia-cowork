@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
-import { useGiaStore, type Skill } from '../store/useGiaStore';
+import { useGiaStore } from '../store/useGiaStore';
+import { useAgentStore } from '../store/useAgentStore';
+import { STUDIO_AGENTS, syncStudioSkills } from '../services/studio/devAgents';
 
 /** Built-in GIA bots. Same idea as a model bot: a named mind with a job. */
 export const GIA_BOTS: {
@@ -123,46 +125,80 @@ export function botPortrait(id: string): string {
 
 function useBots() {
   const activeSkillId = useGiaStore(s => s.activeSkillId);
-  useEffect(() => { syncGiaBots(); }, []);
+  const custom = useAgentStore(s => s.agents);
+  useEffect(() => { syncGiaBots(); syncStudioSkills(); }, []);
   const pick = (id: string) => {
     const s = useGiaStore.getState();
+    const made = custom.find(a => a.id === id);
+    if (made && !s.skills.some(sk => sk.id === id)) {
+      s.addSkill({
+        id: made.id,
+        name: made.name,
+        description: made.description || 'Custom agent',
+        systemPrompt: made.systemPrompt,
+        tools: made.tools,
+        category: 'user',
+      });
+    }
     const sess = s.sessions.find(x => x.id === s.activeSessionId);
     if (sess && sess.messages.length > 0 && (s.activeSkillId ?? 'core-general') !== id) {
-      s.createSession();
+      const next = s.createSession();
+      const who = [...GIA_BOTS, ...STUDIO_AGENTS].find(b => b.id === id)?.name || made?.name;
+      if (who) s.updateSessionTitle(next, who);
     }
     s.setSkill(id);
   };
   const active = activeSkillId ?? 'core-general';
-  return { pick, active };
+  return { pick, active, custom };
 }
 
-/** Empty-room roster. One portrait per bot, like a Grok bot picker. Picking one opens its own chat. */
+export function agentName(id: string | null | undefined): string {
+  const key = id || 'core-general';
+  return GIA_BOTS.find(b => b.id === key)?.name
+    || STUDIO_AGENTS.find(b => b.id === key)?.name
+    || useAgentStore.getState().agents.find(a => a.id === key)?.name
+    || 'GIA';
+}
+
+function Portrait({ id, mark, on }: { id: string; mark: string; on: boolean }) {
+  const known = ['core-general', 'core-developer', 'skill-researcher', 'skill-creative', 'skill-tutor', 'skill-security'].includes(id);
+  return (
+    <span
+      className="rounded-full overflow-hidden flex items-center justify-center"
+      style={{
+        width: 72,
+        height: 72,
+        boxShadow: on ? '0 0 0 2px #f4efe4' : '0 0 0 1px rgba(255,255,255,0.08)',
+        background: '#1c1c22',
+        color: '#f4efe4',
+        fontSize: 18,
+      }}
+    >
+      {known
+        ? <img src={botPortrait(id)} alt="" className="w-full h-full object-cover" draggable={false} />
+        : mark.slice(0, 1)}
+    </span>
+  );
+}
+
+/** Everyone you can talk to. House bots, studio lanes, and agents you made. */
 export function GiaBotRoster() {
-  const { pick, active } = useBots();
+  const { pick, active, custom } = useBots();
+  const people = [
+    ...GIA_BOTS.map(b => ({ id: b.id, name: b.name, line: b.blurb, mark: b.mark })),
+    ...STUDIO_AGENTS.map(b => ({ id: b.id, name: b.name, line: b.role, mark: b.name.slice(0, 1) })),
+    ...custom.map(a => ({ id: a.id, name: a.name, line: a.description || 'Your agent', mark: a.name.slice(0, 1) })),
+  ];
   return (
     <div className="w-full max-w-xl" data-testid="gia-bot-roster">
-      <div className="grid grid-cols-3 gap-x-3 gap-y-5">
-        {GIA_BOTS.map(bot => {
+      <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-3 gap-y-5">
+        {people.map(bot => {
           const on = active === bot.id;
           return (
-            <button
-              key={bot.id}
-              type="button"
-              onClick={() => pick(bot.id)}
-              className="flex flex-col items-center text-center"
-            >
-              <span
-                className="rounded-full overflow-hidden"
-                style={{
-                  width: 84,
-                  height: 84,
-                  boxShadow: on ? '0 0 0 2px #f4efe4, 0 0 0 4px #1a1610' : '0 0 0 1px rgba(255,255,255,0.08)',
-                }}
-              >
-                <img src={botPortrait(bot.id)} alt="" className="w-full h-full object-cover" draggable={false} />
-              </span>
+            <button key={bot.id} type="button" onClick={() => pick(bot.id)} className="flex flex-col items-center text-center">
+              <Portrait id={bot.id} mark={bot.mark} on={on} />
               <span className="mt-2 text-[13px] font-medium" style={{ color: 'var(--gia-text)' }}>{bot.name}</span>
-              <span className="mt-0.5 text-[11px] leading-snug max-w-[140px]" style={{ color: 'var(--gia-muted)' }}>{bot.blurb}</span>
+              <span className="mt-0.5 text-[11px] leading-snug max-w-[120px]" style={{ color: 'var(--gia-muted)' }}>{bot.line}</span>
             </button>
           );
         })}

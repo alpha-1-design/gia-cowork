@@ -37,7 +37,7 @@ import { ClarificationBottomSheet } from '../components/chat/ClarificationBottom
 import { EngineSheet } from '../components/chat/EngineSheet';
 import ModelSwitcherSheet from '../components/chat/ModelSwitcherSheet';
 import ToolsCatalogSheet from '../components/chat/ToolsCatalogSheet';
-import { GiaBotRoster, GIA_BOTS, botPortrait } from '../components/GiaBots';
+import { GiaBotRoster, botPortrait, agentName } from '../components/GiaBots';
 import ProviderIcon from '../components/ProviderIcon';
 import { BranchView } from '../components/chat/BranchView';
 import { SummaryBanner } from '../components/chat/SummaryBanner';
@@ -199,6 +199,25 @@ const [dockOpen, setDockOpen] = React.useState(false);
 
   useProactiveMessage();
 
+  // A blank chat is already a new chat. Plus must not stack another empty one,
+  // and leftover blanks should not sit in the list.
+  React.useEffect(() => {
+    const s = useGiaStore.getState();
+    const next = s.sessions.filter(sess =>
+      sess.messages.length > 0
+      || sess.id === s.activeSessionId
+      || (sess.title && sess.title !== 'New Chat' && sess.title !== 'New chat'),
+    );
+    if (next.length !== s.sessions.length) useGiaStore.setState({ sessions: next });
+  }, []);
+
+  const startFreshChat = () => {
+    const s = useGiaStore.getState();
+    const active = s.sessions.find(x => x.id === s.activeSessionId);
+    if (active && active.messages.length === 0) return;
+    createSession();
+  };
+
   if (showHistory) {
     return (
     <div className="flex flex-col h-full relative" style={{ background: 'var(--gia-bg)' }}>
@@ -207,8 +226,8 @@ const [dockOpen, setDockOpen] = React.useState(false);
             ← Back
           </button>
           <span className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Chats</span>
-          <button onClick={() => { createSession(); setShowHistory(false); }} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#a855f7' }}>
-            <Plus size={15} className="text-white" />
+          <button onClick={() => { startFreshChat(); setShowHistory(false); }} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#f4efe4', color: '#1a1610' }}>
+            <Plus size={15} />
           </button>
         </div>
         <div className="px-4 pt-3 shrink-0">
@@ -226,8 +245,10 @@ const [dockOpen, setDockOpen] = React.useState(false);
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {(() => {
             const filtered = sessions.filter(s => {
+              const emptyBlank = s.messages.length === 0 && (s.title === 'New Chat' || s.title === 'New chat');
+              if (emptyBlank && s.id !== activeSessionId) return false;
+              if (!historySearch) return true;
               if (s.title?.toLowerCase().includes(historySearch.toLowerCase())) return true;
-              if (!historySearch) return false;
               return s.messages.some(m => m.message?.content?.toLowerCase().includes(historySearch.toLowerCase()));
             });
             return (
@@ -319,7 +340,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
           </button>
           <div className="min-w-0 text-left">
             <p className="text-[13px] font-medium leading-none truncate" style={{ color: 'var(--gia-text)' }}>
-              {(GIA_BOTS.find(b => b.id === (activeSkillId || 'core-general')) ?? GIA_BOTS[0]).name}
+              {agentName(activeSkillId)}
             </p>
             <p className="text-[11px] mt-1 truncate" style={{ color: 'var(--gia-muted)' }}>{activeSession?.title ?? 'New chat'}</p>
           </div>
@@ -333,7 +354,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
           >
             {providerConnected ? (activeModel?.split('/').pop() || providerLabel) : 'No model'}
           </button>
-          <button onClick={createSession} className="p-1.5 rounded-lg" style={{ color: 'var(--gia-muted)' }} aria-label="New chat" title="New chat"><Plus size={15} /></button>
+          <button onClick={startFreshChat} className="p-1.5 rounded-lg" style={{ color: 'var(--gia-muted)' }} aria-label="New chat" title="New chat"><Plus size={15} /></button>
           <div className="relative">
             <button
               onClick={() => setShowMoreMenu(o => !o)}
@@ -353,6 +374,17 @@ const [dockOpen, setDockOpen] = React.useState(false);
                     { icon: <Brain size={13} />, label: 'Knowledge', onClick: () => { setShowKnowledge(true); setShowMoreMenu(false); } },
                     { icon: <Download size={13} />, label: 'Export chat', onClick: () => { exportChat(); setShowMoreMenu(false); } },
                     { icon: <History size={13} />, label: 'Chat history', onClick: () => { setShowHistory(true); setShowMoreMenu(false); } },
+                    { icon: <Paperclip size={13} />, label: 'Attach a file', onClick: () => { fileRef.current?.click(); setShowMoreMenu(false); } },
+                    { icon: <ImageIcon size={13} />, label: 'Photo', onClick: () => { imgRef.current?.click(); setShowMoreMenu(false); } },
+                    { icon: <Sparkles size={13} />, label: 'Build studio', onClick: () => { setShowBuildStudio(true); setShowMoreMenu(false); } },
+                    { icon: <Hammer size={13} />, label: buildMode ? 'Leave build' : 'Build an app', onClick: () => {
+                      if (!forceBuild) {
+                        const next = !buildModeStore;
+                        setBuildMode(next);
+                        useGiaStore.getState().updateSharedData({ currentMode: next ? 'build' : 'code' });
+                      }
+                      setShowMoreMenu(false);
+                    } },
                   ].map(item => (
                     <button
                       key={item.label}
@@ -364,6 +396,35 @@ const [dockOpen, setDockOpen] = React.useState(false);
                       {item.label}
                     </button>
                   ))}
+                  <div
+                    className="flex flex-wrap gap-1 px-3 py-2"
+                    role="group"
+                    aria-label="GIA mode"
+                    data-testid="mode-picker"
+                  >
+                    {MODES.map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          useGiaStore.getState().updateSharedData({ currentMode: m });
+                          setBuildMode(m === 'build');
+                          setShowMoreMenu(false);
+                        }}
+                        data-testid={`mode-${m}`}
+                        aria-pressed={currentModeName === m}
+                        className="px-2 py-1 rounded-lg text-[10px] font-medium"
+                        style={{
+                          background: currentModeName === m ? 'var(--gia-accent-dim)' : 'transparent',
+                          color: currentModeName === m ? 'var(--gia-accent)' : 'var(--gia-muted)',
+                          border: `1px solid ${currentModeName === m ? 'var(--gia-accent-glow)' : 'var(--gia-border)'}`,
+                        }}
+                        title={getModePromptName(m)}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </>
             )}
@@ -601,80 +662,6 @@ const [dockOpen, setDockOpen] = React.useState(false);
             <SlidersHorizontal size={14} />
           </button>
 
-          <div className="flex-1 relative overflow-hidden">
-            <div className="overflow-x-auto flex items-center gap-1.5 py-1 [&::-webkit-scrollbar]:hidden">
-            <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl transition-all tap-feedback shrink-0" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-muted)' }}>
-              <Paperclip size={11} /> File
-            </button>
-            <button type="button" onClick={() => imgRef.current?.click()} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl transition-all tap-feedback shrink-0" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-muted)' }}>
-              <ImageIcon size={11} /> Photo
-            </button>
-            <button type="button" onClick={() => { if (isNativePlatform()) imgRef.current?.click(); else setShowCamera(true); }} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl transition-all tap-feedback shrink-0" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-muted)' }}>
-              <Camera size={11} /> Camera
-            </button>
-            <button type="button" onClick={() => setShowTemplateSelector(true)} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl transition-all tap-feedback shrink-0" style={{ background: 'rgba(168,85,247,0.14)', border: '1px solid rgba(168,85,247,0.32)', color: '#c084fc' }}>
-              <LayoutTemplate size={11} /> Templates
-            </button>
-            <div className="w-px h-4 mx-1 shrink-0" style={{ background: 'var(--gia-border)' }} />
-            <div
-              className="flex items-center gap-0.5 px-1 py-0.5 rounded-xl shrink-0"
-              style={{ border: '1px solid var(--gia-border)' }}
-              role="group"
-              aria-label="GIA mode"
-              data-testid="mode-picker"
-            >
-              {MODES.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => {
-                    useGiaStore.getState().updateSharedData({ currentMode: m });
-                    setBuildMode(m === 'build');
-                  }}
-                  data-testid={`mode-${m}`}
-                  aria-pressed={currentModeName === m}
-                  className="px-2 py-1 rounded-lg text-[10px] font-medium transition-all"
-                  style={{
-                    background: currentModeName === m ? 'var(--gia-accent-dim)' : 'transparent',
-                    color: currentModeName === m ? 'var(--gia-accent)' : 'var(--gia-muted)',
-                    border: `1px solid ${currentModeName === m ? 'var(--gia-accent-glow)' : 'var(--gia-border)'}`,
-                  }}
-                  title={getModePromptName(m)}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowBuildStudio(true)}
-              data-testid="open-build-studio"
-              className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border transition-all tap-feedback shrink-0"
-              style={{ background: 'var(--gia-accent-dim)', border: '1px solid var(--gia-accent-glow)', color: 'var(--gia-accent)', fontWeight: 500 }}
-              title="Describe what you want, choose a model and a look, load a skill"
-            >
-              <Sparkles size={11} />
-              Studio
-            </button>
-            <button type="button" onClick={() => {
-              if (forceBuild) return;
-              const next = !buildModeStore;
-              setBuildMode(next);
-              useGiaStore.getState().updateSharedData({ currentMode: next ? 'build' : 'code' });
-            }} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border transition-all tap-feedback shrink-0" style={{ background: buildMode ? '#f9731620' : 'var(--gia-surface)', border: `1px solid ${buildMode ? '#f9731640' : 'var(--gia-border)'}`, color: buildMode ? '#f97316' : 'var(--gia-muted)', fontWeight: 500 }}>
-              <Hammer size={11} />
-              Build
-            </button>
-            {buildMode && (
-              <button type="button" onClick={() => setShowPreviewSheet(true)} disabled={!buildPreviewUrl} className="flex items-center gap-1 text-[10px] px-2.5 py-1.5 rounded-xl border transition-all tap-feedback shrink-0 disabled:opacity-40 disabled:cursor-not-allowed" style={{ background: buildPreviewUrl ? '#22c55e15' : 'var(--gia-surface)', border: `1px solid ${buildPreviewUrl ? '#22c55e40' : 'var(--gia-border)'}`, color: buildPreviewUrl ? '#22c55e' : 'var(--gia-muted)', fontWeight: 500 }}>
-                {buildPreviewUrl && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#22c55e', boxShadow: '0 0 6px #22c55e' }} />}
-                <Eye size={11} />
-                Preview
-              </button>
-            )}
-          </div>
-            <div className="absolute right-0 top-0 bottom-0 w-8 pointer-events-none" style={{ background: 'linear-gradient(to right, transparent, var(--gia-bg))' }} />
-          </div>
           {buildMode && sandboxEnvReady === false && (
             <button type="button" onClick={() => useGiaStore.getState().setModule('settings')} className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-lg self-start transition-colors tap-feedback" style={{ background: 'rgba(249,115,22,0.12)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)' }}>
               <Terminal size={11} />

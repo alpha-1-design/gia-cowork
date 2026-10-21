@@ -1,4 +1,5 @@
 import type { CustomAgent } from '../../store/useAgentStore';
+import { useGiaStore } from '../../store/useGiaStore';
 
 /** Development agents. Each prompt is the whole job, not a slogan. */
 export interface StudioAgent {
@@ -102,4 +103,27 @@ export function systemPromptFor(agent: { name: string; role: string }, custom?: 
   if (studio) return studio.systemPrompt;
   return `You are ${agent.name}, a ${agent.role} working inside GIA Studio.
 Do only the task you were given. Lead with the result. Name files and commands. Do not edit the repository unless your role is Implementer or Pull requests. Never force-push. Never commit on main.`;
+}
+
+/** Studio agents are skills, so picking one in chat changes the next reply. */
+export function syncStudioSkills() {
+  const { skills } = useGiaStore.getState();
+  const ids = new Set(skills.map(s => s.id));
+  const missing = STUDIO_AGENTS.filter(a => !ids.has(a.id));
+  if (missing.length === 0) return;
+  useGiaStore.setState({
+    skills: [
+      ...skills,
+      ...missing.map(a => ({
+        id: a.id,
+        name: a.name,
+        description: a.role,
+        systemPrompt: a.systemPrompt,
+        tools: a.writes
+          ? ['terminal_run', 'filesystem_read', 'filesystem_write', 'github']
+          : ['filesystem_read', 'github', 'web_search'],
+        category: 'dev' as const,
+      })),
+    ],
+  });
 }
