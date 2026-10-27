@@ -6,7 +6,7 @@
 
 `Real shell · Real files · Real screen control · Local-first`
 
-![version](https://img.shields.io/badge/version-0.2.0-8b5cf6?style=for-the-badge)
+![version](https://img.shields.io/badge/version-0.2.1-8b5cf6?style=for-the-badge)
 ![Tauri](https://img.shields.io/badge/Tauri%202-6a5acd?style=for-the-badge&logo=tauri&logoColor=white)
 ![React](https://img.shields.io/badge/React%2019-0ea5e9?style=for-the-badge&logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?style=for-the-badge&logo=typescript&logoColor=white)
@@ -142,9 +142,9 @@ Grab the latest from **[Releases](https://github.com/alpha-1-design/gia-cowork/r
 
 | Platform | Package | Command |
 |:---|:---|:---|
-| Debian · Ubuntu · Mint | `.deb` | `sudo apt install ./GIA.Cowork_0.2.0_amd64.deb` |
-| Fedora · RHEL · openSUSE | `.rpm` | `sudo dnf install ./GIA.Cowork-0.2.0-1.x86_64.rpm` |
-| Any Linux | `.AppImage` | `chmod +x GIA.Cowork_0.2.0_amd64.AppImage && ./GIA.Cowork_0.2.0_amd64.AppImage` |
+| Debian · Ubuntu · Mint | `.deb` | `sudo apt install ./GIA.Cowork_0.2.1_amd64.deb` |
+| Fedora · RHEL · openSUSE | `.rpm` | `sudo dnf install ./GIA.Cowork-0.2.1-1.x86_64.rpm` |
+| Any Linux | `.AppImage` | `chmod +x GIA.Cowork_0.2.1_amd64.AppImage && ./GIA.Cowork_0.2.1_amd64.AppImage` |
 | Windows 10/11 x64 | `.msi` / `-setup.exe` | Run the installer |
 
 > Linux packages build on Ubuntu; Windows installers come from a separate Windows CI workflow.
