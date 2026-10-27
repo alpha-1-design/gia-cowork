@@ -1,9 +1,10 @@
 import React from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { Settings as SettingsIcon, ChevronRight, UserCircle } from 'lucide-react';
+import { Settings as SettingsIcon, ChevronRight } from 'lucide-react';
 import { useGiaStore } from '../store/useGiaStore';
 import LeftDrawer from './ui/LeftDrawer';
 import { MODULES } from '../config/appModules';
+import { UserAvatar } from './avatars/UserAvatar';
 
 // The left-swipe drawer Sam asked for: profile up top, settings gear below
 // it, same shape as most AI apps' side menu. Deliberately kept minimal for
@@ -45,12 +46,12 @@ const ProfileDrawer: React.FC = () => {
         className="flex items-center gap-3 px-4 py-5 text-left tap-feedback transition-colors active:bg-white/5 shrink-0"
         style={{ borderBottom: '1px solid var(--gia-border)' }}
       >
-        <div
-          className="w-12 h-12 rounded-full flex items-center justify-center text-white text-base font-bold shrink-0"
-          style={{ background: 'linear-gradient(135deg, #a855f7, #7c3aed)', boxShadow: '0 0 12px rgba(168,85,247,0.4)' }}
-        >
-          {userProfile.name ? userProfile.name[0].toUpperCase() : <UserCircle size={22} />}
-        </div>
+        <UserAvatar
+          avatarId={userProfile.avatarId}
+          name={userProfile.name}
+          size={48}
+          title="Your avatar"
+        />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate" style={{ color: 'var(--gia-text)' }}>
             {userProfile.name || 'Set up your profile'}
@@ -67,7 +68,7 @@ const ProfileDrawer: React.FC = () => {
         onClick={() => goTo('settings')}
         className="flex items-center gap-3 px-4 py-3 text-left tap-feedback transition-colors active:bg-white/5 shrink-0"
       >
-        <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(148,163,184,0.15)', color: 'var(--gia-muted)' }}>
+        <span className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-muted)', border: '1px solid var(--gia-border)' }}>
           <SettingsIcon size={16} />
         </span>
         <span className="flex-1 text-sm font-medium" style={{ color: 'var(--gia-text)' }}>Settings</span>
@@ -87,11 +88,11 @@ const ProfileDrawer: React.FC = () => {
                 key={mod.id}
                 onClick={() => { setShowLeftDrawer(false); setModule(mod.id); }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-left tap-feedback transition-colors active:bg-white/5"
-                style={{ background: active ? 'rgba(168,85,247,0.1)' : 'transparent' }}
+                style={{ background: active ? 'var(--gia-surface-2)' : 'transparent' }}
               >
-                <span style={{ color: mod.color }}>{mod.icon}</span>
+                <span style={{ color: active ? 'var(--gia-text)' : 'var(--gia-muted)' }}>{mod.icon}</span>
                 <span className="flex-1 text-[13px] font-medium" style={{ color: active ? 'var(--gia-text)' : 'var(--gia-muted)' }}>{mod.label}</span>
-                {active && <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#a855f7' }} />}
+                {active && <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--gia-text)' }} />}
               </button>
             );
           })}

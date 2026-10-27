@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { pathArgsOf } from '../projects/projectIsolation';
 import {
   detectPeerAgents,
@@ -168,9 +168,6 @@ describe('peer detection works on Windows', () => {
 });
 
 describe('quoting matches the host shell', () => {
-  const restorePosix = () => {};
-  afterEach(() => { restorePosix(); });
-
   it('uses the POSIX idiom on Unix', () => {
     const restore = setQuoteStyle('posix');
     try {
@@ -220,9 +217,11 @@ describe('quoting matches the host shell', () => {
   });
 
   it('restores the previous style', () => {
+    // The previous style is whatever the host sniffed, not necessarily POSIX.
+    const before = currentQuoteStyle();
     const restore = setQuoteStyle('posix');
     setQuoteStyle('powershell');
     restore();
-    expect(currentQuoteStyle()).toBe('posix');
+    expect(currentQuoteStyle()).toBe(before);
   });
 });

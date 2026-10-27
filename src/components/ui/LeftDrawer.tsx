@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion, type PanInfo } from 'motion/react';
 import { shouldDismissFromLeftDrag } from './dragDismiss';
 
@@ -28,6 +28,19 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
 
   const reduceMotion = useReducedMotion();
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open, onClose]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -42,6 +55,9 @@ export const LeftDrawer: React.FC<LeftDrawerProps> = ({
           />
           <motion.div
             className="fixed inset-y-0 left-0 overflow-hidden flex flex-col"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu"
             style={{
               zIndex: zIndex + 1,
               width,

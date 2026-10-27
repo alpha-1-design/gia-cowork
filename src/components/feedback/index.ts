@@ -1,4 +1,3 @@
-export { default as ThinkingDots } from './ThinkingDots';
 export { default as ProgressBar } from './ProgressBar';
 export { default as StepTimeline } from './StepTimeline';
 export { default as StatusBadge } from './StatusBadge';

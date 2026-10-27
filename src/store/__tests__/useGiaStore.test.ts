@@ -34,7 +34,6 @@ describe('useGiaStore', () => {
     useGiaStore.setState({
       currentModule: 'chat',
       intentState: 'idle',
-      showTerminal: false,
       sharedData: {},
       sessions: [],
       activeSessionId: null,
@@ -73,11 +72,6 @@ describe('useGiaStore', () => {
     it('setCurrentTool updates current tool', () => {
       useGiaStore.getState().setCurrentTool('web_search');
       expect(useGiaStore.getState().currentTool).toBe('web_search');
-    });
-
-    it('setShowTerminal toggles terminal', () => {
-      useGiaStore.getState().setShowTerminal(true);
-      expect(useGiaStore.getState().showTerminal).toBe(true);
     });
   });
 

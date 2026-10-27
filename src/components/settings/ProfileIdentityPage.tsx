@@ -8,6 +8,8 @@ import { SkillsSubPage } from './SkillsSubPage';
 import { IdentitySubPage } from './IdentitySubPage';
 import { BrainExportSubPage } from './BrainExportSubPage';
 import { MemorySection } from './MemorySection';
+import { UserAvatar } from '../avatars/UserAvatar';
+import { UserAvatarPicker } from '../avatars/UserAvatarPicker';
 
 type SubPage = 'main' | 'skills' | 'identity' | 'brain-export';
 
@@ -22,9 +24,10 @@ export const ProfileIdentityPage: React.FC<{ onBack: () => void }> = ({ onBack }
   const [name, setProfileName] = useState(userProfile.name);
   const [bio, setBio] = useState(userProfile.bio);
   const [goals, setGoals] = useState(userProfile.goals);
+  const [avatarId, setAvatarId] = useState(userProfile.avatarId || 'nova');
 
   const saveProfile = () => {
-    setUserProfile({ name: name.trim(), bio: bio.trim(), goals: goals.trim() });
+    setUserProfile({ name: name.trim(), bio: bio.trim(), goals: goals.trim(), avatarId });
     setEditProfile(false);
   };
 
@@ -60,13 +63,17 @@ export const ProfileIdentityPage: React.FC<{ onBack: () => void }> = ({ onBack }
               Your Profile
             </span>
           </div>
-          <button onClick={() => setEditProfile(e => !e)}
+          <button onClick={() => { setAvatarId(userProfile.avatarId || 'nova'); setEditProfile(e => !e); }}
             className="text-[11px] font-medium" style={{ color: '#a855f7' }}>
             {editProfile ? 'Cancel' : 'Edit'}
           </button>
         </div>
         {editProfile ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--gia-muted)', display: 'block', marginBottom: '4px' }}>Your character</label>
+              <UserAvatarPicker value={avatarId} name={name} onChange={setAvatarId} compact />
+            </div>
             {[
               { label: 'Your name', val: name, set: setProfileName, placeholder: 'e.g. Samuel' },
               { label: 'About you', val: bio, set: setBio, placeholder: 'e.g. WASSCE student in Ghana' },
@@ -81,6 +88,9 @@ export const ProfileIdentityPage: React.FC<{ onBack: () => void }> = ({ onBack }
           </div>
         ) : (
           <div>
+            <div className="flex items-start gap-3 mb-2">
+              <UserAvatar avatarId={userProfile.avatarId} name={userProfile.name} size={40} />
+              <div className="flex-1 min-w-0">
             {userProfile.name ? (
               <>
                 <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>{userProfile.name}</p>
@@ -90,6 +100,8 @@ export const ProfileIdentityPage: React.FC<{ onBack: () => void }> = ({ onBack }
             ) : (
               <p className="text-xs" style={{ color: 'var(--gia-muted)' }}>No profile set — add your name so GIA can personalise responses.</p>
             )}
+            </div>
+            </div>
           </div>
         )}
       </div>

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   MessageSquare, Search, Globe, Brain, Hand,
   FolderOpen, Download, Upload, Eraser, Terminal, Settings, Wrench,
-  MessageCircle, PenLine, BarChart3, ClipboardList, Wifi, StickyNote, Hammer, EyeOff, Eye
+  MessageCircle, PenLine, BarChart3, ClipboardList, Wifi, StickyNote, Hammer, EyeOff, Package
 } from 'lucide-react';
 import { useGiaStore, type Module } from '../store/useGiaStore';
 import { exportBrainToFile, importBrainFromFile } from '../services/BrainExport';
@@ -41,12 +41,14 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
     'module-analyst': 'analyst',
     'module-planner': 'planner',
     'module-build': 'build',
+    'module-deliverables': 'deliverables',
   };
 
   const actions: Action[] = [
-    { id: 'new-chat', label: 'New Chat', description: 'Start a fresh conversation', icon: <MessageSquare {...iconStyle} />, category: 'Chat', execute: () => { useGiaStore.getState().createSession(); onClose(); } },
+    { id: 'new-chat', label: 'New Chat', description: 'Start a fresh conversation', icon: <MessageSquare {...iconStyle} />, category: 'Chat', execute: () => { const s = useGiaStore.getState(); s.setModule('chat'); s.createSession(); onClose(); } },
     { id: 'module-chat', label: 'Switch to Chat', description: 'Go to Chat module', icon: <MessageCircle {...iconStyle} />, category: 'Navigation', execute: () => { useGiaStore.getState().setModule('chat'); onClose(); } },
     { id: 'module-build', label: 'Switch to Build', description: 'Go to Build module — scaffold apps with live preview', icon: <Hammer {...iconStyle} />, category: 'Navigation', execute: () => { useGiaStore.getState().setModule('build'); onClose(); } },
+    { id: 'module-deliverables', label: 'Switch to Deliverables', description: 'Browse pages, diagrams and documents GIA has produced', icon: <Package {...iconStyle} />, category: 'Navigation', execute: () => { useGiaStore.getState().setModule('deliverables'); onClose(); } },
     { id: 'module-writer', label: 'Switch to Writer', description: 'Go to Writer module', icon: <PenLine {...iconStyle} />, category: 'Navigation', execute: () => { useGiaStore.getState().setModule('writer'); onClose(); } },
     { id: 'module-analyst', label: 'Switch to Analyst', description: 'Go to Analyst module', icon: <BarChart3 {...iconStyle} />, category: 'Navigation', execute: () => { useGiaStore.getState().setModule('analyst'); onClose(); } },
     { id: 'module-planner', label: 'Switch to Planner', description: 'Go to Planner module', icon: <ClipboardList {...iconStyle} />, category: 'Navigation', execute: () => { useGiaStore.getState().setModule('planner'); onClose(); } },
@@ -55,7 +57,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
     { id: 'toggle-thinking', label: 'Toggle Extended Thinking', description: 'Show GIA\'s internal reasoning process', icon: <Brain {...iconStyle} />, category: 'Tools', execute: () => { const s = useGiaStore.getState(); s.setExtThinking(!s.extThinking); s.addNotification(`Extended thinking ${s.extThinking ? 'disabled' : 'enabled'}`); onClose(); } },
     { id: 'toggle-hands-off', label: 'Toggle Hands-Off Mode', description: 'Let GIA execute tools without asking', icon: <Hand {...iconStyle} />, category: 'Tools', execute: () => { const s = useGiaStore.getState(); s.setHandsOff(!s.handsOff); s.addNotification(`Hands-off ${s.handsOff ? 'disabled' : 'enabled'}`); onClose(); } },
     { id: 'terminal', label: 'Open Terminal', description: 'Run real commands in the host shell', icon: <Terminal {...iconStyle} />, category: 'System', execute: () => { void onNavigate?.('terminal-panel'); onClose(); } },
-    { id: 'engine-room', label: 'Open Engine Room', description: 'Manage AI providers, models & network', icon: <Wrench {...iconStyle} />, category: 'System', execute: () => { useGiaStore.getState().setShowTerminal(true); onClose(); } },
+    { id: 'model-provider', label: 'Switch Model & Provider', description: 'Connect a provider or choose a model', icon: <Wrench {...iconStyle} />, category: 'System', execute: () => { const s = useGiaStore.getState(); s.setModule('chat'); s.setShowModelSwitcher(true); onClose(); } },
     { id: 'pick-folder', label: 'Pick Project Folder', description: 'Select a local folder for file access', icon: <FolderOpen {...iconStyle} />, category: 'Files', execute: () => { import('../services/DesktopFS').then(m => m.default.pickDirectory().then(r => { if (r) useGiaStore.getState().addNotification(`Project folder: ${r.name}`); })); onClose(); } },
     { id: 'export-brain', label: 'Export Brain', description: 'Download GIA memories as JSON', icon: <Download {...iconStyle} />, category: 'Files', execute: () => { try { exportBrainToFile(); useGiaStore.getState().addNotification('Brain exported'); } catch { useGiaStore.getState().addNotification('Export failed'); } onClose(); } },
     { id: 'import-brain', label: 'Import Brain', description: 'Restore GIA from a brain export file', icon: <Upload {...iconStyle} />, category: 'Files', execute: () => {
@@ -73,7 +75,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
     { id: 'clear-session', label: 'Clear Current Chat', description: 'Remove all messages from current session', icon: <Eraser {...iconStyle} />, category: 'Chat', execute: () => { const s = useGiaStore.getState(); const sid = s.activeSessionId; if (sid) { s.clearSession(sid); s.addNotification('Session cleared'); } onClose(); } },
     { id: 'mcp-servers', label: 'Manage MCP Servers', description: 'Configure and connect to MCP servers', icon: <Wifi {...iconStyle} />, category: 'System', execute: () => { useGiaStore.getState().setModule('settings'); onClose(); } },
     { id: 'presenter-mode', label: 'Presenter Mode', description: 'Hide GIA for a screen share — restore from the tray', icon: <EyeOff {...iconStyle} />, category: 'System', execute: () => { void togglePresenterMode(); onClose(); } },
-    { id: 'jarvis-panel', label: 'What GIA Is Seeing', description: 'Live view of the orb\'s observations and where vision ran', icon: <Eye {...iconStyle} />, category: 'System', execute: () => { window.dispatchEvent(new CustomEvent('gia:jarvis-panel')); onClose(); } },
+    { id: 'toggle-hud', label: 'Toggle Floating HUD', description: 'Show or hide the floating chat window', icon: <MessageSquare {...iconStyle} />, category: 'System', execute: () => { const s = useGiaStore.getState(); const next = !s.showHud; s.setShowHud(next); s.addNotification(`Floating HUD ${next ? 'shown' : 'hidden'}`); onClose(); } },
     { id: 'task-board', label: 'Open Task Board', description: 'View and manage your tasks', icon: <ClipboardList {...iconStyle} />, category: 'Co-Work', execute: () => { void onNavigate?.('task-board'); onClose(); } },
     { id: 'notes-panel', label: 'Open Notes', description: 'View and manage your notes', icon: <StickyNote {...iconStyle} />, category: 'Co-Work', execute: () => { void onNavigate?.('notes-panel'); onClose(); } },
   ];
@@ -93,13 +95,32 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
       })
     : visibleActions;
 
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
     if (isOpen) {
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
       setQuery('');
       setSelectedIdx(0);
       setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      previousFocusRef.current?.focus();
+      previousFocusRef.current = null;
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [isOpen, onClose]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -140,9 +161,12 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
     <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh]" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-xl mx-4 rounded-2xl overflow-hidden shadow-2xl"
+        className="relative w-full max-w-xl mx-4 rounded-lg overflow-hidden shadow-2xl"
         style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border)' }}
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
       >
         <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--gia-border)' }}>
           <Search size={16} style={{ color: 'var(--gia-muted)' }} />
@@ -153,10 +177,11 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search commands..."
+            aria-label="Search commands"
             className="flex-1 bg-transparent text-sm outline-none"
             style={{ color: 'var(--gia-text)' }}
           />
-          <kbd className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'var(--gia-overlay-2)', color: 'var(--gia-muted-2)' }}>
+          <kbd className="text-[9px] px-1.5 py-0.5 rounded-sm" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-muted)' }}>
             ESC
           </kbd>
         </div>
@@ -176,9 +201,9 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
                     key={action.id}
                     onClick={action.execute}
                     onMouseEnter={() => setSelectedIdx(globalIdx)}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all"
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left transition-colors"
                     style={{
-                      background: isSelected ? 'rgba(168,85,247,0.12)' : 'transparent',
+                      background: isSelected ? 'var(--gia-surface-3)' : 'transparent',
                       color: 'var(--gia-text)',
                     }}
                   >
@@ -192,7 +217,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
                       </p>
                     </div>
                     {isSelected && (
-                      <kbd className="text-[9px] px-1.5 py-0.5 rounded shrink-0" style={{ background: 'rgba(168,85,247,0.2)', color: '#a855f7' }}>
+                      <kbd className="text-[9px] px-1.5 py-0.5 rounded-sm shrink-0" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-muted)' }}>
                         ↵
                       </kbd>
                     )}

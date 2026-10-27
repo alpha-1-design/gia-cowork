@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { User, AlertCircle, RotateCcw, Paperclip, Brain, ChevronDown, ChevronRight, Lock, Cloud, Globe, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { AlertCircle, RotateCcw, Paperclip, Brain, ChevronDown, ChevronRight, Lock, Cloud, Globe, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { ReasoningChain } from './ReasoningChain';
 import { WorkLog } from './WorkLog';
 import { SegmentedReasoning } from './SegmentedReasoning';
@@ -14,6 +14,7 @@ import MessageActionSheet, { RewriteBar } from './MessageActionSheet';
 import MessageContextMenu from './MessageContextMenu';
 import MessageFullScreen from './MessageFullScreen';
 import { ChatSkeleton } from './feedback';
+import { UserAvatar } from './avatars/UserAvatar';
 import { resolveAgentColor, resolveAgentIcon } from '../utils/agentIcons';
 import ToolTray from './ToolTray';
 import InlineToolCalls from './InlineToolCalls';
@@ -22,11 +23,10 @@ import { useProtocolStore } from '../store/useProtocolStore';
 import InlineClarificationForm from './chat/InlineClarificationForm';
 import type { Message, ThinkingPhase, Clarification } from '../store/useGiaStore';
 
-const AgentBadge: React.FC<{ agentName?: string; agentIcon?: string; agentTask?: string }> = ({ agentName, agentIcon, agentTask }) => {
-  const color = resolveAgentColor(agentIcon || 'Bot');
+const AgentBadge: React.FC<{ agentName?: string; agentIcon?: string; agentTask?: string }> = ({ agentName, agentTask }) => {
   return (
-    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[9px] font-semibold uppercase tracking-wider" style={{ background: `${color}15`, color }}>
-      <OrbAvatar color={color} size={10} animate={false} glow={false} />
+    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[9px] font-semibold uppercase tracking-wider" style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}>
+      <OrbAvatar color="var(--gia-text)" size={10} animate={false} glow={false} />
       {agentName || 'Agent'}
       {agentTask && (
         <span className="ml-0.5 text-[7px] opacity-60 font-normal normal-case max-w-[120px] truncate">{agentTask}</span>
@@ -100,17 +100,17 @@ const SourcesBlock: React.FC<{ sources: Array<string | { url: string; title?: st
                 initial={{ opacity: 0, y: 12, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 24, mass: 0.8, delay: si * 0.08 }}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] transition-all hover:scale-[1.02] active:scale-[0.98]"
-                style={{ background: 'rgba(59,130,246,0.04)', border: '1px solid rgba(59,130,246,0.1)' }}
+                className="flex items-center gap-2 px-3 py-2 rounded-md text-[10px] transition-colors hover:bg-[var(--gia-surface-3)]"
+                style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)' }}
               >
-                <span className="w-5 h-5 rounded-md flex items-center justify-center text-[8px] font-bold shrink-0"
-                  style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa' }}>
+                <span className="w-5 h-5 rounded-sm flex items-center justify-center text-[8px] font-bold shrink-0"
+                  style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-text)' }}>
                   {si + 1}
                 </span>
-                <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`} alt="" className="w-3.5 h-3.5 rounded shrink-0" loading="lazy" />
+                <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`} alt="" className="w-3.5 h-3.5 rounded-sm shrink-0" loading="lazy" />
                 <div className="min-w-0 flex-1">
                   <span className="block truncate font-medium" style={{ color: 'var(--gia-text)' }}>{title}</span>
-                  <span className="block text-[7px] truncate" style={{ color: '#64748b' }}>{domain}</span>
+                  <span className="block text-[7px] truncate" style={{ color: 'var(--gia-muted)' }}>{domain}</span>
                 </div>
               </motion.a>
             );
@@ -143,6 +143,7 @@ const MessageList: React.FC<MessageListProps> = ({
   clarification, onClarificationFormAnswer,
 }) => {
   const extThinking = useGiaStore(s => s.extThinking);
+  const userProfile = useGiaStore(s => s.userProfile);
   const showTokenUsage = useShowTokenUsage();
   const [sheetMsgId, setSheetMsgId] = useState<string | null>(null);
   const [fullScreenMsgId, setFullScreenMsgId] = useState<string | null>(null);
@@ -155,8 +156,8 @@ const MessageList: React.FC<MessageListProps> = ({
       )}
       {messages.map((msg) => (
         <motion.div key={msg.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className={`flex gap-2 sm:gap-3 md:gap-3.5 group ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-          <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center mt-0.5" style={msg.agentId ? { background: `${resolveAgentColor(msg.agentIcon || 'Bot')}20`, border: `1px solid ${resolveAgentColor(msg.agentIcon || 'Bot')}40` } : { background: msg.role === 'user' ? 'linear-gradient(135deg, #a855f7, #7c3aed)' : msg.error ? 'rgba(239,68,68,0.15)' : 'var(--gia-surface-2)', border: msg.role === 'assistant' ? '1px solid var(--gia-border)' : 'none' }}>
-            {msg.agentId ? <OrbAvatar color={resolveAgentColor(msg.agentIcon || 'Bot')} size={18} animate={false} icon={React.createElement(resolveAgentIcon(msg.agentIcon || 'Bot'))} /> : msg.role === 'user' ? <User size={13} className="text-white" /> : msg.error ? <AlertCircle size={13} style={{ color: '#f87171' }} /> : msg.thinking ? extThinking ? <GiaIcon size={13} animate color="#a855f7" /> : <div className="flex gap-0.5">{[0,1,2].map(d => <div key={d} className="thinking-dot" style={{ animationDelay: `${d * 0.16}s` }} />)}</div> : <GiaIcon size={14} animate={false} color="var(--gia-muted)" />}
+          <div className="w-7 h-7 rounded-md shrink-0 flex items-center justify-center mt-0.5" style={msg.agentId ? { background: 'var(--gia-surface-3)', border: '1px solid var(--gia-border)' } : msg.role === 'user' ? { background: 'transparent', border: 'none' } : { background: msg.error ? 'rgba(239,68,68,0.12)' : 'var(--gia-surface-2)', border: '1px solid var(--gia-border)' }}>
+            {msg.agentId ? <OrbAvatar color="var(--gia-text)" size={18} animate={false} icon={React.createElement(resolveAgentIcon(msg.agentIcon || 'Bot'))} /> : msg.role === 'user' ? <UserAvatar avatarId={userProfile.avatarId} name={userProfile.name} size={26} /> : msg.error ? <AlertCircle size={13} style={{ color: '#f87171' }} /> : msg.thinking ? extThinking ? <GiaIcon size={13} animate color="var(--gia-text)" /> : <div className="flex gap-0.5">{[0,1,2].map(d => <div key={d} className="thinking-dot" style={{ animationDelay: `${d * 0.16}s` }} />)}</div> : <GiaIcon size={14} animate={false} color="var(--gia-muted)" />}
           </div>
           <div className="flex-1 min-w-0 space-y-1">
             {msg.attachments?.some(a => a.preview) && (
@@ -167,7 +168,7 @@ const MessageList: React.FC<MessageListProps> = ({
               </div>
             )}
             <div className="flex items-center gap-2 mb-0.5 ml-1">
-              <span className="text-[9px] font-medium uppercase tracking-wider" style={{ color: msg.agentId ? resolveAgentColor(msg.agentIcon || 'Bot') : msg.role === 'user' ? '#a855f7' : 'var(--gia-muted-2)' }}>
+              <span className="text-[9px] font-medium uppercase tracking-wider" style={{ color: msg.agentId ? 'var(--gia-text)' : msg.role === 'user' ? 'var(--gia-text)' : 'var(--gia-muted)' }}>
                 {msg.agentId ? msg.agentName : msg.role === 'user' ? 'You' : 'GIA'}
               </span>
               <span className="text-[8px]" style={{ color: 'var(--gia-muted-2)' }} title={new Date(msg.timestamp).toLocaleString()}>
@@ -188,10 +189,9 @@ const MessageList: React.FC<MessageListProps> = ({
                 onContinue={msg.role === 'assistant' ? onContinue : undefined}
               >
               <div
-                className={`p-3 sm:p-4 md:p-5 rounded-2xl relative cursor-pointer ${msg.role === 'user' ? 'bg-violet-600/10 border border-violet-500/20' : msg.error ? 'bg-rose-950/20 border border-rose-800/30' : streamingMsgId === msg.id || streamingMsgIds?.has(msg.id) ? 'streaming-message' : ''}`}
+                className={`p-3 sm:p-4 md:p-5 relative cursor-pointer ${msg.role === 'user' ? 'bg-[var(--gia-surface-2)] border border-[var(--gia-border)]' : msg.error ? 'bg-rose-950/20 border border-rose-800/30' : streamingMsgId === msg.id || streamingMsgIds?.has(msg.id) ? 'streaming-message' : ''}`}
                 style={{
-                  borderTopRightRadius: msg.role === 'user' ? '4px' : '20px',
-                  borderTopLeftRadius: msg.role === 'assistant' ? '4px' : '20px',
+                  borderRadius: msg.role === 'user' ? '12px 12px 4px 12px' : '4px 12px 12px 12px',
                 }}
                 onClick={(e) => {
                   if ((e.target as HTMLElement).closest('a, button')) return;
@@ -242,20 +242,20 @@ const MessageList: React.FC<MessageListProps> = ({
                           {formatTimeAgo(msg.timestamp)}
                         </span>
                         {msg.thinking ? (
-                          <span className="text-[8px] px-1.5 py-0.5 rounded-full phase-badge" style={{ background: 'rgba(251,191,36,0.12)', color: '#f59e0b' }}>
+                          <span className="text-[8px] px-1.5 py-0.5 rounded-sm phase-badge" style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-muted)' }}>
                             Thinking…
                           </span>
                         ) : streamingMsgId === msg.id || streamingMsgIds?.has(msg.id) ? (
-                          <span className="text-[8px] px-1.5 py-0.5 rounded-full phase-badge" style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399' }}>
+                          <span className="text-[8px] px-1.5 py-0.5 rounded-sm phase-badge" style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-text)' }}>
                             Generating…
                           </span>
                         ) : responseTimesRef.current[msg.id] ? (
-                          <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,0.1)', color: '#34d399' }}>
+                          <span className="text-[8px] px-1.5 py-0.5 rounded-sm" style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-muted)' }}>
                             {(responseTimesRef.current[msg.id] / 1000).toFixed(1)}s
                           </span>
                         ) : null}
                         {showTokenUsage && msg.tokenUsage && !msg.thinking && (
-                          <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
+                          <span className="text-[8px] px-1.5 py-0.5 rounded-sm" style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-muted)' }}>
                             {msg.tokenUsage.total} tok
                           </span>
                         )}
@@ -292,9 +292,9 @@ const MessageList: React.FC<MessageListProps> = ({
                       // (or any path that doesn't populate segments) --
                       // same single collapsible blob as before.
                       return (liveThoughts[msg.id] || msg.thoughts) ? (
-                      <div className="mb-3 rounded-xl overflow-hidden transition-all duration-300" style={{
-                        border: '1px solid rgba(251,191,36,0.12)',
-                        background: 'linear-gradient(135deg, rgba(251,191,36,0.04), rgba(217,119,6,0.02))',
+                      <div className="mb-3 rounded-md overflow-hidden transition-all duration-300" style={{
+                        border: '1px solid var(--gia-border)',
+                        background: 'var(--gia-surface-2)',
                       }}>
                         <button
                           onClick={() => setShowThoughts(prev => {
@@ -304,7 +304,7 @@ const MessageList: React.FC<MessageListProps> = ({
                             return next;
                           })}
                           className="w-full flex items-center gap-2 px-3 py-2 text-left hover:opacity-80 transition-opacity"
-                          style={{ color: '#f59e0b' }}
+                          style={{ color: 'var(--gia-text)' }}
                         >
                           <Brain size={12} />
                           <span className="text-[11px] font-medium flex-1">
@@ -330,7 +330,7 @@ const MessageList: React.FC<MessageListProps> = ({
                     {msg.content.length > LONG_MSG_CHARS && !expandedMsgs.has(msg.id) ? (
                       <>
                         <MarkdownRenderer content={msg.content.slice(0, LONG_MSG_CHARS)} sources={msg.sources} />
-                        <button onClick={() => setExpandedMsgs(prev => new Set(prev).add(msg.id))} className="mt-2 text-[11px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>
+                        <button onClick={() => setExpandedMsgs(prev => new Set(prev).add(msg.id))} className="mt-2 text-[11px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-md transition-colors" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}>
                           Show more ({Math.ceil((msg.content.length - LONG_MSG_CHARS) / 1000)}k+ chars)
                         </button>
                       </>
@@ -339,11 +339,11 @@ const MessageList: React.FC<MessageListProps> = ({
                         <MarkdownRenderer content={msg.content} sources={msg.sources} />
                         {(streamingMsgId === msg.id || streamingMsgIds?.has(msg.id)) && msg.content && loading && (
                           extThinking
-                            ? <GiaIcon size={13} animate color="#a855f7" className="ml-1" speed={1.3} />
+                            ? <GiaIcon size={13} animate color="var(--gia-text)" className="ml-1" speed={1.3} />
                             : <span className="stream-cursor ml-0.5">▋</span>
                         )}
                         {expandedMsgs.has(msg.id) && (
-                          <button onClick={() => setExpandedMsgs(prev => { const n = new Set(prev); n.delete(msg.id); return n; })} className="mt-2 text-[11px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>
+                          <button onClick={() => setExpandedMsgs(prev => { const n = new Set(prev); n.delete(msg.id); return n; })} className="mt-2 text-[11px] font-medium flex items-center gap-1 px-3 py-1.5 rounded-md transition-colors" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}>
                             Show less
                           </button>
                         )}
@@ -352,15 +352,15 @@ const MessageList: React.FC<MessageListProps> = ({
                     {msg.role === 'assistant' && !msg.thinking && !msg.error && (
                       <div className="mt-1.5 text-[9px] text-right tracking-wider select-none flex items-center justify-end gap-1.5" style={{ color: 'var(--gia-muted-3)' }}>
                         <span className="opacity-40">— </span>
-                        <span style={{ color: msg.agentId ? `${resolveAgentColor(msg.agentIcon || 'Bot')}66` : '#a855f766' }}>✦</span>
-                        <span className="font-medium ml-0.5" style={{ color: msg.agentId ? `${resolveAgentColor(msg.agentIcon || 'Bot')}44` : '#a855f744' }}>{msg.agentId ? msg.agentName : 'GIA'}</span>
+                        <span style={{ color: 'var(--gia-muted-3)' }}>✦</span>
+                        <span className="font-medium ml-0.5" style={{ color: 'var(--gia-muted-3)' }}>{msg.agentId ? msg.agentName : 'GIA'}</span>
                         {msg.source === 'on-device' && (
-                          <span className="inline-flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399' }}>
+                          <span className="inline-flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded-sm" style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-muted)' }}>
                             <Lock size={9} /> on-device
                           </span>
                         )}
                         {msg.source === 'cloud' && (
-                          <span className="inline-flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
+                          <span className="inline-flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded-sm" style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-muted)' }}>
                             <Cloud size={9} /> cloud
                           </span>
                         )}
@@ -428,11 +428,11 @@ const MessageList: React.FC<MessageListProps> = ({
               {msg.role === 'assistant' && msg.wasTruncated && (
                 <button
                   onClick={() => onContinue(msg.id)}
-                  className="flex items-center gap-1.5 text-[10px] font-semibold px-3 py-1.5 rounded-full transition-all tap-feedback active:scale-95"
+                  className="flex items-center gap-1.5 text-[10px] font-semibold px-3 py-1.5 rounded-md transition-colors tap-feedback"
                   style={{
-                    background: 'rgba(168,85,247,0.12)',
-                    color: '#c4b5fd',
-                    border: '1px solid rgba(168,85,247,0.3)',
+                    background: 'var(--gia-surface-2)',
+                    color: 'var(--gia-text)',
+                    border: '1px solid var(--gia-border)',
                   }}
                 >
                   <ChevronRight size={11} />
@@ -445,7 +445,7 @@ const MessageList: React.FC<MessageListProps> = ({
                     <button
                       key={s}
                       onClick={() => onSuggestionClick?.(s)}
-                      className="text-[10px] px-3 py-1.5 rounded-full transition-all tap-feedback active:scale-95"
+                      className="text-[10px] px-3 py-1.5 rounded-md transition-colors tap-feedback"
                       style={{
                         background: 'var(--gia-surface-2)',
                         color: 'var(--gia-muted)',

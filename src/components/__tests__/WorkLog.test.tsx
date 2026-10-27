@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { WorkLog } from '../WorkLog';
 
 // Bug report: while GIA is web searching, a full step-by-step panel forced
@@ -50,11 +50,13 @@ describe('WorkLog during a live run (e.g. web search)', () => {
     // with isExpanded=false it must not be in the document, regardless of
     // isLive. This is the exact behavior that was broken.
     expect(container.querySelector('[data-testid="worklog-steps"]')).toBeNull();
-    expect(screen.queryByText(/^Searching the web$/)).toBeNull();
+    // The compact header may name the current step, but the detailed timeline
+    // is still closed.
+    expect(screen.getAllByText('Searching the web')).toHaveLength(1);
   });
 
   it('does render the detailed step timeline once the user explicitly expands it', () => {
-    render(
+    const { container } = render(
       <WorkLog
         thoughts={liveWebSearchThoughts}
         isLive={true}
@@ -65,6 +67,8 @@ describe('WorkLog during a live run (e.g. web search)', () => {
     );
     // With isExpanded=true (user tapped it open), the step detail should
     // now be visible -- confirms this isn't just permanently hidden.
-    expect(screen.getByText('Searching the web')).toBeInTheDocument();
+    const steps = container.querySelector('[data-testid="worklog-steps"]');
+    expect(steps).not.toBeNull();
+    expect(within(steps as HTMLElement).getByText('Searching the web')).toBeInTheDocument();
   });
 });

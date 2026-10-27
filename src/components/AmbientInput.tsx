@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Send, Loader2, Square, Mic, MicOff } from 'lucide-react';
-import { useGiaStore, IntentState } from '../store/useGiaStore';
 import { SlashCommandMenu, isCommandNameActive } from './SlashCommandMenu';
 import { getCommandSuggestions, getCommandByName, type CommandSpec } from '../services/SlashCommands';
 
@@ -21,16 +20,6 @@ interface AmbientInputProps {
   prefix?: React.ReactNode;
 }
 
-const STATE_GLOW: Record<IntentState, string> = {
-  idle:       '168, 85, 247',
-  typing:     '168, 85, 247',
-  analyst:    '59, 130, 246',
-  writer:     '236, 72, 153',
-  planner:    '16, 185, 129',
-  thinking:   '251, 191, 36',
-  responding: '34, 197, 94',
-};
-
 const AmbientInput: React.FC<AmbientInputProps> = ({
   value, onChange, onSubmit, onStop,
   onVoiceToggle, isVoiceListening, isVoiceRefining,
@@ -40,7 +29,6 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
   multiline = false,
   prefix,
 }) => {
-  const intentState = useGiaStore(s => s.intentState);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -48,7 +36,8 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
   // holds a bare command name, so `/note my thing` does not get a popup
   // fighting the text the user is typing.
   const [commandIndex, setCommandIndex] = useState(0);
-  const commandMenuOpen = isCommandNameActive(value);
+  const [commandDismissed, setCommandDismissed] = useState(false);
+  const commandMenuOpen = isCommandNameActive(value) && !commandDismissed;
   const commandMatches = useMemo(
     () => (commandMenuOpen ? getCommandSuggestions(value.trimStart()) : []),
     [commandMenuOpen, value],
@@ -65,10 +54,8 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
     // and one that takes arguments needs the cursor already in place.
     onChange(`/${c.name} `);
     setCommandIndex(0);
+    setCommandDismissed(false);
   }, [onChange]);
-
-  const color = STATE_GLOW[intentState] ?? STATE_GLOW.idle;
-  const isActive = intentState !== 'idle' || value.length > 0;
 
   // Auto-resize textarea
   useEffect(() => {
@@ -113,7 +100,8 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
         // Escape dismisses the menu without clearing what was typed — the
         // user may want to keep the text and just get the popup out of the way.
         e.preventDefault();
-        onChange('');
+        e.stopPropagation();
+        setCommandDismissed(true);
         return;
       }
       if (e.key === 'Enter' && !e.shiftKey && !commandIsExact) {
@@ -132,21 +120,13 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
     }
   };
 
-  const borderColor = isActive
-    ? `rgba(${color}, 0.35)`
-    : 'var(--gia-overlay-2)';
-
-  const boxShadow = isLoading
-    ? `0 0 0 2px rgba(${color}, 0.2), 0 0 20px rgba(${color}, 0.15)`
-    : isActive
-    ? `0 0 0 1px rgba(${color}, 0.15), 0 2px 12px rgba(0,0,0,0.3)`
-    : '0 2px 12px rgba(0,0,0,0.3)';
-
   const sharedInputProps = {
+    'data-gia-composer': '',
     value,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       onChange(e.target.value);
       setCommandIndex(0);
+      setCommandDismissed(false);
     },
     onKeyDown: handleKeyDown,
     onPasteCapture: handlePasteCapture,
@@ -158,27 +138,20 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
     spellCheck: true,
     inputMode: 'text' as const,
     style: {
-      background: 'var(--gia-overlay)',
-      border: `1px solid ${borderColor}`,
-      boxShadow,
+      background: 'var(--gia-surface-2)',
+      border: '1px solid var(--gia-border)',
       color: 'var(--gia-text)',
-      borderRadius: multiline ? '18px' : '999px',
-      transition: 'all 0.25s ease',
-      caretColor: `rgba(${color}, 1)`,
+      borderRadius: '12px',
+      transition: 'border-color 0.2s ease',
+      caretColor: 'var(--gia-text)',
     },
   };
 
+  const sendDisabled = !isLoading && (!value.trim() || disabled);
+  const sendLabel = isLoading ? 'Stop generating' : 'Send message';
+
   return (
     <div className="relative w-full">
-      <div
-        className="absolute -inset-2 rounded-full pointer-events-none"
-        style={{
-          background: `radial-gradient(ellipse at center, rgba(${color}, ${isLoading ? 0.18 : isActive ? 0.1 : 0.05}) 0%, transparent 70%)`,
-          filter: 'blur(20px)',
-          transition: 'all 0.4s ease',
-        }}
-      />
-
       <div className="relative flex items-end gap-2">
         <SlashCommandMenu
           input={value}
@@ -222,8 +195,10 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
           <button
             type="button"
             onClick={onVoiceToggle}
-            className="absolute left-1.5 bottom-1.5 w-10 h-10 rounded-full flex items-center justify-center transition-all"
+            className="absolute left-1.5 bottom-1.5 w-9 h-9 rounded-md flex items-center justify-center transition-colors"
             style={{ color: isVoiceListening ? '#f87171' : 'var(--gia-muted)' }}
+            aria-label={isVoiceListening ? 'Stop voice input' : 'Start voice input'}
+            title={isVoiceListening ? 'Stop voice input' : 'Start voice input'}
           >
             {isVoiceListening ? <Mic size={17} className="animate-pulse" /> : <MicOff size={17} />}
           </button>
@@ -232,8 +207,8 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
         {/* Refinement Indicator */}
         {isVoiceRefining && (
           <div className="absolute left-12 top-1 flex items-center gap-1.5 animate-pulse">
-            <Loader2 size={10} className="animate-spin text-emerald-400" />
-            <span className="text-[8px] text-emerald-400 font-medium">Polishing...</span>
+            <Loader2 size={10} className="animate-spin" style={{ color: 'var(--gia-muted)' }} />
+            <span className="text-[8px] font-medium" style={{ color: 'var(--gia-muted)' }}>Polishing...</span>
           </div>
         )}
 
@@ -241,23 +216,29 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
         <button
           type="button"
           onClick={isLoading && onStop ? onStop : onSubmit}
-          disabled={!isLoading && (!value.trim() || disabled)}
-          className="absolute right-2 bottom-2 w-9 h-9 rounded-full flex items-center justify-center transition-all disabled:opacity-30"
+          disabled={sendDisabled}
+          className="absolute right-2 bottom-2 w-9 h-9 rounded-md flex items-center justify-center transition-all disabled:opacity-30"
           style={{
             background: isLoading
               ? 'rgba(239, 68, 68, 0.8)'
               : value.trim()
-              ? `rgb(${color})`
-              : 'var(--gia-overlay-2)',
+              ? 'var(--gia-accent)'
+              : 'var(--gia-surface-3)',
+            color: isLoading
+              ? '#ffffff'
+              : value.trim()
+              ? 'var(--gia-accent-contrast)'
+              : 'var(--gia-muted)',
             transform: value.trim() || isLoading ? 'scale(1)' : 'scale(0.85)',
           }}
+          aria-label={sendLabel}
+          title={sendLabel}
         >
           {isLoading
             ? onStop
-              ? <Square size={12} className="text-white fill-white" />
-              : <Loader2 size={14} className="text-white animate-spin" />
-            : <Send size={13} className="text-white" style={{ transform: 'translateX(1px)' }} />
-          }
+              ? <Square size={12} className="fill-current" />
+              : <Loader2 size={14} className="animate-spin" />
+            : <Send size={13} style={{ transform: 'translateX(1px)' }} />}
         </button>
       </div>
     </div>

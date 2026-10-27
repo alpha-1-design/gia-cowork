@@ -46,34 +46,18 @@ export interface DesktopTheme {
 
 export const DESKTOP_THEMES: DesktopTheme[] = [
   {
-    id: 'obsidian-aurora',
-    label: 'Obsidian Aurora',
-    description: 'True OLED black with an aurora gradient. The default.',
-    preview: { bg: '#000000', surface: '#08080c', accent: '#06b6d4' },
-    palette: {
-      bg: '#000000',
-      surface: '#08080c',
-      surface2: '#0e0e14',
-      border: 'rgba(255,255,255,0.06)',
-      text: '#f0f0f5',
-      muted: '#7a7a95',
-      accent: '#06b6d4',
-    },
-    system: false,
-  },
-  {
     id: 'dark',
     label: 'Dark',
-    description: 'Deep charcoal with a violet accent. Genuinely dark, not grey.',
-    preview: { bg: '#08080c', surface: '#0e0e14', accent: '#a855f7' },
+    description: 'True-black surfaces with a neutral accent. The default.',
+    preview: { bg: '#000000', surface: '#060607', accent: '#e4e4e7' },
     palette: {
-      bg: '#08080c',
-      surface: '#0e0e14',
-      surface2: '#14141c',
+      bg: '#000000',
+      surface: '#060607',
+      surface2: '#0b0b0d',
       border: 'rgba(255,255,255,0.07)',
       text: '#f0f0f5',
       muted: '#8888a0',
-      accent: '#a855f7',
+      accent: '#e4e4e7',
     },
     system: false,
   },
@@ -81,7 +65,7 @@ export const DESKTOP_THEMES: DesktopTheme[] = [
     id: 'light',
     label: 'Light',
     description: 'Clean and bright, for daylight and documents.',
-    preview: { bg: '#e8e8ef', surface: '#f5f5f9', accent: '#a855f7' },
+    preview: { bg: '#e8e8ef', surface: '#f5f5f9', accent: '#18181b' },
     palette: {
       bg: '#e8e8ef',
       surface: '#f5f5f9',
@@ -89,7 +73,7 @@ export const DESKTOP_THEMES: DesktopTheme[] = [
       border: 'rgba(0,0,0,0.10)',
       text: '#1b1b2a',
       muted: '#5a5a70',
-      accent: '#a855f7',
+      accent: '#18181b',
     },
     system: false,
   },
@@ -101,28 +85,43 @@ export const DESKTOP_THEMES: DesktopTheme[] = [
     // stand-in because that is what it resolves to unless the OS says light.
     preview: { bg: '#5b5b66', surface: '#7a7a86', accent: '#c4c4cc' },
     palette: {
-      bg: '#08080c',
-      surface: '#0e0e14',
-      surface2: '#14141c',
+      bg: '#000000',
+      surface: '#060607',
+      surface2: '#0b0b0d',
       border: 'rgba(255,255,255,0.07)',
       text: '#f0f0f5',
       muted: '#8888a0',
-      accent: '#a855f7',
+      accent: '#e4e4e7',
     },
     system: true,
+  },
+  {
+    id: 'obsidian-aurora',
+    label: 'Obsidian Aurora',
+    description: 'Optional OLED theme with an aurora gradient accent.',
+    preview: { bg: '#000000', surface: '#060607', accent: '#06b6d4' },
+    palette: {
+      bg: '#000000',
+      surface: '#060607',
+      surface2: '#0b0b0d',
+      border: 'rgba(255,255,255,0.06)',
+      text: '#f0f0f5',
+      muted: '#7a7a95',
+      accent: '#06b6d4',
+    },
+    system: false,
   },
 ];
 
 /**
  * The default.
  *
- * Obsidian Aurora, because it is the only one designed against the two targets
- * that actually matter here: a native desktop window on OLED, and a screen
- * that is going to be screenshotted or presented. Its black is true black, so
- * it does not glow against a dark bezel, and its accents stay legible when the
- * brightness is turned down.
+ * Dark, because the desktop is a working surface first: true-black panels,
+ * neutral controls, and semantic colour reserved for state (connected,
+ * warning, error). Obsidian Aurora remains available for people who want the
+ * more expressive theme, but it is no longer what a fresh install gets.
  */
-export const DEFAULT_THEME: ThemeId = 'obsidian-aurora';
+export const DEFAULT_THEME: ThemeId = 'dark';
 
 export const THEME_IDS: ThemeId[] = DESKTOP_THEMES.map(t => t.id);
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Terminal as TerminalIcon, Loader2, Circle } from 'lucide-react';
 import terminalService from '../services/TerminalService';
 import { isTauri } from '../platform';
+import { APP_VERSION } from '../config/appVersion';
 
 type LineKind = 'cmd' | 'out' | 'err' | 'info' | 'success';
 
@@ -16,7 +17,7 @@ const mk = (kind: LineKind, text: string): Line => ({ id: lid++, kind, text });
 
 const WELCOME: Line[] = [
   mk('info', '╔══════════════════════════════════════════╗'),
-  mk('info', '║       GIA COWORK · HOST SHELL v0.1.0      ║'),
+  mk('info', `║       GIA COWORK · HOST SHELL v${APP_VERSION}      ║`),
   mk('info', '║  Real commands on this machine — not a    ║'),
   mk('info', '║  fake shell. Sessions, kill & timeouts    ║'),
   mk('info', '║  are handled by the desktop host (Tauri). ║'),
@@ -40,7 +41,7 @@ const UNAVAILABLE_LINES: Line[] = [
   mk('err', 'Host shell unavailable in this preview.'),
   mk('err', 'The real terminal only runs inside the GIA Cowork desktop app'),
   mk('err', '(Tauri host shell). In the browser preview you can still:'),
-  mk('out', '  • Open Engine Room  — manage providers, models & network'),
+  mk('out', '  • Switch model & provider from the Chat header'),
   mk('out', '  • Use GIA in Build mode — it scaffolds and runs apps for you'),
 ];
 

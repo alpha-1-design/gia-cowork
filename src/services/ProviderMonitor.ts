@@ -1,6 +1,6 @@
 /**
  * ProviderMonitor — tracks latency, error rate, and health per provider.
- * Phase 0.3: Foundation for Engine Room health dashboard.
+ * Provider health monitoring — latency, failures and availability.
  */
 import { logger } from '../utils/logger';
 import { useProviderStore } from '../store/useProviderStore';

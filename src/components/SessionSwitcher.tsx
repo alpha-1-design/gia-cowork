@@ -62,18 +62,19 @@ const busySessionId = activeGeneration.active ? activeGeneration.sessionId : nul
     <div className="relative" ref={ref} data-testid="session-switcher">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors"
         style={{
           background: 'var(--gia-surface-2)',
           color: 'var(--gia-muted)',
           border: '1px solid var(--gia-border)',
         }}
         title="Switch conversation"
+        aria-label="Switch conversation"
       >
         <MessagesSquare size={12} />
-        <span className="max-w-[120px] truncate">{active?.title || 'New chat'}</span>
+        <span className="max-w-[120px] truncate">{active?.title || 'Conversations'}</span>
         {sessions.length > 1 && (
-          <span className="text-[9px] px-1 rounded" style={{ background: 'rgba(148,163,184,0.15)' }}>
+          <span className="text-[9px] px-1 rounded-sm" style={{ background: 'var(--gia-surface-3)' }}>
             {sessions.length}
           </span>
         )}
@@ -81,7 +82,7 @@ const busySessionId = activeGeneration.active ? activeGeneration.sessionId : nul
 
       {open && (
         <div
-          className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto rounded-xl z-50"
+          className="absolute top-full left-0 mt-1 w-64 max-h-80 overflow-y-auto rounded-md z-50"
           style={{
             background: 'var(--gia-surface)',
             border: '1px solid var(--gia-border)',
@@ -94,8 +95,8 @@ const busySessionId = activeGeneration.active ? activeGeneration.sessionId : nul
             </span>
             <button
               onClick={() => { createSession(); setOpen(false); }}
-              className="flex items-center gap-1 text-[10px] px-1.5 py-1 rounded-md transition-all"
-              style={{ background: 'rgba(168,85,247,0.12)', color: '#a855f7' }}
+              className="flex items-center gap-1 text-[10px] px-1.5 py-1 rounded-sm transition-colors"
+              style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}
             >
               <Plus size={10} /> New
             </button>
@@ -114,10 +115,10 @@ const busySessionId = activeGeneration.active ? activeGeneration.sessionId : nul
                   <button
                     onClick={() => { setActiveSession(s.id); setOpen(false); }}
                     data-testid={`session-item-${s.id}`}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-all"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-sm text-left transition-colors"
                     style={{
-                      background: isActive ? 'rgba(168,85,247,0.12)' : 'transparent',
-                      color: isActive ? '#c084fc' : 'var(--gia-muted)',
+                      background: isActive ? 'var(--gia-surface-3)' : 'transparent',
+                      color: isActive ? 'var(--gia-text)' : 'var(--gia-muted)',
                     }}
                   >
                     <span className="flex-1 truncate text-[11px]">{s.title || 'Untitled'}</span>

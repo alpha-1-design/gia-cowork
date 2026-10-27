@@ -68,7 +68,7 @@ export const HuggingFaceBrowser: React.FC = () => {
       setStatus(`Downloading ${m.id}…`);
       try {
         await service.loadModel(m.id);
-        setStatus(`Ready: ${m.id}. Set local-llm as your provider in Engine Room.`);
+        setStatus(`Ready: ${m.id}. Choose local-llm from the Chat model switcher.`);
       } catch (e) {
         setStatus(`Download failed: ${e instanceof Error ? e.message : 'error'}`);
       } finally {

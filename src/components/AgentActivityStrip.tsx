@@ -12,9 +12,9 @@ import { TOOL_LABELS } from '../utils/toolLabels';
  * Every competing desktop agent converged on the same instinct: the UI should
  * assume many things in flight and the human is in the orchestrator seat. But
  * watching that means watching *trajectories*, not just finished answers — and
- * GIA's activity was scattered across a reasoning chain, a protocol console, a
- * work log and a Jarvis panel. All of those are archives. None of them answer
- * the only question that matters while you wait.
+ * GIA's activity was scattered across a reasoning chain, a protocol console and
+ * a work log. All of those are archives. None of them answer the only question
+ * that matters while you wait.
  *
  * So this is deliberately small and deliberately singular. One line: what is
  * happening, for how long, and how do I stop it. It does not summarise, does
@@ -70,20 +70,20 @@ export function AgentActivityStrip() {
         color: 'var(--gia-muted)',
       }}
     >
-      <Loader2 size={11} className="animate-spin shrink-0" style={{ color: '#a855f7' }} />
+      <Loader2 size={11} className="animate-spin shrink-0" style={{ color: 'var(--gia-muted)' }} />
       <span className="font-medium shrink-0" style={{ color: 'var(--gia-text)' }}>{toolLabel}</span>
 
       {steps > 0 && (
-        <span className="px-1.5 py-0.5 rounded text-[9px] shrink-0"
-          style={{ background: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
+        <span className="px-1.5 py-0.5 rounded-sm text-[9px] shrink-0"
+          style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-muted)' }}>
           {steps} step{steps === 1 ? '' : 's'}
         </span>
       )}
 
       {tabCount > 0 && (
         <span
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] shrink-0"
-          style={{ background: 'rgba(20,184,166,0.12)', color: '#14b8a6' }}
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[9px] shrink-0"
+          style={{ background: 'var(--gia-surface-3)', color: 'var(--gia-muted)' }}
           title={`${tabCount} page${tabCount === 1 ? '' : 's'} open in the browser panel`}
         >
           <Globe size={9} />

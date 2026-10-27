@@ -10,7 +10,7 @@ export type { MessageSegment };
 
 const FEEDBACK_KEYS = { up: 'feedback:liked', down: 'feedback:disliked' } as const;
 
-export type Module = 'chat' | 'writer' | 'analyst' | 'planner' | 'settings' | 'exam' | 'autonomy' | 'agents' | 'build';
+export type Module = 'chat' | 'writer' | 'analyst' | 'planner' | 'settings' | 'exam' | 'autonomy' | 'agents' | 'build' | 'deliverables';
 export type IntentState = 'idle' | 'typing' | 'analyst' | 'writer' | 'planner' | 'thinking' | 'responding';
 export type ThinkingPhase = 'gathering' | 'analyzing' | 'coding' | 'writing' | 'searching' | 'planning' | 'reasoning' | 'processing' | 'idle';
 
@@ -175,6 +175,19 @@ function updateMessageInTree(nodes: MessageNode[], msgId: string, content: strin
   });
 }
 
+function setMessageThinkingInTree(nodes: MessageNode[], msgId: string, thinking: boolean): MessageNode[] {
+  if (!Array.isArray(nodes)) return [];
+  return nodes.map(node => {
+    if (node.message.id === msgId) {
+      return { ...node, message: { ...node.message, thinking } };
+    }
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      return { ...node, children: setMessageThinkingInTree(node.children, msgId, thinking) };
+    }
+    return node;
+  });
+}
+
 function updateArtifactsInTree(nodes: MessageNode[], msgId: string, artifacts: Artifact[]): MessageNode[] {
   if (!Array.isArray(nodes)) return [];
   return nodes.map(node => {
@@ -329,6 +342,8 @@ export interface UserProfile {
   bio: string;
   goals: string;
   profilePictureUri?: string;
+  /** Id from USER_AVATARS; defaults to the Nova character. */
+  avatarId?: string;
 }
 
 export interface ClarificationField {
@@ -358,9 +373,7 @@ export interface Clarification {
 interface GiaState {
   currentModule: Module;
   intentState: IntentState;
-  showTerminal: boolean;
   showModelSwitcher: boolean;
-  showEngine: boolean;
   showLeftDrawer: boolean;
   setShowLeftDrawer: (show: boolean) => void;
   moduleHistory: Module[];
@@ -401,6 +414,9 @@ interface GiaState {
   hapticFeedback: boolean;
   fullScreenMode: boolean;
   toggleFullScreenMode: () => void;
+  /** Floating chat HUD, explicitly enabled by the user. */
+  showHud: boolean;
+  setShowHud: (on: boolean) => void;
   showVoiceMode: boolean;
   setShowVoiceMode: (v: boolean) => void;
   thinkingPhase: ThinkingPhase;
@@ -471,7 +487,6 @@ interface GiaState {
 
   setModule: (module: Module) => void;
   goBack: () => boolean;
-  setShowEngine: (v: boolean) => void;
   setGenerationState: (state: { active: boolean; module: 'chat' | 'agents' | null; sessionId: string | null; messageId: string | null; abortSignal?: AbortSignal }) => void;
   setCurrentTool: (tool: string | null) => void;
   registerGenerationController: (key: string, controller: AbortController) => void;
@@ -480,7 +495,6 @@ interface GiaState {
   abortAllGenerations: () => void;
   setClarification: (c: Clarification | null) => void;
   setIntentState: (state: IntentState) => void;
-  setShowTerminal: (show: boolean) => void;
   setShowModelSwitcher: (show: boolean) => void;
   setWebSearch: (enabled: boolean) => void;
   setDeepSearch: (enabled: boolean) => void;
@@ -525,6 +539,7 @@ interface GiaState {
   setActiveSession: (id: string) => void;
   addMessage: (sessionId: string, msg: Message) => void;
   updateMessage: (sessionId: string, msgId: string, content: string, thoughts?: string) => void;
+  setMessageThinking: (sessionId: string, msgId: string, thinking: boolean) => void;
   updateMessageSegments: (sessionId: string, msgId: string, segments: MessageSegment[]) => void;
   updateMessageArtifacts: (sessionId: string, msgId: string, artifacts: Artifact[]) => void;
   updateMessageTasks: (sessionId: string, msgId: string, tasks: TaskItem[]) => void;
@@ -596,9 +611,7 @@ export const useGiaStore = create<GiaState>()(
     (set, get) => ({
       currentModule: 'chat',
       intentState: 'idle',
-      showTerminal: false,
       showModelSwitcher: false,
-      showEngine: false,
       showLeftDrawer: false,
       moduleHistory: [],
       sharedData: {},
@@ -606,7 +619,7 @@ export const useGiaStore = create<GiaState>()(
       archivedSessions: [],
       activeSessionId: null,
       scheduledTasks: [],
-      userProfile: { name: '', bio: '', goals: '', profilePictureUri: '' },
+      userProfile: { name: '', bio: '', goals: '', profilePictureUri: '', avatarId: 'nova' },
       notifications: [],
       skills: [
         {
@@ -696,7 +709,7 @@ export const useGiaStore = create<GiaState>()(
       useWhisper: localStorage.getItem('gia-use-whisper') === 'true',
       customInstructions: (() => { try { return localStorage.getItem('gia-custom-instructions') || ''; } catch { return ''; } })(),
       pinnedMemories: (() => { try { return JSON.parse(localStorage.getItem('gia-pinned-memories') || '[]'); } catch { return []; } })(),
-      theme: 'obsidian-aurora',
+      theme: 'dark',
       reduceMotion: (() => { try { return localStorage.getItem('gia-reduce-motion') === 'true'; } catch { return false; } })(),
       hiddenModules: [],
       connectionStatus: navigator.onLine ? 'online' : 'offline',
@@ -723,6 +736,7 @@ export const useGiaStore = create<GiaState>()(
       longRunningMode: (() => { try { return localStorage.getItem('gia-long-running') === 'true'; } catch { return false; } })(),
       autoModelUnload: (() => { try { return localStorage.getItem('gia-auto-model-unload') !== 'false'; } catch { return true; } })(),
       fullScreenMode: false,
+      showHud: (() => { try { return localStorage.getItem('gia-floating-hud') === 'true'; } catch { return false; } })(),
       showVoiceMode: false,
 
       setShowVoiceMode: (v) => set({ showVoiceMode: v }),
@@ -760,7 +774,6 @@ export const useGiaStore = create<GiaState>()(
         set((st) => ({ currentModule: prev, moduleHistory: st.moduleHistory.slice(0, -1) }));
         return true;
       },
-      setShowEngine: (v) => set({ showEngine: v }),
       setGenerationState: (generationState) => set((s) => {
         // Single choke point for all 5 "generation finished" call sites (chat
         // streaming, agents, errors, aborts) rather than touching each one.
@@ -789,9 +802,12 @@ export const useGiaStore = create<GiaState>()(
       setCurrentTool: (tool) => set({ currentTool: tool }),
       setClarification: (c) => set({ clarification: c }),
       setIntentState: (state) => set({ intentState: state }),
-      setShowTerminal: (show) => set({ showTerminal: show }),
       setShowModelSwitcher: (show) => set({ showModelSwitcher: show }),
       setShowLeftDrawer: (show) => set({ showLeftDrawer: show }),
+      setShowHud: (on) => {
+        try { localStorage.setItem('gia-floating-hud', String(on)); } catch { /* storage blocked */ }
+        set({ showHud: on });
+      },
       setWebSearch: (enabled) => set({ webSearch: enabled }),
       setDeepSearch: (enabled) => set({ deepSearch: enabled }),
       setReaction: (msgId, value, snippet) => set(s => {
@@ -1004,6 +1020,15 @@ export const useGiaStore = create<GiaState>()(
           ),
         })),
 
+      setMessageThinking: (sessionId, msgId, thinking) =>
+        set((s) => ({
+          sessions: s.sessions.map((sess) =>
+            sess.id === sessionId
+              ? { ...sess, messages: setMessageThinkingInTree(sess.messages, msgId, thinking) }
+              : sess
+          ),
+        })),
+
       updateMessageSegments: (sessionId, msgId, segments) =>
         set((s) => ({
           sessions: s.sessions.map((sess) =>
@@ -1077,8 +1102,8 @@ export const useGiaStore = create<GiaState>()(
         })),
 
       getBranchMessages: (sessionId, branchId) => {
-        const { sessions } = get();
-        const sess = sessions.find((s) => s.id === sessionId);
+        const { sessions, archivedSessions } = get();
+        const sess = sessions.find((s) => s.id === sessionId) ?? archivedSessions.find((s) => s.id === sessionId);
         if (!sess || !Array.isArray(sess.messages)) return [];
         return flattenBranch(sess.messages, branchId);
       },
@@ -1284,22 +1309,9 @@ export const useGiaStore = create<GiaState>()(
       version: 4,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persistedState: unknown, version: number) => {
-        // v3 → v4: Obsidian Aurora becomes the desktop default.
-        //
-        // Only `'dark'` is rewritten, and that asymmetry is the whole design.
-        // Before this, `'dark'` WAS the default, so a stored `'dark'` cannot be
-        // distinguished from "never picked a theme" — leaving it alone would mean
-        // the new default only ever reaches new installs, and every existing
-        // user is quietly stuck on the old look forever. `'light'` and
-        // `'system'` were always deliberate departures from the default, so
-        // those are real choices and are left alone. Overriding them would be
-        // the app overruling someone who actually asked for something.
-        if (version < 4 && persistedState && typeof persistedState === 'object') {
-          const s4 = persistedState as Record<string, unknown>;
-          if (s4.theme === 'dark' || s4.theme === undefined) {
-            s4.theme = 'obsidian-aurora';
-          }
-        }
+        // v4 no longer rewrites `dark` to Obsidian Aurora. Dark is the clean
+        // monochrome default again; anyone who deliberately chose Aurora keeps
+        // it, and anyone who never chose a theme simply gets the default.
         if (version < 3 && persistedState && typeof persistedState === 'object') {
           const state = persistedState as Record<string, unknown>;
           if (Array.isArray(state.sessions)) {

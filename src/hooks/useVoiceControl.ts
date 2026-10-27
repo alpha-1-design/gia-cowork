@@ -81,13 +81,13 @@ function mapWakeWordToBuiltin(wakeWord: string): string {
     'hey_siri': 'HEY_SIRI',
     'alexa': 'ALEXA',
     'computer': 'COMPUTER',
-    'jarvis': 'JARVIS',
+    'jarvis': 'GIA',
     'picovoice': 'PICOVOICE',
     'porcupine': 'PORCUPINE',
-    'hey_gia': 'JARVIS',
-    'gia': 'JARVIS',
+    'hey_gia': 'GIA',
+    'gia': 'GIA',
   };
-  return known[w] || 'JARVIS';
+  return known[w] || 'GIA';
 }
 
 export function useVoiceControl(config: VoiceControlConfig = {}) {
@@ -624,17 +624,6 @@ export function useVoiceControl(config: VoiceControlConfig = {}) {
   useEffect(() => {
     return () => { activeRef.current = false; stopListening(); };
   }, [stopListening]);
-
-  // Jarvis eyes: calling GIA by voice (wake word / push-to-talk) lights the
-  // floating orb up to "listening" so there's a visible "she heard you" cue.
-  // Lazy-loaded to avoid pulling the vision graph into test modules.
-  useEffect(() => {
-    let cancelled = false;
-    import('../services/JarvisOrbService').then(({ jarvisOrbService }) => {
-      if (!cancelled) jarvisOrbService.setListening(isListening || isHearing);
-    });
-    return () => { cancelled = true; };
-  }, [isListening, isHearing]);
 
   return { isListening, isHearing, startListening, stopListening, requestPermissions } as const;
 }

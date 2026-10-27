@@ -6,6 +6,7 @@ import { isNativePlatform } from '../../utils/helpers';
 import { isTauri } from '../../platform';
 import AnalyticsService from '../../services/AnalyticsService';
 import ConfirmDialog from '../ConfirmDialog';
+import { APP_VERSION } from '../../config/appVersion';
 
 export const AboutPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [confirmChats, setConfirmChats] = useState(false);
@@ -126,7 +127,7 @@ export const AboutPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
       {/* Version */}
       <p className="text-center text-[10px] pb-4" style={{ color: 'var(--gia-muted-2)' }}>
-        GIA Cowork v0.1.0 · Built by Samuel Mensah · Alpha-1 Studio, Ghana
+        GIA Cowork v{APP_VERSION} · Built by Samuel Mensah · Alpha-1 Studio, Ghana
       </p>
 
       <ConfirmDialog

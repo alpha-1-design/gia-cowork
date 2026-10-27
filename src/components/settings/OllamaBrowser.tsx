@@ -47,7 +47,7 @@ export const OllamaBrowser: React.FC = () => {
       setStatus(`Pulling ${name}…`);
       try {
         await pullOllamaModel(name, (p) => setProgress(p), base);
-        setStatus(`Pulled ${name}. Use the Ollama provider in Engine Room to chat with it.`);
+        setStatus(`Pulled ${name}. Choose the Ollama provider from the Chat model switcher to chat with it.`);
         await loadInstalled();
       } catch (e) {
         setStatus(`Pull failed: ${e instanceof Error ? e.message : 'error'}`);

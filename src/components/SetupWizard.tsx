@@ -23,7 +23,6 @@ import { companyFor, descriptionFor, docsUrlFor } from '../services/providerInfo
 import { useProviderStore, type ModelOption } from '../store/useProviderStore';
 import { corsProxy } from '../services/CorsProxy';
 import { useCustomProviderStore, validateCustomProvider, getAllProvidersWithCustom } from '../services/providers/customProviders';
-import { useGiaStore } from '../store/useGiaStore';
 
 // ─── Wizard State Store ───────────────────────────────────────────────
 
@@ -107,7 +106,6 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
   const wizard = useWizardStore();
   const { setProviderKey, setProviderModel, setActiveProvider, fetchModels } = useProviderStore();
   const { addCustomProvider } = useCustomProviderStore();
-  const setShowTerminal = useGiaStore(s => s.setShowTerminal);
   const [testing, setTesting] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [keyError, setKeyError] = useState('');
@@ -169,20 +167,56 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
           wizard.setTestResult({ success: false, error: 'Provider not found' });
         }
       } else {
-        const baseUrl = def.baseUrl;
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        };
-        if (wizard.apiKey) {
-          headers['Authorization'] = `Bearer ${wizard.apiKey}`;
+        const listingType = def.listingType;
+
+        // Providers with no live listing endpoint (HuggingFace, on-device) are
+        // validated against the curated catalog instead of a network call.
+        if (listingType === 'huggingface' || listingType === 'local') {
+          const elapsed = Math.round(performance.now() - start);
+          wizard.setTestResult({
+            success: true,
+            latencyMs: elapsed,
+            models: providerRegistry.getModels(wizard.provider).map((m) => m.id),
+          });
+          return;
         }
-        if (def.headers) Object.assign(headers, def.headers);
 
-        const isLocal = !def.needsApiKey;
-        const fetchFn = isLocal ? fetch : (url: string, init?: RequestInit) => corsProxy.fetch(url, init);
+        let requestUrl: string;
+        let requestHeaders: Record<string, string> = {};
+        let requestFetch: (url: string, init?: RequestInit) => Promise<Response>;
 
-        const res = await fetchFn(`${baseUrl}/models`, {
-          headers,
+        if (listingType === 'anthropic') {
+          requestUrl = 'https://api.anthropic.com/v1/models';
+          requestHeaders = {
+            'x-api-key': wizard.apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          };
+          requestFetch = (url, init) => corsProxy.fetch(url, init);
+        } else if (listingType === 'gemini') {
+          requestUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
+          requestHeaders = { 'x-goog-api-key': wizard.apiKey };
+          requestFetch = (url, init) => corsProxy.fetch(url, init);
+        } else if (listingType === 'ollama') {
+          requestUrl = 'http://localhost:11434/api/tags';
+          requestHeaders = {};
+          requestFetch = (url, init) => fetch(url, init);
+        } else if (wizard.provider === 'lmstudio') {
+          requestUrl = 'http://localhost:1234/v1/models';
+          if (wizard.apiKey) requestHeaders['Authorization'] = `Bearer ${wizard.apiKey}`;
+          requestFetch = (url, init) => fetch(url, init);
+        } else {
+          requestUrl = `${def.baseUrl}/models`;
+          if (wizard.apiKey) requestHeaders['Authorization'] = `Bearer ${wizard.apiKey}`;
+          if (def.headers) Object.assign(requestHeaders, def.headers);
+          const isLocal = !def.needsApiKey;
+          requestFetch = isLocal
+            ? (url, init) => fetch(url, init)
+            : (url, init) => corsProxy.fetch(url, init);
+        }
+
+        const res = await requestFetch(requestUrl, {
+          headers: requestHeaders,
           signal: AbortSignal.timeout(10000),
         });
 
@@ -190,8 +224,26 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
 
         if (res.ok) {
           const json = await res.json();
-          const modelList = json.data ?? json.models ?? [];
-          const modelNames = modelList.map((m: { id?: string; name?: string }) => m.id || m.name || '');
+          let modelNames: string[] = [];
+          if (listingType === 'anthropic') {
+            modelNames = (json.data || [])
+              .filter((m: { type?: string }) => m.type === 'model')
+              .map((m: { id?: string }) => m.id || '');
+          } else if (listingType === 'gemini') {
+            modelNames = (json.models || [])
+              .filter((m: { supportedGenerationMethods?: string[] }) =>
+                m.supportedGenerationMethods?.includes('generateContent'),
+              )
+              .map((m: { name?: string }) => (m.name || '').split('/').pop() || '');
+          } else if (listingType === 'ollama') {
+            modelNames = (json.models || []).map((m: { name?: string }) => m.name || '');
+          } else {
+            const list = json.data ?? json.models ?? [];
+            modelNames = list.map((m: { id?: string; name?: string }) => m.id || m.name || '');
+          }
+          if (modelNames.length === 0) {
+            modelNames = providerRegistry.getModels(wizard.provider).map((m) => m.id);
+          }
           wizard.setTestResult({ success: true, latencyMs: elapsed, models: modelNames });
         } else {
           wizard.setTestResult({
@@ -218,17 +270,17 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
   if (wizard.step === 'welcome') {
     return (
       <div className="flex-1 w-full max-w-lg mx-auto flex flex-col items-center justify-center text-center px-8 py-8">
-        <div className="mb-6 w-16 h-16 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-          <Activity size={36} className="text-indigo-400" />
+        <div className="mb-6 w-16 h-16 rounded-lg bg-[var(--gia-surface-2)] border border-[var(--gia-border)] flex items-center justify-center">
+          <Activity size={36} className="text-[var(--gia-text)]" />
         </div>
-        <h1 className="text-2xl font-bold text-zinc-100 mb-2">Welcome to GIA</h1>
+        <h1 className="gia-display text-[30px] leading-tight text-zinc-100 mb-2">Welcome to GIA</h1>
         <p className="text-zinc-400 text-sm max-w-md mb-8">
           Your intelligent AI assistant. Connect an AI provider below to begin chatting, coding, researching, and automating tasks.
         </p>
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <button
             onClick={() => wizard.setStep('select-provider')}
-            className="flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-colors shadow-lg shadow-indigo-600/20"
+            className="flex items-center justify-center gap-2 px-6 py-3.5 bg-[var(--gia-accent)] hover:opacity-90 text-[var(--gia-accent-contrast)] rounded-md font-medium transition-colors"
           >
             Connect AI Provider <ArrowRight size={16} />
           </button>
@@ -237,7 +289,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
               setActiveProvider('local-llm');
               handleClose();
             }}
-            className="flex items-center justify-center gap-2 px-6 py-3.5 border border-violet-500/30 text-violet-300 hover:bg-violet-500/10 rounded-xl font-medium transition-colors"
+            className="flex items-center justify-center gap-2 px-6 py-3.5 border border-[var(--gia-border)] text-[var(--gia-text)] hover:bg-[var(--gia-surface-2)] rounded-md font-medium transition-colors"
           >
             <Cpu size={16} /> Start Offline (Local AI)
           </button>
@@ -324,9 +376,9 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
               disabled={busy}
               className={clsx(
                 'w-full text-left p-4 rounded-lg border transition-colors',
-                'hover:border-indigo-500 hover:bg-zinc-800/50',
+                'hover:border-[var(--gia-border-2)] hover:bg-zinc-800/50',
                 wizard.provider === def.id
-                  ? 'border-indigo-500 bg-zinc-800/60'
+                  ? 'border-[var(--gia-text)] bg-zinc-800/60'
                   : 'border-zinc-700 bg-zinc-900'
               )}
             >
@@ -366,26 +418,26 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
                   placeholder="Provider name (e.g., My AI)"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[var(--gia-border-2)]"
                 />
                 <input
                   type="text"
                   value={customBaseUrl}
                   onChange={(e) => setCustomBaseUrl(e.target.value)}
                   placeholder="Base URL (e.g., https://api.example.com/v1)"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[var(--gia-border-2)]"
                 />
                 <input
                   type="password"
                   value={customApiKey}
                   onChange={(e) => setCustomApiKey(e.target.value)}
                   placeholder="API Key (optional)"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[var(--gia-border-2)]"
                 />
                 <button
                   onClick={handleAddCustomProvider}
                   disabled={!customName.trim() || !customBaseUrl.trim()}
-                  className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="w-full px-4 py-2 bg-[var(--gia-accent)] hover:opacity-90 disabled:bg-zinc-700 disabled:text-zinc-500 text-[var(--gia-accent-contrast)] rounded-lg text-sm font-medium transition-colors"
                 >
                   Add & Validate
                 </button>
@@ -450,16 +502,15 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
               <span className="text-zinc-400">{companyFor(wizard.provider)}</span>
               {descriptionFor(wizard.provider) ? <> — {descriptionFor(wizard.provider)}</> : null}
             </p>
-            {docsUrlFor(wizard.provider) && (
-              <a
-                href={docsUrlFor(wizard.provider)}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="text-[11px] font-medium text-indigo-400 hover:underline"
-              >
-                Get an API key from {companyFor(wizard.provider)} ↗
-              </a>
-            )}
+            <a
+              href={docsUrlFor(wizard.provider) || `https://www.google.com/search?q=${encodeURIComponent(companyFor(wizard.provider) + ' API key')}`}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors"
+              style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }}
+            >
+              Get an API key from {companyFor(wizard.provider)} ↗
+            </a>
           </div>
 
           <div className="relative">
@@ -473,7 +524,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
               placeholder="sk-..."
               className={clsx(
                 'w-full bg-zinc-800 border rounded-lg px-4 py-3 pr-20 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none transition-colors',
-                keyError ? 'border-rose-500' : 'border-zinc-700 focus:border-indigo-500'
+                keyError ? 'border-rose-500' : 'border-zinc-700 focus:border-[var(--gia-border-2)]'
               )}
               autoFocus
             />
@@ -500,7 +551,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
           <button
             onClick={handleContinue}
             disabled={wizard.apiKey.trim().length < 8}
-            className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors"
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-[var(--gia-accent)] hover:opacity-90 disabled:bg-zinc-700 disabled:text-zinc-500 text-[var(--gia-accent-contrast)] rounded-lg font-medium transition-colors"
           >
             Continue <ArrowRight size={16} />
           </button>
@@ -525,7 +576,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
           {testing && (
             <>
-              <Loader2 size={32} className="text-indigo-400 animate-spin" />
+              <Loader2 size={32} className="text-[var(--gia-text)] animate-spin" />
               <p className="text-sm text-zinc-400">Testing connection...</p>
             </>
           )}
@@ -568,14 +619,40 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
                     setBusy(true);
                     fetchModels(wizard.provider)
                       .then((models) => {
-                        setFetchedModels(models);
+                        if (models && models.length > 0) {
+                          setFetchedModels(models);
+                        } else if (wizard.testResult?.models?.length) {
+                          setFetchedModels(
+                            wizard.testResult.models.map((id) => ({
+                              id,
+                              label: id,
+                              free: false,
+                              context: '?',
+                              tools: true,
+                            })),
+                          );
+                        } else {
+                          setFetchedModels(providerRegistry.getModels(wizard.provider));
+                        }
                       })
                       .catch(() => {
-                        setFetchedModels(providerRegistry.getModels(wizard.provider));
+                        if (wizard.testResult?.models?.length) {
+                          setFetchedModels(
+                            wizard.testResult.models.map((id) => ({
+                              id,
+                              label: id,
+                              free: false,
+                              context: '?',
+                              tools: true,
+                            })),
+                          );
+                        } else {
+                          setFetchedModels(providerRegistry.getModels(wizard.provider));
+                        }
                       })
                       .finally(() => setBusy(false));
                   }}
-                  className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors"
+                  className="flex items-center justify-center gap-2 px-6 py-3 bg-[var(--gia-accent)] hover:opacity-90 text-[var(--gia-accent-contrast)] rounded-lg font-medium transition-colors"
                 >
                   Continue <ArrowRight size={16} />
                 </button>
@@ -645,7 +722,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
               className={clsx(
                 'w-full text-left p-4 rounded-lg border transition-colors',
                 wizard.model === m.id
-                  ? 'border-indigo-500 bg-zinc-800/60'
+                  ? 'border-[var(--gia-text)] bg-zinc-800/60'
                   : 'border-zinc-700 bg-zinc-900 hover:border-zinc-600'
               )}
             >
@@ -663,11 +740,11 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
                   className={clsx(
                     'w-4 h-4 rounded-full border-2 flex items-center justify-center',
                     wizard.model === m.id
-                      ? 'border-indigo-500 bg-indigo-500'
+                      ? 'border-[var(--gia-text)] bg-[var(--gia-text)]'
                       : 'border-zinc-600'
                   )}
                 >
-                  {wizard.model === m.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  {wizard.model === m.id && <div className="w-1.5 h-1.5 rounded-full bg-[var(--gia-accent-contrast)]" />}
                 </div>
               </div>
             </button>
@@ -677,7 +754,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
         <button
           onClick={handleDone}
           disabled={!wizard.model}
-          className="mt-4 flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg font-medium transition-colors"
+          className="mt-4 flex items-center justify-center gap-2 px-6 py-3 bg-[var(--gia-accent)] hover:opacity-90 disabled:bg-zinc-700 disabled:text-zinc-500 text-[var(--gia-accent-contrast)] rounded-lg font-medium transition-colors"
         >
           Continue <ArrowRight size={16} />
         </button>
@@ -697,7 +774,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
             <CheckCircle2 size={40} className="text-emerald-400" />
           </div>
         </div>
-        <h1 className="text-2xl font-bold text-zinc-100 mb-2">All Set!</h1>
+        <h1 className="gia-display text-[30px] leading-tight text-zinc-100 mb-2">All Set!</h1>
         <p className="text-zinc-400 text-sm max-w-sm mb-8">
           GIA is ready to go. Here's your configuration summary:
         </p>
@@ -732,18 +809,9 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onClose, onComplete }) => {
               onComplete?.();
               handleClose();
             }}
-            className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors"
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-[var(--gia-accent)] hover:opacity-90 text-[var(--gia-accent-contrast)] rounded-lg font-medium transition-colors"
           >
             Start using GIA <ArrowRight size={16} />
-          </button>
-          <button
-            onClick={() => {
-              setShowTerminal(true);
-              handleClose();
-            }}
-            className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            Open Engine Room
           </button>
         </div>
       </div>

@@ -22,7 +22,7 @@ Because these are real desktop actions, the app is operating on what is actually
 
 ## Verification
 
-Every desktop-changing tool does not just assume it worked. After it makes a change, the app takes a fresh capture and checks the result. That is "verified rather than assumed": the app does not conclude a click landed because it sent a click event. It looks again afterward.
+When a task needs visual confirmation, a screen-aware tool can take a fresh capture after an action and check the result. GIA does not have to conclude a click landed just because it sent a click event; it can look again. Automatic post-action verification is not wired into every desktop-changing tool.
 
 ## Why this matters
 
@@ -38,5 +38,4 @@ A desktop agent that cannot see or touch the screen is a chat agent with extra s
 
 - [README.md](../README.md)
 - [Architecture](architecture.md)
-- [Jarvis Eyes](jarvis-eyes.md)
 - [Tools](tools.md)

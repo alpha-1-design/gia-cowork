@@ -5,7 +5,7 @@ import { BuildStudio } from '../BuildStudio';
 import { useGiaStore } from '../../store/useGiaStore';
 import { useProviderStore } from '../../store/useProviderStore';
 import { setShell, type ShellResult } from '../../services/agents/peerAgents';
-import { DESKTOP_THEMES, DEFAULT_THEME } from '../../config/themes';
+import { DESKTOP_THEMES, DEFAULT_THEME, getDesktopTheme } from '../../config/themes';
 import { BUILD_STYLES } from '../../services/build/giaThemes';
 
 /**
@@ -87,7 +87,7 @@ describe('BuildStudio', () => {
     expect(msg).toContain('A kanban task board with drag and drop');
     expect(msg).toContain('Developer Mode');
     expect(msg).toContain('openai');
-    expect(msg).toContain('Obsidian Aurora');
+    expect(msg).toContain(getDesktopTheme(DEFAULT_THEME).label);
     expect(onClose).toHaveBeenCalled();
   });
 

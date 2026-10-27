@@ -5,7 +5,6 @@ import { exportBrainToFile, importBrainFromFile } from '../services/BrainExport'
 interface MenuBarProps {
   onOpenPalette: () => void;
   onOpenTerminal: () => void;
-  onOpenEngineRoom: () => void;
   onOpenTaskBoard: () => void;
   onOpenNotes: () => void;
 }
@@ -31,7 +30,7 @@ interface Menu {
  * a desktop workspace instead of a phone shell. Hidden in narrow previews
  * (the palette + sidebar still cover everything).
  */
-const MenuBar: React.FC<MenuBarProps> = ({ onOpenPalette, onOpenTerminal, onOpenEngineRoom, onOpenTaskBoard, onOpenNotes }) => {
+const MenuBar: React.FC<MenuBarProps> = ({ onOpenPalette, onOpenTerminal, onOpenTaskBoard, onOpenNotes }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -50,7 +49,7 @@ const MenuBar: React.FC<MenuBarProps> = ({ onOpenPalette, onOpenTerminal, onOpen
       id: 'file',
       label: 'File',
       items: [
-        { label: 'New Chat', shortcut: 'Ctrl+N', action: () => { store().createSession(); setOpenMenu(null); } },
+        { label: 'New Chat', shortcut: 'Ctrl+N', action: () => { store().setModule('chat'); store().createSession(); setOpenMenu(null); } },
         { label: 'Clear Current Chat', action: () => { const s = store(); if (s.activeSessionId) { s.clearSession(s.activeSessionId); s.addNotification('Session cleared'); } setOpenMenu(null); } },
         { label: 'Export Brain', action: () => { try { exportBrainToFile(); store().addNotification('Brain exported'); } catch { store().addNotification('Export failed'); } setOpenMenu(null); } },
         { label: 'Import Brain', action: () => { setOpenMenu(null); const input = document.createElement('input'); input.type = 'file'; input.accept = 'application/json,.json'; input.onchange = () => { const file = input.files?.[0]; if (!file) return; importBrainFromFile(file).then(r => store().addNotification(r.message)).catch(() => store().addNotification('Import failed')); }; input.click(); } },
@@ -78,7 +77,7 @@ const MenuBar: React.FC<MenuBarProps> = ({ onOpenPalette, onOpenTerminal, onOpen
       label: 'Tools',
       items: [
         { label: 'Open Terminal', action: () => { setOpenMenu(null); onOpenTerminal(); } },
-        { label: 'Engine Room', action: () => { setOpenMenu(null); onOpenEngineRoom(); } },
+        { label: 'Model & Provider…', action: () => { store().setModule('chat'); store().setShowModelSwitcher(true); setOpenMenu(null); } },
         { label: 'Task Board', action: () => { setOpenMenu(null); onOpenTaskBoard(); } },
         { label: 'Notes', action: () => { setOpenMenu(null); onOpenNotes(); } },
       ],

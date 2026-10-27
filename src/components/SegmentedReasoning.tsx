@@ -22,23 +22,23 @@ function ToolBlock({ segment, defaultOpen }: { segment: MessageSegment; defaultO
   const [open, setOpen] = useState(defaultOpen);
   const meta = (segment.toolName && TOOL_META[segment.toolName]) || null;
   const label = meta?.label || segment.toolName || 'Using a tool';
-  const color = meta?.color || '#8b5cf6';
   const icon = meta?.icon || <Brain size={12} />;
 
   const statusIcon = segment.toolStatus === 'running'
-    ? <Loader2 size={11} className="animate-spin" style={{ color }} />
+    ? <Loader2 size={11} className="animate-spin" style={{ color: 'var(--gia-muted)' }} />
     : segment.toolStatus === 'failed'
-      ? <AlertCircle size={11} style={{ color: '#f87171' }} />
-      : <CheckCircle size={11} style={{ color: '#34d399' }} />;
+      ? <AlertCircle size={11} style={{ color: 'var(--gia-danger, #ef4444)' }} />
+      : <CheckCircle size={11} style={{ color: 'var(--gia-success, #34d399)' }} />;
 
   return (
-    <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${color}22`, background: `${color}0a` }}>
+    <div className="rounded-md overflow-hidden" style={{ border: '1px solid var(--gia-border)', background: 'var(--gia-surface-2)' }}>
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left"
-        style={{ color }}
+        style={{ color: 'var(--gia-text)' }}
+        aria-expanded={open}
       >
-        <span style={{ color }}>{icon}</span>
+        <span style={{ color: 'var(--gia-muted)' }}>{icon}</span>
         <span className="text-[11px] font-medium flex-1">{label}</span>
         {statusIcon}
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
@@ -64,17 +64,17 @@ function ToolBlock({ segment, defaultOpen }: { segment: MessageSegment; defaultO
 
 function ThinkingBlock({ segment, defaultOpen }: { segment: MessageSegment; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
-  const preview = segment.content.trim().split('\n')[0]?.slice(0, 60) || 'Thinking';
 
   return (
-    <div className="rounded-lg overflow-hidden" style={{ border: '1px solid rgba(251,191,36,0.12)', background: 'rgba(251,191,36,0.03)' }}>
+    <div className="rounded-md overflow-hidden" style={{ border: '1px solid var(--gia-border)', background: 'var(--gia-surface-2)' }}>
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left"
-        style={{ color: '#f59e0b' }}
+        style={{ color: 'var(--gia-text)' }}
+        aria-expanded={open}
       >
-        <Brain size={12} />
-        <span className="text-[11px] font-medium flex-1 truncate">{open ? 'Thinking' : preview}</span>
+        <Brain size={12} style={{ color: 'var(--gia-muted)' }} />
+        <span className="text-[11px] font-medium flex-1 truncate">Thinking</span>
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
       </button>
       <AnimatePresence initial={false}>

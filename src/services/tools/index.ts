@@ -31,7 +31,6 @@ import { geolocationTools } from './geolocation';
 import { hapticsTools } from './haptics';
 import { identityTools } from './identity';
 import { intelligenceTools } from './intelligence';
-import { jarvisTools } from './jarvis';
 import { locationTools } from './location';
 import { longRunningTools } from './longRunning';
 import { mcpTools } from './mcp';
@@ -103,7 +102,6 @@ export function registerAllTools(): void {
     hapticsTools,
     identityTools,
     intelligenceTools,
-    jarvisTools,
     locationTools,
     longRunningTools,
     mcpTools,

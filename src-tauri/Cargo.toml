@@ -1,6 +1,6 @@
 [package]
 name = "gia-cowork"
-version = "0.1.0"
+version = "0.2.0"
 description = "GIA Desktop -- private, on-device AI workspace for Linux"
 authors = ["Samuel Mensah"]
 edition = "2021"

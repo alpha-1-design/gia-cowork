@@ -30,7 +30,7 @@ That registration point is the wiring layer. Each tool file owns its own tools. 
 
 When a tool is called, the app validates the call through the same schema the model saw, then runs the tool's implementation. The implementation can do anything the app is allowed to do: read files, run commands, send messages, capture the screen, and so on.
 
-Some tools change the desktop. Those are the ones that flip the Jarvis orb to "acting" and then verify the result with a fresh screen capture.
+Some tools change the desktop. When a task needs visual confirmation, a screen-aware tool can capture the screen again and check the result.
 
 ## Tool categories
 

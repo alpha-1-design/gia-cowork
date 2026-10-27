@@ -1,6 +1,6 @@
 import React, { useEffect, lazy, Suspense, useState, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Bell, X, Cpu, Download, AlertCircle, Wifi, WifiOff, ClipboardIcon } from 'lucide-react';
+import { Bell, X, Cpu, Download, AlertCircle, Wifi, WifiOff, ClipboardIcon, Minimize2 } from 'lucide-react';
 import { useGiaStore, Module } from './store/useGiaStore';
 import { setStorageErrorHandler } from './store/idb-storage';
 import { useShallow } from 'zustand/react/shallow';
@@ -8,12 +8,13 @@ import { useMemoryStore } from './store/useMemoryStore';
 import { useAutonomyStore } from './store/useAutonomyStore';
 import ChatModule from './modules/ChatModule';
 import BuildModule from './modules/BuildModule';
+import DeliverablesModule from './modules/DeliverablesModule';
 import WriterModule from './modules/WriterModule';
 import PlannerModule from './modules/PlannerModule';
 import SettingsModule from './modules/SettingsModule';
 import ErrorBoundary from './components/ErrorBoundary';
 import ApiKeyInputPanel from './components/ApiKeyInputPanel';
-import JarvisOrb from './components/JarvisOrb';
+import FloatingHud from './components/FloatingHud';
 import { SourcesPanel } from './components/SourcesPanel';
 import AppNavigation from './components/AppNavigation';
 import AppSidebar from './components/AppSidebar';
@@ -26,9 +27,7 @@ import { useNotificationStore } from './store/useNotificationStore';
 import type { IncomingNotification } from './services/SmartNotificationEngine';
 import type { WhatsAppIncomingMessage } from './services/WhatsAppBridgeService';
 import messagingBridge from './services/MessagingBridge';
-import { giaCoreServices, featureFlags } from './services/GIACoreServices';
-import { jarvisOrbService } from './services/JarvisOrbService';
-import { JarvisPanel } from './components/JarvisPanel';
+import { giaCoreServices } from './services/GIACoreServices';
 import { TrustGate } from './components/TrustGate';
 import { useTrustStore } from './store/useTrustStore';
 import smartNotificationEngine from './services/SmartNotificationEngine';
@@ -47,13 +46,11 @@ import { logger } from './utils/logger';
 import { togglePresenterMode, attachTrayBridge } from './services/PresenterMode';
 import { useProjectContextStore } from './store/useProjectContextStore';
 import { syncActiveProject, welcomeForSwitch } from './services/projects/projectSync';
-import TTSService from './services/TTSService';
 import { useClipboardMonitor } from './hooks/useClipboardMonitor';
 import { useAutomationBridge } from './hooks/useAutomationBridge';
 import type { UpdateInfo } from './services/UpdateService';
 import './styles/globals.css';
 
-const EngineRoom = lazy(() => import('./components/EngineRoom'));
 const GiaConsole = lazy(() => import('./components/GiaConsole'));
 const TaskBoard = lazy(() => import('./components/TaskBoard').then(m => ({ default: m.TaskBoard })));
 const NotesPanel = lazy(() => import('./components/NotesPanel').then(m => ({ default: m.NotesPanel })));
@@ -121,7 +118,7 @@ const ModuleView: React.FC = () => {
   const Fallback = () => (
     <div className="flex items-center justify-center h-full">
       <div className="flex flex-col items-center gap-2">
-        <div className="w-4 h-4 rounded-full border-2" style={{ borderColor: 'var(--gia-border)', borderTopColor: '#a855f7' }} />
+        <div className="w-4 h-4 rounded-full border-2" style={{ borderColor: 'var(--gia-border)', borderTopColor: 'var(--gia-text)' }} />
         <span className="text-[10px]" style={{ color: 'var(--gia-muted-2)' }}>Loading...</span>
       </div>
     </div>
@@ -130,6 +127,7 @@ const ModuleView: React.FC = () => {
   const components: Record<Module, React.ReactNode> = {
     chat:      <ErrorBoundary name="Chat"><ChatModule /></ErrorBoundary>,
     build:     <ErrorBoundary name="Build"><BuildModule /></ErrorBoundary>,
+    deliverables: <ErrorBoundary name="Deliverables"><DeliverablesModule /></ErrorBoundary>,
     exam:      <Suspense fallback={<Fallback />}><ErrorBoundary name="Exam"><ExamModule /></ErrorBoundary></Suspense>,
     analyst:   <Suspense fallback={<Fallback />}><ErrorBoundary name="Analyst"><AnalystModule /></ErrorBoundary></Suspense>,
     writer:    <ErrorBoundary name="Writer"><WriterModule /></ErrorBoundary>,
@@ -155,9 +153,8 @@ const ModuleView: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  const { setModule, showTerminal, setShowTerminal, notifications, clearNotification, showConsole, consoleLogs, setShowConsole, theme, reduceMotion, addNotification, fullScreenMode } = useGiaStore(useShallow(s => ({
+  const { setModule, notifications, clearNotification, showConsole, consoleLogs, setShowConsole, theme, reduceMotion, addNotification, fullScreenMode } = useGiaStore(useShallow(s => ({
       setModule: s.setModule,
-      showTerminal: s.showTerminal, setShowTerminal: s.setShowTerminal,
       notifications: s.notifications, clearNotification: s.clearNotification,
       showConsole: s.showConsole, consoleLogs: s.consoleLogs, setShowConsole: s.setShowConsole,
       theme: s.theme,
@@ -168,20 +165,18 @@ const App: React.FC = () => {
   const [showTaskBoard, setShowTaskBoard] = useState(false);
   const [showNotesPanel, setShowNotesPanel] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // Transparency surface for the orb — without it the eyes have a toggle and
-  // no way to see what they observed.
-  const [jarvisPanelOpen, setJarvisPanelOpen] = useState(false);
 
   // Desktop command palette — Ctrl/Cmd+K opens it anywhere in the app.
   // Ctrl/Cmd+Shift+P toggles presenter mode (GIA hides for a screen share).
   useKeyboardShortcuts([
-    { key: 'k', ctrl: true, handler: () => setPaletteOpen(o => !o), preventDefault: true },
-    { key: 'p', ctrl: true, shift: true, handler: () => { void togglePresenterMode(); }, preventDefault: true },
+    { key: 'k', meta: true, handler: () => setPaletteOpen(o => !o), preventDefault: true },
+    { key: 'n', meta: true, handler: () => { const s = useGiaStore.getState(); s.setModule('chat'); s.createSession(); }, preventDefault: true },
+    { key: 'p', meta: true, shift: true, handler: () => { void togglePresenterMode(); }, preventDefault: true },
     // The kill switch. One chord, no dialog, no reading required — which is
     // the entire point. Every other control in this app makes you read before
     // you click; this one is for the moment when you cannot afford to read.
     // It outranks Full Autonomy, standing grants, and the prompt queue.
-    { key: 'x', ctrl: true, shift: true, handler: () => {
+    { key: 'x', meta: true, shift: true, handler: () => {
       const armed = useTrustStore.getState().toggleArmed();
       useGiaStore.getState().addNotification(
         armed
@@ -189,38 +184,21 @@ const App: React.FC = () => {
           : '🛑 GIA stopped — every tool call is blocked until you re-arm. Shortcut to undo: Ctrl/Cmd+Shift+X',
       );
     }, preventDefault: true },
-    // Fast kill switch for the eyes. Every always-on assistant ships one —
-    // Limitless does it with a physical gesture, Humane with a hardware
-    // light. A desktop agent has no hardware to borrow, so the keyboard is
-    // the honest equivalent: one chord, reachable without finding a menu.
-    { key: 'j', ctrl: true, shift: true, handler: () => {
-      // setEnabled dispatches gia:feature-flags:changed, and the effect above
-      // already starts/stops the orb from it — calling both would double-start.
-      const nowOn = featureFlags.toggle('jarvisEyes');
-      useGiaStore.getState().addNotification(
-        nowOn
-          ? '👁️ Jarvis eyes on — watching the screen on-device.'
-          : '🛑 Jarvis eyes off — she stopped watching the screen.',
-      );
-    }, preventDefault: true },
   ]);
 
-  // Right-clicking the orb opens the transparency panel.
+  // Fullscreen hides every visible control, including the button that turned
+  // it on. Escape is the one exit everyone knows; make it work and keep a
+  // floating button on screen as the discoverable exit.
   useEffect(() => {
-    const open = () => setJarvisPanelOpen(true);
-    window.addEventListener('gia:jarvis-panel', open);
-    return () => window.removeEventListener('gia:jarvis-panel', open);
-  }, []);
-
-  // Orb follows TTS. VoiceMode feeds its own phase machine into the orb, but
-  // the main chat path speaks through TTSService directly — without this the
-  // orb sat at "idle" through every spoken answer.
-  useEffect(() => {
-    const detach = TTSService.onSpeakingChange(speaking => {
-      jarvisOrbService.setSpeaking(speaking);
-    });
-    return detach;
-  }, []);
+    if (!fullScreenMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      useGiaStore.getState().toggleFullScreenMode();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullScreenMode]);
 
   // Peer-agent detection — warm the cache the system prompt reads.
   //
@@ -457,14 +435,12 @@ const App: React.FC = () => {
             const { proactiveEngine } = await import('./services/autonomy/ProactiveEngine');
             automationEngine.stop();
             proactiveEngine.stop();
-            jarvisOrbService.setPaused(true);
             useGiaStore.getState().addNotification('🔒 Screen locked — paused background work');
           } else if (p.lockState === 'UNLOCKED' && locked) {
             locked = false;
             const { proactiveEngine } = await import('./services/autonomy/ProactiveEngine');
             automationEngine.start();
             proactiveEngine.start();
-            jarvisOrbService.setPaused(false);
           }
         } catch { /* presence polling is best-effort */ }
       };
@@ -758,17 +734,6 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
     return () => clearTimeout(timeout);
   }, [notifications, clearNotification]);
 
-  // Jarvis eyes — react to the feature-flag toggle and restore on boot.
-  useEffect(() => {
-    const onFlagsChanged = () => {
-      if (featureFlags.isEnabled('jarvisEyes')) jarvisOrbService.start();
-      else jarvisOrbService.stop();
-    };
-    window.addEventListener('gia:feature-flags:changed', onFlagsChanged);
-    if (featureFlags.isEnabled('jarvisEyes')) jarvisOrbService.start();
-    return () => window.removeEventListener('gia:feature-flags:changed', onFlagsChanged);
-  }, []);
-
   return (
     <div
       className="flex flex-col h-full overflow-hidden relative"
@@ -777,8 +742,6 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
       <Suspense fallback={null}>
         <ProfileDrawer />
       </Suspense>
-      <JarvisOrb />
-      <JarvisPanel open={jarvisPanelOpen} onClose={() => setJarvisPanelOpen(false)} />
       <TrustGate />
       {/* Global Notifications */}
       <div data-presenter-hide="" className="fixed top-16 left-0 right-0 z-[60] px-4 pointer-events-none space-y-2">
@@ -786,16 +749,16 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
           {notifications.map((n) => {
             const msg = n.message;
             const iconMap: [RegExp, React.ReactNode, string][] = [
-              [/model|switch|provider|connected/i, <Cpu size={14} />, '#a855f7'],
-              [/brain|memory|export|import/i, <Download size={14} />, '#8b5cf6'],
-              [/error|fail|blocked/i, <AlertCircle size={14} />, '#f87171'],
-              [/online|back online/i, <Wifi size={14} />, '#34d399'],
-              [/offline|no internet/i, <WifiOff size={14} />, '#71717a'],
-              [/notification|listen|voice/i, <Bell size={14} />, '#ec4899'],
+              [/model|switch|provider|connected/i, <Cpu size={14} />, 'var(--gia-text)'],
+              [/brain|memory|export|import/i, <Download size={14} />, 'var(--gia-muted)'],
+              [/error|fail|blocked/i, <AlertCircle size={14} />, 'var(--gia-danger, #f87171)'],
+              [/online|back online/i, <Wifi size={14} />, 'var(--gia-success, #34d399)'],
+              [/offline|no internet/i, <WifiOff size={14} />, 'var(--gia-muted-2)'],
+              [/notification|listen|voice/i, <Bell size={14} />, 'var(--gia-text)'],
             ];
             const match = iconMap.find(([re]) => re.test(msg));
             const icon = match ? match[1] : <Bell size={14} />;
-            const color = match ? match[2] : '#34d399';
+            const color = match ? match[2] : 'var(--gia-text)';
             return (
               <motion.div
                 key={n.id}
@@ -820,12 +783,24 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
         </AnimatePresence>
       </div>
 
+      {fullScreenMode && (
+        <button
+          type="button"
+          onClick={() => useGiaStore.getState().toggleFullScreenMode()}
+          className="fixed top-3 right-3 z-[200] flex items-center gap-2 h-8 px-3 rounded-md text-[11px] font-medium shadow-lg"
+          style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border-2)' }}
+          aria-label="Exit full screen"
+          title="Exit full screen (Esc)"
+        >
+          <Minimize2 size={13} /> Exit full screen
+        </button>
+      )}
+
 {/* Desktop menu bar */}
       {!fullScreenMode && (
         <MenuBar
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenTerminal={() => setShowTerminalPanel(true)}
-          onOpenEngineRoom={() => setShowTerminal(true)}
           onOpenTaskBoard={() => setShowTaskBoard(true)}
           onOpenNotes={() => setShowNotesPanel(true)}
         />
@@ -836,7 +811,7 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
         {!fullScreenMode && <AppSidebar />}
         <div className="flex flex-col flex-1 min-w-0">
           {/* Header */}
-          {!fullScreenMode && <AppNavigation />}
+          {!fullScreenMode && <AppNavigation onOpenPalette={() => setPaletteOpen(true)} />}
 
           {/* Module content */}
           <main className="flex-1 overflow-hidden relative z-10">
@@ -844,6 +819,10 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
           </main>
         </div>
       </div>
+
+      {/* Floating chat surface — neutral, opt-in, and separate from the
+          always-on orb that used to watch the screen. */}
+      {!fullScreenMode && <FloatingHud />}
 
       {/* Global download / install progress — long transfers used to look
           frozen because nothing surfaced their progress app-wide. */}
@@ -860,29 +839,31 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
             className="fixed bottom-24 left-4 right-4 z-50 max-w-md mx-auto"
           >
             <div
-              className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-2xl"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl"
               style={{
-                background: 'rgba(20,20,30,0.95)',
-                border: '1px solid rgba(168,85,247,0.2)',
+                background: 'var(--gia-surface)',
+                border: '1px solid var(--gia-border-2)',
                 backdropFilter: 'blur(20px)',
               }}
             >
-              <ClipboardIcon size={16} className="text-violet-400 shrink-0" />
+              <ClipboardIcon size={16} className="shrink-0" style={{ color: 'var(--gia-muted)' }} />
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-medium text-zinc-400">Copied to clipboard</p>
-                <p className="text-xs text-zinc-200 truncate">{copiedText.slice(0, 100)}</p>
+                <p className="text-[10px] font-medium" style={{ color: 'var(--gia-muted)' }}>Copied to clipboard</p>
+                <p className="text-xs truncate" style={{ color: 'var(--gia-text)' }}>{copiedText.slice(0, 100)}</p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   onClick={pasteCopied}
-                  className="text-[10px] font-semibold px-3 py-1.5 rounded-xl transition-all"
-                  style={{ background: 'rgba(168,85,247,0.2)', color: '#a855f7' }}
+                  className="text-[10px] font-semibold px-3 py-1.5 rounded-lg transition-all"
+                  style={{ background: 'var(--gia-accent)', color: 'var(--gia-accent-contrast)' }}
                 >
                   Ask GIA
                 </button>
                 <button
                   onClick={dismissCopied}
-                  className="w-6 h-6 rounded-lg flex items-center justify-center text-zinc-500 hover:text-zinc-300"
+                  className="w-6 h-6 rounded-md flex items-center justify-center transition-colors"
+                  style={{ color: 'var(--gia-muted)' }}
+                  aria-label="Dismiss clipboard notice"
                 >
                   <X size={12} />
                 </button>
@@ -960,29 +941,15 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
         )}
       </AnimatePresence>
 
-      {/* Engine Room overlay — above the app header (z-[100]) so its Back
-          button is clickable; the old z-50 sat under the header's z-[100]. */}
-      <AnimatePresence>
-        {showTerminal && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[150]"
-          >
-            <EngineRoom />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <AnimatePresence>
         {showConsole && (
-          <GiaConsole
-            logs={consoleLogs}
-            isVisible={showConsole}
-            onClose={() => setShowConsole(false)}
-          />
+          <Suspense fallback={null}>
+            <GiaConsole
+              logs={consoleLogs}
+              isVisible={showConsole}
+              onClose={() => setShowConsole(false)}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
 
@@ -997,7 +964,9 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
             >
               <X size={16} />
             </button>
-            <TaskBoard />
+            <Suspense fallback={null}>
+              <TaskBoard />
+            </Suspense>
           </div>
         </div>
       )}
@@ -1012,7 +981,9 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
             >
               <X size={16} />
             </button>
-            <NotesPanel />
+            <Suspense fallback={null}>
+              <NotesPanel />
+            </Suspense>
           </div>
         </div>
       )}
@@ -1027,7 +998,9 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[200] w-full h-[100dvh] bg-[var(--gia-bg)] flex flex-col overflow-y-auto"
           >
-            <SetupWizard onClose={closeSetup} onComplete={closeSetup} />
+            <Suspense fallback={null}>
+              <SetupWizard onClose={closeSetup} onComplete={closeSetup} />
+            </Suspense>
           </motion.div>
         )}
       </AnimatePresence>

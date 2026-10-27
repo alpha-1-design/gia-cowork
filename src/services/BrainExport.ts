@@ -157,7 +157,7 @@ export function importBrainFromFile(file: File): Promise<{ success: boolean; mes
             }
           });
         }
-        if (data.userProfile.name) {
+        if (data.userProfile) {
           giaStore.setUserProfile(data.userProfile);
         }
         if (data.customInstructions) {

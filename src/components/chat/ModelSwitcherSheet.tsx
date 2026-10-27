@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Check, ChevronRight, KeyRound, Settings2, Zap, Eye, Wrench, Cpu, RefreshCw, Film, AudioLines, Image as ImageIcon, Brain, Info } from 'lucide-react';
+import { X, Check, ChevronRight, KeyRound, Zap, Eye, Wrench, Cpu, RefreshCw, Film, AudioLines, Image as ImageIcon, Brain, Info } from 'lucide-react';
 import { useProviderStore } from '../../store/useProviderStore';
 import { providerRegistry } from '../../services/ProviderRegistry';
 import { companyFor, descriptionFor, docsUrlFor } from '../../services/providerInfo';
@@ -11,7 +11,6 @@ import { resolveCapabilities, capabilityBadges, type ModelCapabilities } from '.
 interface ModelSwitcherSheetProps {
   open: boolean;
   onClose: () => void;
-  onOpenEngine?: () => void;
 }
 
 const BADGE_ICON: Record<string, React.ReactNode> = {
@@ -61,7 +60,7 @@ const ModelBadges: React.FC<{ free?: boolean; caps: ModelCapabilities }> = ({ fr
   );
 };
 
-const ModelSwitcherSheet: React.FC<ModelSwitcherSheetProps> = ({ open, onClose, onOpenEngine }) => {
+const ModelSwitcherSheet: React.FC<ModelSwitcherSheetProps> = ({ open, onClose }) => {
   const {
     providers, activeProvider, availableModels, modelListStatus,
     setActiveProvider, setProviderModel, setProviderImageModel, setProviderKey, fetchModels,
@@ -153,21 +152,14 @@ const ModelSwitcherSheet: React.FC<ModelSwitcherSheetProps> = ({ open, onClose, 
                   <p className="text-[10px]" style={{ color: 'var(--gia-muted)' }}>Switch without leaving the chat</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {onOpenEngine && (
-                  <button
-                    onClick={() => { onClose(); onOpenEngine(); }}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all"
-                    style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-muted)' }}
-                    title="View live agent thinking, tool calls, and results"
-                  >
-                    <Settings2 size={12} /> Activity
-                  </button>
-                )}
-                <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-muted)' }}>
-                  <X size={15} />
-                </button>
-              </div>
+              <button
+                onClick={onClose}
+                aria-label="Close provider catalogue"
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+                style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-muted)' }}
+              >
+                <X size={15} />
+              </button>
             </div>
 
             <div className="flex flex-1 min-h-0">
@@ -261,7 +253,7 @@ const ModelSwitcherSheet: React.FC<ModelSwitcherSheetProps> = ({ open, onClose, 
                       </button>
                     </div>
                     <p className="text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>
-                      Keys are stored locally on this device. Or open Engine for advanced options.
+                      Keys are stored locally on this device.
                     </p>
                   </div>
                 ) : loadingModels ? (

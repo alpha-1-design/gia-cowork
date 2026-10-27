@@ -108,20 +108,20 @@ export const VoiceSection: React.FC = () => {
   const previewSimulatedLog = useCallback(async () => {
     setTesting(true);
     setDetectionLog([]);
-    const simPatterns = ['JARVIS', 'HEY GIA', 'ALEXA', 'OK GOOGLE'];
+    const pattern = (wakeWord.trim() || 'hey gia').toUpperCase();
     for (let i = 0; i < 5; i++) {
       await new Promise(r => setTimeout(r, 800));
       const e: DetectionEvent = {
         id: didRef.current++,
         timestamp: Date.now(),
-        text: simPatterns[Math.floor(Math.random() * simPatterns.length)],
+        text: pattern,
         confidence: 0.5 + Math.random() * 0.5,
         simulated: true,
       };
       setDetectionLog(prev => [...prev.slice(-49), e]);
     }
     setTesting(false);
-  }, []);
+  }, [wakeWord]);
 
   useEffect(() => { checkService(); }, [checkService]);
   useEffect(() => { if (logEndRef.current) logEndRef.current.scrollIntoView({ behavior: 'smooth' }); }, [detectionLog]);

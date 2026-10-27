@@ -151,7 +151,7 @@ export const LocalModelsSection: React.FC = () => {
 
       <div className="px-3 py-2 rounded-xl text-[11px] leading-relaxed" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)', color: '#86efac' }}>
         <p className="font-medium mb-1">On-Device LLM</p>
-        <p>These models run <strong>100% locally on your device</strong> using ONNX runtime. Download a model, load it, then set <strong>local-llm</strong> as your provider in Engine Room.</p>
+        <p>These models run <strong>100% locally on your device</strong> using ONNX runtime. Download a model, load it, then choose <strong>local-llm</strong> from the model switcher in Chat.</p>
       </div>
 
       {/* Load any model — not locked to the curated catalog */}
@@ -388,7 +388,7 @@ export const LocalModelsSection: React.FC = () => {
       {activeModelId && (
         <div className="text-[10px] text-center py-1 px-2 rounded-lg" style={{ background: 'rgba(34,197,94,0.08)', color: '#34d399' }}>
           Active: {allLocalModels().find(m => m.id === activeModelId)?.label || activeModelId}
-          {' · '}Switch to <strong>local-llm</strong> provider in Engine Room to use it
+          {' · '}Choose <strong>local-llm</strong> in the Chat model switcher to use it
         </div>
       )}
 

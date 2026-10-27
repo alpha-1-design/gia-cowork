@@ -29,10 +29,10 @@ export async function retryFetch(url: string, options: RequestInit, retries = 1)
 export function friendlyError(label: string, e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network error') || msg.includes('fetch failed') || msg.includes('ENOTFOUND') || msg.includes('DNS')) {
-    return `${label} can't be reached — your network may be blocking it. Try OpenRouter (works everywhere) in Settings → Engine Room.`;
+    return `${label} can't be reached — your network may be blocking it. Try OpenRouter (works everywhere) from the model switcher in Chat.`;
   }
   if (msg.includes('401') || msg.includes('Unauthorized') || msg.includes('API key')) {
-    return `${label} rejected your API key — check it in Settings → Engine Room.`;
+    return `${label} rejected your API key — check it in the model switcher in Chat.`;
   }
   if (msg.includes('402') || msg.includes('insufficient_quota') || msg.includes('quota')) {
     return `${label} — your account has run out of credits or quota. Top up or switch providers.`;

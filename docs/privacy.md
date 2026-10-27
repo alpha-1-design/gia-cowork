@@ -40,21 +40,17 @@ The embedded Unimind relay is localhost-only by default. LAN exposure requires e
 
 Remote plugin installation accepts declarative manifests only. Executable JavaScript hooks are not loaded from URLs because downloaded code would otherwise run inside the desktop webview and reach native integrations.
 
-## Screen awareness — Jarvis Eyes
+## Screen awareness
 
-The floating Jarvis Eyes orb is off by default and only starts working when you explicitly enable it, from Settings → Developer → Jarvis Eyes or by tapping the orb.
-
-While enabled it captures the screen at a slow ambient cadence and analyzes each capture using the vision pipeline.
+Screen capture is on-demand. It runs when a screen-aware tool or an explicit capture action asks for it; there is no ambient always-on screen watch. GIA hides her own window for the capture so the shot shows your desktop rather than a screenshot of GIA screenshotting herself.
 
 When your local on-device vision models are loaded, analysis happens entirely locally. Screenshots are used transiently and are never uploaded, stored, or sent to any provider.
 
 If the local models are not loaded, GIA falls back to the vision capability of the AI provider you have active in chat, such as GPT-4o, Gemini, or Claude. In that case the screen capture is sent to that provider in the same way your chat messages are. Only a short distilled text description enters the brain's context.
 
-Screen-watching automatically pauses while your screen is locked.
-
 ## Related
 
 - [README.md](../README.md)
 - [Providers and Models](providers-models.md)
-- [Jarvis Eyes](jarvis-eyes.md)
+- [Screen Control](screen-control.md)
 - [Unimind Relay](unimind-relay.md)

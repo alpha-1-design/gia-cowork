@@ -9,6 +9,9 @@ import {
 } from 'lucide-react';
 import { useGiaStore } from '../store/useGiaStore';
 import { DESKTOP_THEMES, getDesktopTheme } from '../config/themes';
+import { APP_VERSION } from '../config/appVersion';
+import { UserAvatar } from '../components/avatars/UserAvatar';
+import { UserAvatarPicker } from '../components/avatars/UserAvatarPicker';
 import { useProviderStore } from '../store/useProviderStore';
 import { isNativePlatform } from '../utils/helpers';
 import { updateService, formatSize } from '../services/UpdateService';
@@ -59,11 +62,11 @@ const CATEGORIES: { id: SettingsPage; icon: React.ReactNode; label: string; desc
 
 const SettingsModule: React.FC = () => {
   const {
-    setShowTerminal, userProfile, setUserProfile,
+    userProfile, setUserProfile,
     theme, setTheme,
   } = useGiaStore(useShallow(s => ({
-    setShowTerminal: s.setShowTerminal, userProfile: s.userProfile, setUserProfile: s.setUserProfile,
-    addNotification: s.addNotification, theme: s.theme, setTheme: s.setTheme,
+    userProfile: s.userProfile, setUserProfile: s.setUserProfile,
+    theme: s.theme, setTheme: s.setTheme,
   })));
   const providers = useProviderStore(s => s.providers);
 
@@ -90,6 +93,7 @@ const SettingsModule: React.FC = () => {
   const [name, setProfileName] = useState(userProfile.name);
   const [bio, setBio] = useState(userProfile.bio);
   const [goals, setGoals] = useState(userProfile.goals);
+  const [avatarId, setAvatarId] = useState(userProfile.avatarId || 'nova');
   const [confirmChats, setConfirmChats] = useState(false);
   const dangerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { return () => { if (dangerTimerRef.current) clearTimeout(dangerTimerRef.current); }; }, []);
@@ -133,11 +137,9 @@ const SettingsModule: React.FC = () => {
   };
 
   const saveProfile = () => {
-    setUserProfile({ name: name.trim(), bio: bio.trim(), goals: goals.trim() });
+    setUserProfile({ name: name.trim(), bio: bio.trim(), goals: goals.trim(), avatarId });
     setEditProfile(false);
   };
-
-  const connectedCount = Object.keys(providers).filter(p => providers[p]?.enabled).length;
 
   // ── Sub-page routing ──────────────────────────────────────────────
   if (settingsPage === 'profile-identity') return <ProfileIdentityPage onBack={() => setSettingsPage('main')} />;
@@ -186,13 +188,17 @@ const SettingsModule: React.FC = () => {
               Your Profile
             </span>
           </div>
-          <button onClick={() => setEditProfile(e => !e)}
+          <button onClick={() => { setAvatarId(userProfile.avatarId || 'nova'); setEditProfile(e => !e); }}
             className="text-[11px] font-medium" style={{ color: '#a855f7' }}>
             {editProfile ? 'Cancel' : 'Edit'}
           </button>
         </div>
         {editProfile ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--gia-muted)', display: 'block', marginBottom: '4px' }}>Your character</label>
+              <UserAvatarPicker value={avatarId} name={name} onChange={setAvatarId} compact />
+            </div>
             {[
               { label: 'Your name', val: name, set: setProfileName, placeholder: 'e.g. Samuel' },
               { label: 'About you', val: bio, set: setBio, placeholder: 'e.g. WASSCE student in Ghana' },
@@ -206,7 +212,9 @@ const SettingsModule: React.FC = () => {
             <button onClick={saveProfile} className="gia-btn gia-btn-primary w-full mt-1"><Save size={13} /> Save Profile</button>
           </div>
         ) : (
-          <div>
+          <div className="flex items-start gap-3">
+            <UserAvatar avatarId={userProfile.avatarId} name={userProfile.name} size={40} />
+            <div className="flex-1 min-w-0">
             {userProfile.name ? (
               <>
                 <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>{userProfile.name}</p>
@@ -216,6 +224,7 @@ const SettingsModule: React.FC = () => {
             ) : (
               <p className="text-xs" style={{ color: 'var(--gia-muted)' }}>No profile set — add your name so GIA can personalise responses.</p>
             )}
+            </div>
           </div>
         )}
       </div>
@@ -314,34 +323,6 @@ const SettingsModule: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Engine Room (untouched) */}
-      <button
-        onClick={() => setShowTerminal(true)}
-        className="gia-card p-4 flex items-center gap-4 w-full text-left tap-feedback"
-        style={{ transition: 'border-color 0.2s' }}
-      >
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-          style={{ background: 'var(--gia-code-bg)', border: '1px solid rgba(16,185,129,0.2)' }}>
-          <Terminal size={18} style={{ color: '#34d399' }} />
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Engine Room</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--gia-muted)' }}>
-            Connect providers · select models
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="gia-pill" style={{
-            background: connectedCount > 0 ? 'rgba(16,185,129,0.1)' : 'var(--gia-overlay-2)',
-            color: connectedCount > 0 ? '#34d399' : 'var(--gia-muted)',
-            border: `1px solid ${connectedCount > 0 ? 'rgba(16,185,129,0.2)' : 'var(--gia-border)'}`,
-          }}>
-            {connectedCount}/{providerRegistry.getAllIds().length}
-          </span>
-          <ChevronRight size={14} style={{ color: 'var(--gia-muted)' }} />
-        </div>
-      </button>
 
       {/* Terminal */}
       <button onClick={() => setSettingsPage('terminal')} className="gia-card p-4 flex items-center gap-4 w-full text-left tap-feedback"
@@ -476,7 +457,7 @@ const SettingsModule: React.FC = () => {
           </table>
         </div>
         <p className="text-[10px] mt-2" style={{ color: 'var(--gia-muted)' }}>
-          Based on provider type and selected model. Update model in Engine Room for accurate results.
+          Based on provider type and selected model. Open the model switcher in Chat to connect a provider or change model.
         </p>
       </div>
 
@@ -611,7 +592,7 @@ const SettingsModule: React.FC = () => {
 
       {/* Version */}
       <p className="text-center text-[10px] pb-4 pt-2" style={{ color: 'var(--gia-muted-2)' }}>
-        GIA Cowork v0.1.0 · Built by Samuel Mensah · Alpha-1 Studio, Ghana
+        GIA Cowork v{APP_VERSION} · Built by Samuel Mensah · Alpha-1 Studio, Ghana
       </p>
 
       <ConfirmDialog

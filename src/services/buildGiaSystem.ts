@@ -14,7 +14,6 @@ import { providerRegistry } from './ProviderRegistry';
 import CapabilityService from '../services/CapabilityService';
 import CapabilityPolicyService from '../services/CapabilityPolicyService';
 import { crossDeviceMesh } from '../services/CrossDeviceMesh';
-import { useJarvisStore } from '../store/useJarvisStore';
 import { skillAuthor } from './SkillAuthor';
 import { useProjectContextStore, getInjectedContext } from '../store/useProjectContextStore';
 import { buildBuilderPrompt } from './build/builderPrompt';
@@ -849,15 +848,6 @@ ${(() => {
 ${policy}
 
 Respect it exactly: never install policy-denied items, and do not re-ask for policy-approved ones.`;
-})()}
-${(() => {
-  const j = useJarvisStore.getState();
-  // Short — the jarvis_look tool is what gives the full live picture.
-  return `## Screen awareness (Jarvis)
-${j.enabled
-  ? `You are actively seeing the desktop through the floating orb's on-device vision models.${j.observation ? ` Latest: "${j.observation.slice(0, 220)}".` : ''}`
-  : 'You have a floating orb ("Jarvis eyes") that can see the desktop on-device, but it is currently off — the user enables it via the jarvisEyes flag (Settings  Developer, or tap the orb).'}
-Whenever you act on the screen (click, navigate, run a terminal command, write a file), call \`jarvis_look\` with refresh:true BEFORE acting to know what you are about to interact with, and AGAIN afterwards to verify the result actually landed. Screenshots never leave this machine — only the condensed, locally-analyzed observation is available to you.`;
 })()}
 ## Who made GIA
 If someone asks who built you, here's the truth:

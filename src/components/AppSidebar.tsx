@@ -1,23 +1,21 @@
 import React from 'react';
+import { Plus } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useGiaStore, Module } from '../store/useGiaStore';
 import { MODULES } from '../config/appModules';
 
 /**
- * AppSidebar — desktop module rail.
+ * AppSidebar — the desktop module rail.
  *
- * The Android port hid module switching behind the avatar + a left-swipe
- * drawer, which reads as a phone. On desktop the modules live in a
- * permanent, slim icon rail on the left edge: one click to switch, no
- * gestures required. Settings is pinned to the bottom. Respects the same
- * hidden-modules list as the command palette and the profile drawer.
- *
- * Hidden below `md` — narrow previews still fall back to the drawer.
+ * Labels matter here: a strip of nine unlabeled icons is a memory test. Each
+ * item gets a small caption, a 2px active marker and a real hover surface, so
+ * the rail reads as a workspace dock rather than a phone tab bar.
  */
 const AppSidebar: React.FC = () => {
-  const { currentModule, setModule, hiddenModules } = useGiaStore(useShallow((s) => ({
+  const { currentModule, setModule, createSession, hiddenModules } = useGiaStore(useShallow((s) => ({
     currentModule: s.currentModule,
     setModule: s.setModule,
+    createSession: s.createSession,
     hiddenModules: s.hiddenModules,
   })));
 
@@ -31,32 +29,47 @@ const AppSidebar: React.FC = () => {
         onClick={() => setModule(mod.id)}
         title={mod.label}
         aria-label={mod.label}
-        className="relative w-11 h-11 rounded-xl flex items-center justify-center transition-all tap-feedback shrink-0"
+        aria-current={active ? 'page' : undefined}
+        className="relative w-12 h-11 rounded-md flex flex-col items-center justify-center gap-0.5 transition-colors tap-feedback shrink-0"
         style={{
-          background: active ? 'rgba(168,85,247,0.12)' : 'transparent',
-          color: active ? mod.color : 'var(--gia-muted-2)',
-          border: `1px solid ${active ? 'rgba(168,85,247,0.25)' : 'transparent'}`,
+          background: active ? 'var(--gia-surface-3)' : 'transparent',
+          color: active ? 'var(--gia-text)' : 'var(--gia-muted-2)',
+          border: `1px solid ${active ? 'var(--gia-border-2)' : 'transparent'}`,
         }}
       >
         {active && (
           <span
-            className="absolute -left-[9px] top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full"
-            style={{ background: mod.color, boxShadow: `0 0 8px ${mod.color}` }}
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-5 rounded-sm"
+            style={{ background: 'var(--gia-text)' }}
           />
         )}
-        {mod.icon}
+        <span className="flex items-center justify-center">{mod.icon}</span>
+        <span className="text-[8px] font-medium leading-none tracking-wide">{mod.label}</span>
       </button>
     );
   };
 
   return (
     <aside
-      className="hidden md:flex flex-col items-center py-3 gap-1.5 w-[52px] shrink-0"
+      className="hidden md:flex flex-col items-center py-3 gap-1 w-[64px] shrink-0"
       style={{ background: 'var(--gia-surface)', borderRight: '1px solid var(--gia-border)' }}
     >
+      <button
+        onClick={() => { setModule('chat'); createSession(); }}
+        className="w-9 h-9 rounded-md flex items-center justify-center transition-colors tap-feedback"
+        style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-text)' }}
+        title="New chat"
+        aria-label="New chat"
+      >
+        <Plus size={17} />
+      </button>
+
+      <div className="w-8 h-px my-1 shrink-0" style={{ background: 'var(--gia-border)' }} />
+
       {modules.map((mod) => <Item key={mod.id} mod={mod} />)}
+
       {settings && (
-        <div className="mt-auto">
+        <div className="mt-auto pt-2" style={{ borderTop: '1px solid var(--gia-border)' }}>
           <Item mod={settings} />
         </div>
       )}

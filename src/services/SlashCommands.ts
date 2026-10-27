@@ -584,8 +584,8 @@ const REGISTRY: CommandSpec[] = [
           rows.join('\n'),
           '',
           missing.length
-            ? `⚠️ ${missing.length} provider${missing.length === 1 ? '' : 's'} enabled without a key: ${missing.map(([id]) => `\`${id}\``).join(', ')}. Set them in Engine Room.`
-            : '_Keys are never printed. Add them in Engine Room or Settings → Connections._',
+            ? `⚠️ ${missing.length} provider${missing.length === 1 ? '' : 's'} enabled without a key: ${missing.map(([id]) => `\`${id}\``).join(', ')}. Connect them from the model switcher in Chat.`
+            : '_Keys are never printed. Add them from the model switcher in Chat._',
         ].join('\n'),
       };
     },

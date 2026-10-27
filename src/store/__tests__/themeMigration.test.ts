@@ -3,17 +3,12 @@ import { createStore } from 'zustand/vanilla';
 import { useGiaStore } from '../useGiaStore';
 
 /**
- * The migration that actually delivers the new default.
+ * Theme migration is deliberately quiet.
  *
- * Without it, Obsidian Aurora only ever reaches new installs: every existing
- * user has `'dark'` written to IndexedDB and stays on the old look forever,
- * which makes "the default is Obsidian Aurora" true only for people who have
- * not opened the app yet.
- *
- * The asymmetry is the interesting part. `'dark'` was the previous default, so
- * a stored `'dark'` is indistinguishable from "never chose" and gets migrated.
- * `'light'` and `'system'` were always deliberate departures and are left alone
- * — the app does not overrule a choice someone actually made.
+ * Dark is the clean monochrome default again. A stored `'dark'` is therefore
+ * already the right answer, and rewriting it to Obsidian Aurora would overrule
+ * someone who chose the neutral look. The migration only has to leave explicit
+ * choices alone while the older message-tree migration continues to run.
  */
 
 /** The migrate function as declared on the persisted store. */
@@ -28,16 +23,16 @@ const migrateOf = (() => {
 })();
 
 describe('theme migration (v3 -> v4)', () => {
-  it('migrates a legacy dark theme to Obsidian Aurora', () => {
+  it('leaves a legacy dark theme on dark', () => {
     if (!migrateOf) throw new Error('migrate not exposed');
     const out = migrateOf({ theme: 'dark' }, 3) as { theme: string };
-    expect(out.theme).toBe('obsidian-aurora');
+    expect(out.theme).toBe('dark');
   });
 
-  it('migrates a missing theme to Obsidian Aurora', () => {
+  it('does not invent a theme when one is missing', () => {
     if (!migrateOf) throw new Error('migrate not exposed');
-    const out = migrateOf({}, 3) as { theme: string };
-    expect(out.theme).toBe('obsidian-aurora');
+    const out = migrateOf({}, 3) as { theme?: string };
+    expect(out.theme).toBeUndefined();
   });
 
   it('leaves a deliberate light choice alone', () => {
@@ -71,7 +66,7 @@ describe('theme migration (v3 -> v4)', () => {
       sessions: [{ id: 's1', messages: [{ id: 'm1', role: 'user', content: 'hi' }] }],
     }, 2) as { theme: string; sessions: { messages: { message: { branchId: string } }[] }[] };
 
-    expect(out.theme).toBe('obsidian-aurora');
+    expect(out.theme).toBe('dark');
     expect(out.sessions[0].messages[0].message.branchId).toBeTruthy();
   });
 });

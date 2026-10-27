@@ -10,7 +10,7 @@ import { isTauri } from '../platform';
  * like they are being watched by a chatbot while trying to look professional.
  *
  * Presenter mode hides the main window and every floating piece of GIA chrome
- * (the Jarvis orb, toasts, overlays) so a screen share shows only the user's
+ * (the floating HUD, toasts, overlays) so a screen share shows only the user's
  * work. Restoring is the part that matters — a window that never comes back is
  * a broken app — so the state machine guarantees the restore path runs, runs
  * exactly once, and can be force-repaired from a stale in-memory state.

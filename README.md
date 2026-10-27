@@ -177,7 +177,7 @@ The README stays short on purpose. Each feature has its own page explaining how 
 
 ### Optional and device features
 
-- [Jarvis Eyes](docs/jarvis-eyes.md)
+- [Floating HUD](docs/floating-hud.md)
 - [Unimind relay](docs/unimind-relay.md)
 - [WhatsApp bridge](docs/whatsapp-bridge.md)
 
@@ -207,26 +207,13 @@ model's acceptance threshold — higher means easier to trigger.
 
 ---
 
-## 👁 Jarvis eyes
+## 🪟 Floating HUD
 
-A floating orb that watches your desktop — and doubles as a state indicator.
+An optional, compact chat surface that stays with you while you work in another
+window. Toggle it from the header, the command palette, or `gia-floating-hud`.
+It writes into the active chat session and stays out of presenter mode.
 
-| | | |
-|:---:|:---:|:---:|
-| 🟢 **Listening** | 🟣 **Thinking** | 🩷 **Acting** |
-| wake word heard you | reasoning, ring spins | a desktop-changing tool is running |
-| 🔵 **Idle / Seeing** | 🟠 **Speaking** | ⚫ **Off** |
-| ambient watch, breathing | talking back | dim, eyes closed |
-
-Toggle it under **Settings → Developer → Jarvis Eyes**, or click the orb.
-
-Every desktop-changing tool flips it to `acting`, then takes a fresh capture
-afterwards so the result is **verified rather than assumed**. Ask it directly with
-the `jarvis_look` tool. Vision runs on your local models when loaded, otherwise
-your chat provider's vision model — only distilled text reaches the brain. It
-never watches while your screen is locked.
-
-> See [Jarvis Eyes](docs/jarvis-eyes.md) for the full detail.
+> See [Floating HUD](docs/floating-hud.md) for the full detail.
 
 ---
 
@@ -277,8 +264,8 @@ src-tauri/              Rust backend (Tauri 2)
   lib.rs                tray, background daemon, hardware report
 
 src/
-  modules/              10 modules — Chat, Analyst, Exam, Planner, Writer,
-                        Agents, Autonomy, Dashboard, Build, Settings
+  modules/              11 modules — Chat, Build, Deliverables, Analyst, Exam,
+                        Planner, Writer, Agents, Autonomy, Dashboard, Settings
   services/             the brain: GiaBrain, ToolRegistry, MCP,
                         ProviderRegistry — 130+ service modules
   services/tools/       292 tools across ~70 files, wired up in tools/index.ts

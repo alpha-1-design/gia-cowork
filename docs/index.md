@@ -20,7 +20,7 @@ Then read the deep-dives for the features you care about:
 - [Wake Word](wake-word.md) — on-device openWakeWord, no cloud key, no transcription service
 - [Presence Awareness](presence.md) — screen lock detection, pause/resume background work
 - [Tray Daemon](tray-daemon.md) — close the window, keep running
-- [Jarvis Eyes](jarvis-eyes.md) — optional floating orb: desktop watch, state indicator, local vision
+- [Floating HUD](floating-hud.md) — optional compact chat surface for desktop work
 - [Unimind Relay](unimind-relay.md) — embedded cross-device relay for phone/desktop sync
 - [WhatsApp Bridge](whatsapp-bridge.md) — optional two-way WhatsApp via unofficial Baileys sidecar
 - [Architecture](architecture.md) — Rust backend, React frontend, generation pipeline, tool authoring

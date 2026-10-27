@@ -1,5 +1,63 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
+
+/* Fonts are bundled locally — no network request, no Google Fonts dependency.
+   Both families are variable fonts covering their full weight ranges. */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('../assets/fonts/dm-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/dm-sans-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('../assets/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Display face: used only for brand and empty-state headings. Keeping it
+   narrow in scope is the point — a serif everywhere would fight the working
+   UI, but at the top of an empty page it gives the workspace a voice. */
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/instrument-serif-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/instrument-serif-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Tailwind's utility radius scale, matched to the phone app's squared
+ * geometry. The app-level tokens below are one step larger so panels and
+ * cards keep a little more breathing room than buttons and chips. */
+@theme {
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 7px;
+  --radius-xl: 9px;
+  --radius-2xl: 11px;
+  --radius-3xl: 14px;
+}
 
 /* ============================================================
    GIA DESIGN SYSTEM — v2.2.0
@@ -7,33 +65,36 @@
    ============================================================ */
 
 :root, [data-theme="dark"] {
-  /* Core palette */
-  --gia-bg:          #08080c;
-  --gia-surface:     #0e0e14;
-  --gia-surface-2:   #14141c;
-  --gia-surface-3:   #1b1b24;
+  /* Core palette — true-black surfaces, matching the phone app. */
+  --gia-bg:          #000000;
+  --gia-surface:     #060607;
+  --gia-surface-2:   #0b0b0d;
+  --gia-surface-3:   #131316;
   --gia-border:      rgba(255,255,255,0.07);
   --gia-border-2:    rgba(255,255,255,0.12);
   --gia-text:        #f0f0f5;
   --gia-muted:       #8888a0;
-  --gia-muted-2:     #5a5a70;
+  /* 5.1:1 on black and 4.8:1 on --gia-surface-2 — small labels stay legible. */
+  --gia-muted-2:     #7c7c92;
 
-  /* Accent — electric violet */
-  --gia-accent:      #a855f7;
-  --gia-accent-rgb:  168, 85, 247;
-  --gia-accent-dim:  rgba(168, 85, 247, 0.15);
-  --gia-accent-glow: rgba(168, 85, 247, 0.3);
+  /* Accent — neutral. Colour is reserved for state, not decoration. */
+  --gia-accent:      #e4e4e7;
+  --gia-accent-rgb:  228, 228, 231;
+  --gia-accent-dim:  rgba(228, 228, 231, 0.10);
+  --gia-accent-glow: rgba(228, 228, 231, 0.18);
+  --gia-accent-contrast: #09090b;
 
-  /* Module accent colors */
-  --mod-chat:     168, 85, 247;   /* violet */
-  --mod-analyst:  59, 130, 246;   /* blue */
-  --mod-writer:   236, 72, 153;   /* pink */
-  --mod-planner:  16, 185, 129;   /* emerald */
-  --mod-settings: 148, 163, 184;  /* slate */
-  --mod-exam:     245, 158, 11;   /* amber */
-  --mod-autonomy: 52, 211, 153;   /* emerald */
-  --mod-agents:   168, 85, 247;   /* violet */
-  --mod-build:    249, 115, 22;   /* orange — build mode */
+  /* Module accents collapse to the same neutral in the clean dark theme.
+     Identity comes from the icon and label, not from a rainbow. */
+  --mod-chat:     228, 228, 231;
+  --mod-analyst:  228, 228, 231;
+  --mod-writer:   228, 228, 231;
+  --mod-planner:  228, 228, 231;
+  --mod-settings: 228, 228, 231;
+  --mod-exam:     228, 228, 231;
+  --mod-autonomy: 228, 228, 231;
+  --mod-agents:   228, 228, 231;
+  --mod-build:    228, 228, 231;
 
   /* Ambient glow system */
   --glow-color:   var(--mod-chat);
@@ -58,11 +119,36 @@
   /* Raised code / code block background. */
   --gia-code-bg:        #0c0c13;
 
-  /* Spacing / radius */
-  --radius-sm:  10px;
-  --radius-md:  14px;
-  --radius-lg:  20px;
-  --radius-xl:  28px;
+  /* App-level radius tokens — 4 / 6 / 9 / 12, the phone app's scale. */
+  --gia-radius-sm:  4px;
+  --gia-radius-md:  6px;
+  --gia-radius-lg:  9px;
+  --gia-radius-xl:  12px;
+}
+
+/* Command palette trigger + workspace texture. */
+.gia-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.7rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  font-family: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--gia-muted-2);
+  background: var(--gia-overlay-2);
+  border: 1px solid var(--gia-border);
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.gia-workspace-grid {
+  background-image: radial-gradient(circle, var(--gia-overlay-3) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: center top;
 }
 
 /* Light theme washes are BLACK, not white. This is the flip that the
@@ -86,24 +172,26 @@
   --gia-border-2:    rgba(0,0,0,0.16);
   --gia-text:        #1b1b2a;
   --gia-muted:       #5a5a70;
-  --gia-muted-2:     #87879b;
+  /* 4.8:1 on the off-white surface — the old #87879b was 3.2:1. */
+  --gia-muted-2:     #6b6b7d;
 
-  /* Accent */
-  --gia-accent:      #a855f7;
-  --gia-accent-rgb:  168, 85, 247;
-  --gia-accent-dim:  rgba(168, 85, 247, 0.10);
-  --gia-accent-glow: rgba(168, 85, 247, 0.18);
+  /* Accent — near-black, with white text on primary actions. */
+  --gia-accent:      #18181b;
+  --gia-accent-rgb:  24, 24, 27;
+  --gia-accent-dim:  rgba(24, 24, 27, 0.08);
+  --gia-accent-glow: rgba(24, 24, 27, 0.12);
+  --gia-accent-contrast: #ffffff;
 
-  /* Module — same but dimmed for light bg */
-  --mod-chat:     147, 51, 234;
-  --mod-analyst:  37, 99, 235;
-  --mod-writer:   190, 24, 93;
-  --mod-planner:  4, 120, 87;
-  --mod-settings: 100, 116, 139;
-  --mod-exam:     217, 119, 6;
-  --mod-autonomy: 4, 120, 87;
-  --mod-agents:   147, 51, 234;
-  --mod-build:    234, 88, 12;
+  /* Module accents collapse to the same near-black in the clean light theme. */
+  --mod-chat:     24, 24, 27;
+  --mod-analyst:  24, 24, 27;
+  --mod-writer:   24, 24, 27;
+  --mod-planner:  24, 24, 27;
+  --mod-settings: 24, 24, 27;
+  --mod-exam:     24, 24, 27;
+  --mod-autonomy: 24, 24, 27;
+  --mod-agents:   24, 24, 27;
+  --mod-build:    24, 24, 27;
 
   --glow-opacity: 0.10;
 }
@@ -147,22 +235,23 @@
   --gia-overlay-3:      rgba(255, 255, 255, 0.09);
   --gia-overlay-border: rgba(255, 255, 255, 0.08);
   --gia-code-bg:        #0a0a10;
-  /* Core — true OLED black */
+  /* Core — true OLED black, same surfaces as the phone app. */
   --gia-bg:          #000000;
-  --gia-surface:     #08080c;
-  --gia-surface-2:   #0e0e14;
-  --gia-surface-3:   #16161e;
+  --gia-surface:     #060607;
+  --gia-surface-2:   #0b0b0d;
+  --gia-surface-3:   #131316;
   --gia-border:      rgba(255,255,255,0.06);
   --gia-border-2:    rgba(255,255,255,0.10);
   --gia-text:        #f0f0f5;
   --gia-muted:       #7a7a95;
-  --gia-muted-2:     #4a4a60;
+  --gia-muted-2:     #76768e;
 
   /* Accent — aurora gradient (teal → violet → pink) */
   --gia-accent:      #06b6d4;
   --gia-accent-rgb:  6, 182, 212;
   --gia-accent-dim:  rgba(6, 182, 212, 0.12);
   --gia-accent-glow: rgba(6, 182, 212, 0.25);
+  --gia-accent-contrast: #0b0b10;
 
   /* Module colors — aurora palette */
   --mod-chat:     6, 182, 212;    /* cyan */
@@ -281,12 +370,6 @@
 [data-theme="obsidian-aurora"] .exam-option.wrong {
   border-color: #f43f5e;
   background: rgba(244, 63, 94, 0.06);
-}
-
-/* Aurora agent core glow — multicolor */
-[data-theme="obsidian-aurora"] @keyframes agent-core-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(6,182,212,0.15), 0 0 50px rgba(139,92,246,0.08), 0 0 80px rgba(236,72,153,0.03); }
-  50% { box-shadow: 0 0 30px rgba(6,182,212,0.25), 0 0 60px rgba(139,92,246,0.12), 0 0 100px rgba(236,72,153,0.06); }
 }
 
 /* Aurora agent cosmic background */
@@ -504,13 +587,21 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--gia-surface-3);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 /* ============================================================
    TYPOGRAPHY
    ============================================================ */
 .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Brand / empty-state headings. Never body copy: Instrument Serif is a display
+   face with one weight, and it is at its best large and quiet. */
+.gia-display {
+  font-family: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
 
 /* ============================================================
    AMBIENT GLOW SYSTEM
@@ -546,11 +637,11 @@ body {
    TAILWIND THEME EXTENSIONS
    ============================================================ */
 @theme {
-  --color-gia-bg:       #0a0a0f;
-  --color-gia-surface:  #111118;
-  --color-gia-surface2: #18181f;
-  --color-gia-surface3: #202028;
-  --color-gia-accent:   #a855f7;
+  --color-gia-bg:       #000000;
+  --color-gia-surface:  #060607;
+  --color-gia-surface2: #0b0b0d;
+  --color-gia-surface3: #131316;
+  --color-gia-accent:   #e4e4e7;
   --color-gia-text:     #f0f0f5;
   --color-gia-muted:    #8888a0;
   --color-gia-border:   rgba(255,255,255,0.07);
@@ -561,7 +652,7 @@ body {
    ============================================================ */
 .gia-card {
   background: var(--gia-surface);
-  border-radius: var(--radius-lg);
+  border-radius: var(--gia-radius-lg);
   border: 1px solid var(--gia-border);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -572,7 +663,7 @@ body {
   background: rgba(255,255,255,0.03);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-radius: var(--radius-lg);
+  border-radius: var(--gia-radius-lg);
   border: 1px solid var(--gia-border);
 }
 
@@ -582,7 +673,7 @@ body {
 .gia-input {
   background: var(--gia-surface-2);
   border: 1px solid var(--gia-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--gia-radius-md);
   color: var(--gia-text);
   padding: 10px 14px;
   font-size: 14px;
@@ -606,7 +697,7 @@ body {
   justify-content: center;
   gap: 6px;
   padding: 10px 18px;
-  border-radius: var(--radius-md);
+  border-radius: var(--gia-radius-md);
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
@@ -617,7 +708,7 @@ body {
 }
 .gia-btn-primary {
   background: var(--gia-accent);
-  color: white;
+  color: var(--gia-accent-contrast);
 }
 .gia-btn-primary:hover { opacity: 0.9; }
 .gia-btn-primary:active { transform: scale(0.97); }
@@ -639,7 +730,7 @@ body {
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--gia-radius-sm);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -679,20 +770,21 @@ body {
    MESSAGE BUBBLES
    ============================================================ */
 .msg-user {
-  background: linear-gradient(135deg, #a855f7, #7c3aed);
-  color: white;
-  border-radius: 18px 18px 4px 18px;
+  background: var(--gia-surface-3);
+  border: 1px solid var(--gia-border-2);
+  color: var(--gia-text);
+  border-radius: var(--gia-radius-xl) var(--gia-radius-xl) var(--gia-radius-sm) var(--gia-radius-xl);
 }
 .msg-assistant {
   background: var(--gia-surface-2);
   border: 1px solid var(--gia-border);
-  border-radius: 4px 18px 18px 18px;
+  border-radius: var(--gia-radius-sm) var(--gia-radius-xl) var(--gia-radius-xl) var(--gia-radius-xl);
   color: var(--gia-text);
 }
 .msg-error {
   background: rgba(239, 68, 68, 0.08);
   border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 4px 18px 18px 18px;
+  border-radius: var(--gia-radius-sm) var(--gia-radius-xl) var(--gia-radius-xl) var(--gia-radius-xl);
   color: #f87171;
 }
 
@@ -713,13 +805,14 @@ body {
 .gia-markdown ul, .gia-markdown ol { margin: 8px 0; padding-left: 20px; }
 .gia-markdown li { margin: 3px 0; }
 .gia-markdown a  { color: var(--gia-accent); text-decoration: underline; text-underline-offset: 2px; }
-.gia-markdown strong { font-weight: 600; color: white; }
+.gia-markdown strong { font-weight: 600; color: var(--gia-text); }
 .gia-markdown em { font-style: italic; color: var(--gia-muted); }
 .gia-markdown code {
-  background: rgba(168, 85, 247, 0.12);
-  color: #c084fc;
+  background: var(--gia-surface-3);
+  color: var(--gia-text);
   padding: 1px 6px;
-  border-radius: 5px;
+  border-radius: var(--gia-radius-sm);
+  border: 1px solid var(--gia-border);
   font-size: 12px;
   font-family: 'JetBrains Mono', monospace;
 }
@@ -759,7 +852,7 @@ body {
    ============================================================ */
 .code-block {
   margin: 10px 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--gia-radius-md);
   overflow: hidden;
   border: 1px solid var(--gia-border);
 }
@@ -778,13 +871,13 @@ body {
   letter-spacing: 0.08em;
 }
 .code-block-body {
-  background: #0d0d14;
+  background: var(--gia-code-bg);
   padding: 14px;
   overflow-x: auto;
   font-size: 12px;
   font-family: 'JetBrains Mono', monospace;
   line-height: 1.6;
-  color: #e2e8f0;
+  color: var(--gia-text);
   white-space: pre;
   tab-size: 2;
 }
@@ -811,7 +904,7 @@ body {
 .thinking-dot {
   width: 6px; height: 6px;
   border-radius: 50%;
-  background: var(--gia-accent);
+  background: var(--gia-text);
   animation: thinking-pulse 1.4s ease-in-out infinite;
 }
 .thinking-dot:nth-child(2) { animation-delay: 0.16s; }
@@ -835,7 +928,7 @@ body {
 .stream-cursor {
   display: inline;
   animation: stream-blink 0.8s step-end infinite;
-  color: #a855f7;
+  color: var(--gia-text);
 }
 
 /* Token reveal animation */
@@ -945,7 +1038,7 @@ body {
 .exam-option {
   background: var(--gia-surface-2);
   border: 1px solid var(--gia-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--gia-radius-md);
   padding: 10px 14px;
   cursor: pointer;
   transition: all 0.15s ease;

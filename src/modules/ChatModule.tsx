@@ -7,7 +7,7 @@ import {
   BookOpen, Zap, Undo2, Search, Headphones, GitBranch,
   Eye, Loader2, Upload, LayoutTemplate, Languages, Hammer, RotateCcw, Archive, Radar, SlidersHorizontal, Wrench,
   Maximize2, ChevronRight, Settings as SettingsIcon,
-  PlugZap, Plug, KeyRound, MessagesSquare, PanelRight, Files as FilesIcon, MoreHorizontal,
+  PlugZap, Plug, KeyRound, MessagesSquare, PanelRight, Files as FilesIcon, MoreHorizontal, PenLine,
 } from 'lucide-react';
 import WorkspaceDock from '../components/WorkspaceDock';
 import BuildStudio from '../components/BuildStudio';
@@ -34,7 +34,6 @@ import { KnowledgePanel } from '../components/KnowledgePanel';
 import FileManager from '../components/FileManager';
 import ToolTray from '../components/ToolTray';
 import { ClarificationBottomSheet } from '../components/chat/ClarificationBottomSheet';
-import { EngineSheet } from '../components/chat/EngineSheet';
 import ModelSwitcherSheet from '../components/chat/ModelSwitcherSheet';
 import ToolsCatalogSheet from '../components/chat/ToolsCatalogSheet';
 import { GiaBotRoster, botPortrait, agentName } from '../components/GiaBots';
@@ -53,17 +52,34 @@ import CameraCaptureModal from '../components/CameraCaptureModal';
 import { isNativePlatform } from '../utils/helpers';
 
 const QUICK_STARTS = [
-  { icon: Code2, label: 'Code Help', prompt: 'Explain and fix this code:', color: '#ec4899', category: 'code' },
-  { icon: Paperclip, label: 'Analyze a File', prompt: 'Attach a file — summarize or analyze it:', color: '#f59e0b', category: 'work' },
-  { icon: Sparkles, label: 'Summarize URL', prompt: 'Summarize this URL: https://', color: '#10b981', category: 'tools' },
-  { icon: Hammer, label: 'Build an App', prompt: 'Build a web app that…', color: '#f97316', category: 'build' },
-  { icon: Zap, label: 'Plan a Project', prompt: 'Help me plan a project — goal:', color: '#3b82f6', category: 'productivity' },
+  { icon: Code2, label: 'Code Help', prompt: 'Explain and fix this code:', category: 'code' },
+  { icon: Paperclip, label: 'Analyze a File', prompt: 'Attach a file — summarize or analyze it:', category: 'work' },
+  { icon: Sparkles, label: 'Summarize URL', prompt: 'Summarize this URL: https://', category: 'tools' },
+  { icon: Hammer, label: 'Build an App', prompt: 'Build a web app that…', category: 'build' },
+  { icon: Zap, label: 'Plan a Project', prompt: 'Help me plan a project — goal:', category: 'productivity' },
+  { icon: PenLine, label: 'Write a Draft', prompt: 'Write a draft of…', category: 'writing' },
 ];
+
+const focusComposer = () => {
+  requestAnimationFrame(() => {
+    const el = document.querySelector<HTMLInputElement | HTMLTextAreaElement>('[data-gia-composer]');
+    el?.focus();
+  });
+};
 
 const LOCALHOST_RE = /https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|(10\.\d{1,3}\.\d{1,3}\.\d{1,3})|(192\.168\.\d{1,3}\.\d{1,3})|(172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}))(:\d+)?(\/[^\s<]*)?/i;
 const extractLocalhostUrl = (text: string): string | null => {
   const m = text?.match(LOCALHOST_RE);
   return m ? m[0] : null;
+};
+
+const MODE_HINTS: Record<string, string> = {
+  code: 'Full access',
+  plan: 'Propose only',
+  ask: 'Answer only',
+  build: 'Master builder',
+  exam: 'Tutor',
+  analyst: 'Evidence',
 };
 
 interface ChatModuleProps {
@@ -117,13 +133,13 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
   const activeProvider = useProviderStore((s) => s.activeProvider);
 
   const toolItems: { key: 'webSearch' | 'deepSearch' | 'extThinking' | 'handsOff' | 'listen' | 'vision' | 'translate'; label: string; icon: React.ComponentType<{ size?: number }>; active: boolean; color: string }[] = [
-    { key: 'webSearch', label: 'Web Search', icon: Globe, active: webSearch, color: '#3b82f6' },
-    { key: 'deepSearch', label: 'DeepSearch', icon: Radar, active: deepSearch, color: '#22d3ee' },
-    { key: 'extThinking', label: 'Think', icon: Brain, active: extThinking, color: '#f59e0b' },
-    { key: 'handsOff', label: 'Hands-off', icon: Zap, active: handsOff, color: '#a855f7' },
-    { key: 'listen', label: 'Voice Mode', icon: Headphones, active: voiceEnabled, color: '#ec4899' },
-    { key: 'vision', label: 'Vision', icon: Eye, active: localVision, color: '#22c55e' },
-    { key: 'translate', label: 'Translate', icon: Languages, active: localTranslate, color: '#14b8a6' },
+    { key: 'webSearch', label: 'Web Search', icon: Globe, active: webSearch, color: 'var(--gia-text)' },
+    { key: 'deepSearch', label: 'DeepSearch', icon: Radar, active: deepSearch, color: 'var(--gia-text)' },
+    { key: 'extThinking', label: 'Think', icon: Brain, active: extThinking, color: 'var(--gia-text)' },
+    { key: 'handsOff', label: 'Hands-off', icon: Zap, active: handsOff, color: 'var(--gia-text)' },
+    { key: 'listen', label: 'Voice Mode', icon: Headphones, active: voiceEnabled, color: 'var(--gia-text)' },
+    { key: 'vision', label: 'Vision', icon: Eye, active: localVision, color: 'var(--gia-text)' },
+    { key: 'translate', label: 'Translate', icon: Languages, active: localTranslate, color: 'var(--gia-text)' },
   ];
   const activeToolCount = toolItems.filter(t => t.active).length;
   const activeSkill = skills.find(s => s.id === activeSkillId);
@@ -151,8 +167,6 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
     }
   }, [buildMode]);
 
-  const showEngine = useGiaStore((s) => s.showEngine);
-  const setShowEngine = useGiaStore((s) => s.setShowEngine);
   const showModelSwitcher = useGiaStore((s) => s.showModelSwitcher);
   const [showToolsCatalog, setShowToolsCatalog] = React.useState(false);
   const setShowModelSwitcher = useGiaStore((s) => s.setShowModelSwitcher);
@@ -162,6 +176,8 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
   const [showBuildStudio, setShowBuildStudio] = React.useState(false);
   const currentModeName = ((useGiaStore(s => s.sharedData) as { currentMode?: string } | undefined)?.currentMode) ?? 'code';
   const [showVoiceMode, setShowVoiceMode] = React.useState(false);
+  const [showModeMenu, setShowModeMenu] = React.useState(false);
+  const [runElapsed, setRunElapsed] = React.useState(0);
   // Terminal + files docked beside the chat (desktop workflow).
   // Persisted, not local state. The panel is a workspace preference — losing it
 // on every reload meant the toggle felt broken rather than remembered.
@@ -171,8 +187,11 @@ const [dockOpen, setDockOpen] = React.useState(false);
   const [showMoreMenu, setShowMoreMenu] = React.useState(false);
   const [showCouncil, setShowCouncil] = React.useState(false);
   const [showPrompts, setShowPrompts] = React.useState(false);
-  const toggleFullScreenMode = useGiaStore((s) => s.toggleFullScreenMode);
-  const openVoice = React.useCallback(() => { setShowVoiceMode(true); toggleFullScreenMode(); }, [toggleFullScreenMode]);
+  // Voice is its own full-screen surface. It used to toggle the app-wide
+  // fullscreen flag on the way in and out, which left the shell in the wrong
+  // state whenever the two disagreed (and made the close button toggle it a
+  // second time). Opening the overlay is enough.
+  const openVoice = React.useCallback(() => { setShowVoiceMode(true); }, []);
 
   // Ctrl/Cmd+B — the same shortcut VS Code and most editors use for the side
   // panel, so it lands where the user's hand already is.
@@ -190,7 +209,17 @@ const [dockOpen, setDockOpen] = React.useState(false);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  const closeVoice = React.useCallback(() => { setShowVoiceMode(false); if (useGiaStore.getState().fullScreenMode) toggleFullScreenMode(); }, [toggleFullScreenMode]);
+  const closeVoice = React.useCallback(() => { setShowVoiceMode(false); }, []);
+
+  // The header shows a live run clock while a turn is generating. A spinner
+  // says "something is happening"; a clock and a phase say what and for how
+  // long, which is the difference between waiting and wondering.
+  React.useEffect(() => {
+    if (!loading) { setRunElapsed(0); return; }
+    const started = Date.now();
+    const id = setInterval(() => setRunElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [loading]);
 
   const handleCameraCapture = React.useCallback((dataUrl: string, name: string) => {
     const [head, b64] = dataUrl.split(',');
@@ -230,7 +259,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
             ← Back
           </button>
           <span className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>Chats</span>
-          <button onClick={() => { startFreshChat(); setShowHistory(false); }} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: '#f4efe4', color: '#1a1610' }}>
+          <button onClick={() => { startFreshChat(); setShowHistory(false); }} className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: 'var(--gia-accent)', color: 'var(--gia-accent-contrast)' }} aria-label="New chat" title="New chat">
             <Plus size={15} />
           </button>
         </div>
@@ -260,12 +289,18 @@ const [dockOpen, setDockOpen] = React.useState(false);
                 {filtered.map((sess) => {
                   const matchCount = historySearch ? sess.messages.filter(m => m.message?.content?.toLowerCase().includes(historySearch.toLowerCase())).length : 0;
                   return (
-                    <div key={sess.id} className="gia-card p-3 flex items-center gap-3 cursor-pointer transition-all tap-feedback" style={sess.id === activeSessionId ? { borderColor: 'rgba(168,85,247,0.3)', background: 'rgba(168,85,247,0.06)' } : {}} onClick={() => { setActiveSession(sess.id); setShowHistory(false); }}>
+                    <div key={sess.id} className="gia-card p-3 flex items-center gap-3 cursor-pointer transition-all tap-feedback" style={sess.id === activeSessionId ? { borderColor: 'var(--gia-border-2)', background: 'var(--gia-surface-2)' } : {}} onClick={() => { setActiveSession(sess.id); setShowHistory(false); }}>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate" style={{ color: 'var(--gia-text)' }}>{sess.title}</p>
                         <p className="text-[10px] mt-0.5" style={{ color: 'var(--gia-muted)' }}>{sess.messages.length} msgs · {new Date(sess.updatedAt).toLocaleDateString()}{matchCount > 0 ? ` · ${matchCount} match${matchCount > 1 ? 'es' : ''}` : ''}</p>
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); deleteSession(sess.id); }} className="p-1.5 rounded-lg transition-colors text-zinc-600 hover:text-rose-400">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteSession(sess.id); }}
+                        className="p-1.5 rounded-lg transition-colors"
+                        style={{ color: 'var(--gia-muted-2)' }}
+                        aria-label={`Delete ${sess.title}`}
+                        title="Delete chat"
+                      >
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -291,7 +326,9 @@ const [dockOpen, setDockOpen] = React.useState(false);
                   </div>
                   <button
                     onClick={() => restoreSession(sess.id)}
-                    className="p-1.5 rounded-lg transition-colors text-zinc-600 hover:text-emerald-400"
+                    className="p-1.5 rounded-lg transition-colors"
+                    style={{ color: 'var(--gia-muted-2)' }}
+                    aria-label={`Restore ${sess.title}`}
                     title="Restore this archived chat"
                   >
                     <RotateCcw size={13} />
@@ -323,79 +360,189 @@ const [dockOpen, setDockOpen] = React.useState(false);
     <div className="flex flex-col flex-1 min-w-0 relative">
       {/* Processing bar */}
       {loading && (
-        <div className="absolute top-0 left-0 right-0 h-0.5 z-30 overflow-hidden" style={{ background: 'rgba(168,85,247,0.15)' }}>
+        <div className="absolute top-0 left-0 right-0 h-0.5 z-30 overflow-hidden" style={{ background: 'var(--gia-border)' }}>
           <div className="h-full w-full" style={{
-            background: 'linear-gradient(90deg, transparent, #a855f7, #8b5cf6, transparent)',
-            backgroundSize: '200% 100%',
-            animation: 'shimmer 1.5s linear infinite',
+            background: 'var(--gia-text)',
+            opacity: 0.75,
             width: '100%',
             height: '100%',
           }} />
         </div>
       )}
-      <div className="flex items-center justify-between px-3 h-12 shrink-0" style={{ borderBottom: '1px solid var(--gia-border)' }}>
-        <div className="flex items-center gap-2.5 min-w-0">
-          <button onClick={() => setShowHistory(true)} className="shrink-0" title="Chats" aria-label="Chats">
+      <div className="flex items-center justify-between px-3 h-12 shrink-0 gap-2" style={{ borderBottom: '1px solid var(--gia-border)' }}>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <button onClick={() => setShowHistory(true)} className="shrink-0" title="Chat history" aria-label="Chat history">
             <img
               src={botPortrait(activeSkillId || 'core-general')}
               alt=""
               className="w-8 h-8 rounded-full object-cover"
             />
           </button>
-          <div className="min-w-0 text-left">
+          <div className="min-w-0 text-left hidden sm:block">
             <p className="text-[13px] font-medium leading-none truncate" style={{ color: 'var(--gia-text)' }}>
               {agentName(activeSkillId)}
             </p>
             <p className="text-[11px] mt-1 truncate" style={{ color: 'var(--gia-muted)' }}>{activeSession?.title ?? 'New chat'}</p>
           </div>
+          {activeSession && activeSession.branches && Object.keys(activeSession.branches).length > 0 && (
+            <button onClick={() => setShowBranchView(true)} className="p-1 rounded-md transition-colors tap-feedback shrink-0" style={{ color: 'var(--gia-text)' }} aria-label="Branches" title="Branches">
+              <GitBranch size={12} />
+            </button>
+          )}
+
+          {/* Cockpit: mode, active skill and live run state live in the header
+              so the chat surface answers "what is GIA doing, in what mode, as
+              which agent?" without opening a sheet. */}
+          {loading && (
+            <span
+              className="hidden sm:flex items-center gap-1.5 h-5 px-1.5 rounded-sm shrink-0"
+              style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)' }}
+              title={`${thinkingPhase} · ${currentTool || 'working'}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--gia-text)' }} />
+              <span className="text-[9px] font-mono uppercase tracking-wider" style={{ color: 'var(--gia-text)' }}>
+                {thinkingPhase === 'idle' ? 'working' : thinkingPhase}
+              </span>
+              {runElapsed > 0 && (
+                <span className="text-[9px] font-mono tabular-nums" style={{ color: 'var(--gia-muted-2)' }}>{runElapsed}s</span>
+              )}
+            </span>
+          )}
+
+          <div className="relative shrink-0 hidden md:block">
+            <button
+              type="button"
+              onClick={() => setShowModeMenu((open) => !open)}
+              className="flex items-center gap-1 h-5 px-1.5 rounded-sm text-[9px] font-semibold uppercase tracking-wider transition-colors"
+              style={{
+                background: showModeMenu ? 'var(--gia-surface-3)' : 'var(--gia-surface-2)',
+                border: '1px solid var(--gia-border)',
+                color: 'var(--gia-text)',
+              }}
+              aria-haspopup="menu"
+              aria-expanded={showModeMenu}
+              title={`Mode: ${getModePromptName(currentModeName)}`}
+            >
+              {currentModeName}
+              <ChevronDown size={9} style={{ color: 'var(--gia-muted-2)' }} />
+            </button>
+            {showModeMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowModeMenu(false)} />
+                <div
+                  className="absolute left-0 top-7 z-50 w-48 rounded-md py-1 shadow-xl"
+                  style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border)' }}
+                  role="menu"
+                >
+                  {MODES.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={currentModeName === m}
+                      onClick={() => {
+                        useGiaStore.getState().updateSharedData({ currentMode: m });
+                        setBuildMode(m === 'build');
+                        setShowModeMenu(false);
+                      }}
+                      className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-left text-[11px] transition-colors hover:bg-[var(--gia-overlay)]"
+                      style={{ color: currentModeName === m ? 'var(--gia-text)' : 'var(--gia-muted)' }}
+                    >
+                      <span className="capitalize">{m}</span>
+                      <span className="text-[9px] truncate max-w-[100px]" style={{ color: 'var(--gia-muted-2)' }}>{MODE_HINTS[m] ?? ''}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {activeSkill && (
+            <button
+              type="button"
+              onClick={() => setShowSkillPicker(true)}
+              className="hidden xl:flex items-center gap-1 h-5 px-1.5 rounded-sm shrink-0 transition-colors"
+              style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)', color: 'var(--gia-muted)' }}
+              title={`Active skill: ${activeSkill.name} — click to switch`}
+            >
+              <Sparkles size={9} />
+              <span className="text-[9px] max-w-[100px] truncate">{activeSkill.name}</span>
+            </button>
+          )}
         </div>
-        <div className="flex items-center gap-0.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
+          {voiceEnabled && (
+            <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-md shrink-0" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)' }}>
+              <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--gia-text)' }} />
+              <span className="text-[8px] font-medium" style={{ color: 'var(--gia-muted)' }}>LIVE</span>
+            </div>
+          )}
           <button
             onClick={() => setShowModelSwitcher(true)}
-            className="px-2 py-1 rounded-lg text-[11px] truncate max-w-[120px]"
-            style={{ color: 'var(--gia-muted)' }}
-            title="Model"
+            className="gia-pill flex items-center gap-1.5 shrink-0 max-w-[180px] tap-feedback transition-all"
+            style={{
+              background: 'var(--gia-surface-2)',
+              color: 'var(--gia-text)',
+              border: '1px solid var(--gia-border)',
+            }}
+            title="Switch model & provider"
           >
-            {providerConnected ? (activeModel?.split('/').pop() || providerLabel) : 'No model'}
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: providerConnected ? 'var(--gia-text)' : 'var(--gia-muted-2)' }} />
+            <ProviderIcon provider={activeProvider} size={18} bare />
+            <span className="hidden sm:inline truncate max-w-[70px]">{providerLabel}</span>
+            {activeModel && providerConnected && (
+              <span className="text-[7px] opacity-50 truncate max-w-[54px] hidden lg:inline">{activeModel.split('/').pop()}</span>
+            )}
+            <ChevronDown size={11} className="shrink-0 opacity-70" />
           </button>
           <button
             onClick={() => { setShowPrompts(v => !v); setShowCouncil(false); }}
-            className="h-7 px-2.5 rounded-full text-[11px]"
+            className="h-7 px-2 sm:px-2.5 rounded-sm text-[11px] flex items-center gap-1"
             style={{
-              border: '1px solid rgba(255,255,255,0.12)',
-              color: showPrompts ? '#1a1610' : 'var(--gia-text)',
-              background: showPrompts ? '#f4efe4' : 'transparent',
+              border: '1px solid var(--gia-border)',
+              color: showPrompts ? 'var(--gia-accent-contrast)' : 'var(--gia-text)',
+              background: showPrompts ? 'var(--gia-accent)' : 'transparent',
             }}
             aria-pressed={showPrompts}
+            aria-label="Agent prompts"
+            title="Agent prompts"
           >
-            Prompts
+            <PenLine size={11} className="sm:hidden" />
+            <span className="hidden sm:inline">Prompts</span>
           </button>
           <button
             onClick={() => { setShowCouncil(v => !v); setShowPrompts(false); }}
-            className="h-7 px-2.5 rounded-full text-[11px]"
+            className="h-7 px-2 sm:px-2.5 rounded-sm text-[11px] flex items-center gap-1"
             style={{
-              border: '1px solid rgba(244,239,228,0.35)',
-              color: showCouncil ? '#1a1610' : '#f4efe4',
-              background: showCouncil ? '#f4efe4' : 'transparent',
+              border: '1px solid var(--gia-border)',
+              color: showCouncil ? 'var(--gia-accent-contrast)' : 'var(--gia-text)',
+              background: showCouncil ? 'var(--gia-accent)' : 'transparent',
             }}
             aria-pressed={showCouncil}
+            aria-label="Council"
+            title="Council"
           >
-            Council
+            <MessagesSquare size={11} className="sm:hidden" />
+            <span className="hidden sm:inline">Council</span>
           </button>
-          <button onClick={startFreshChat} className="p-1.5 rounded-lg" style={{ color: 'var(--gia-muted)' }} aria-label="New chat" title="New chat"><Plus size={15} /></button>
+          <button onClick={startFreshChat} className="p-1.5 rounded-md" style={{ color: 'var(--gia-muted)' }} aria-label="New chat" title="New chat"><Plus size={15} /></button>
           <div className="relative">
             <button
               onClick={() => setShowMoreMenu(o => !o)}
-              className="p-1.5 rounded-lg"
-              style={{ color: 'var(--gia-muted)' }}
-              aria-label="More"
+              className="p-1.5 rounded-md tap-feedback transition-colors"
+              style={{ color: showMoreMenu ? 'var(--gia-text)' : 'var(--gia-muted)', background: showMoreMenu ? 'var(--gia-surface-2)' : 'transparent' }}
+              aria-label="More actions"
+              title="More"
             >
               <MoreHorizontal size={15} />
             </button>
             {showMoreMenu && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
-                <div className="absolute right-0 top-9 z-50 w-52 rounded-xl py-1 shadow-xl" style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border)' }}>
+                <div
+                  className="absolute right-0 top-9 z-50 w-52 rounded-md py-1 shadow-xl"
+                  style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border)' }}
+                >
                   {[
                     { icon: <PanelRight size={13} />, label: 'Workspace panel', onClick: () => { setDockOpen(o => !o); setSidePanelOpen(!sidePanelOpen); setShowMoreMenu(false); } },
                     { icon: <Upload size={13} />, label: 'Files', onClick: () => { setShowFileManager(true); setShowMoreMenu(false); } },
@@ -473,11 +620,11 @@ const [dockOpen, setDockOpen] = React.useState(false);
       <div ref={scrollRef} onScroll={handleScroll} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop} className="flex-1 overflow-y-auto pt-4 relative z-0" style={{ paddingBottom: `${inputContainerHeight + 120}px` }}>
         {messages.length === 0 && buildMode && (
           <div className="flex flex-col items-center justify-center h-full gap-5 text-center pt-12 sm:pt-16 pb-24 sm:pb-40 animate-fade-in">
-            <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.25), rgba(234,88,12,0.1))', border: '1px solid rgba(249,115,22,0.3)', boxShadow: '0 0 40px rgba(249,115,22,0.25)' }}>
-              <Hammer size={38} style={{ color: '#f97316' }} />
+            <div className="w-16 h-16 rounded-lg flex items-center justify-center" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border-2)' }}>
+              <Hammer size={30} style={{ color: 'var(--gia-text)' }} />
             </div>
             <div>
-              <p className="text-lg font-semibold" style={{ color: 'var(--gia-text)' }}>Build Mode</p>
+              <p className="gia-display text-[28px] sm:text-[32px] leading-tight" style={{ color: 'var(--gia-text)' }}>Build Mode</p>
               <p className="text-xs mt-1 max-w-[260px] leading-relaxed" style={{ color: 'var(--gia-muted)' }}>Describe the app you want to build. GIA scaffolds it, runs a dev server, and a Preview button appears when it's live — tap it to see your app.</p>
             </div>
             <div className="grid grid-cols-1 gap-2 w-full max-w-xs mt-1">
@@ -486,11 +633,11 @@ const [dockOpen, setDockOpen] = React.useState(false);
                 { label: 'Quiz game', prompt: 'Build a quiz game with multiple-choice questions and a live score.' },
                 { label: 'Landing page', prompt: 'Build a landing page for a fictional product with hero, features, and CTA.' },
               ].map((ex) => (
-                <button key={ex.label} onClick={() => setInput(ex.prompt)} className="flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all tap-feedback" style={{ background: 'linear-gradient(135deg, #f973160a, #f9731603)', border: '1px solid #f9731640', backdropFilter: 'blur(8px)' }}>
-                  <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#f9731620', border: '1px solid #f9731630' }}><Hammer size={13} style={{ color: '#f97316' }} /></div>
+                <button key={ex.label} onClick={() => setInput(ex.prompt)} className="flex items-center gap-3 px-4 py-3 rounded-md text-left transition-colors tap-feedback" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)' }}>
+                  <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: 'var(--gia-surface-3)', border: '1px solid var(--gia-border)' }}><Hammer size={13} style={{ color: 'var(--gia-text)' }} /></div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold" style={{ color: 'var(--gia-text)' }}>{ex.label}</p>
-                    <p className="text-[10px] truncate mt-0.5" style={{ color: '#f97316', opacity: 0.7 }}>{ex.prompt}</p>
+                    <p className="text-[10px] truncate mt-0.5" style={{ color: 'var(--gia-muted)' }}>{ex.prompt}</p>
                   </div>
                 </button>
               ))}
@@ -498,32 +645,67 @@ const [dockOpen, setDockOpen] = React.useState(false);
           </div>
         )}
         {messages.length === 0 && !buildMode && (
-          <div className="relative flex flex-col items-center justify-center h-full gap-6 text-center px-5 pt-8 pb-36">
-            <div className="space-y-1.5">
-              <p className="text-[22px] font-medium tracking-tight" style={{ color: 'var(--gia-text)' }}>
-                {userProfile.name ? userProfile.name : 'GIA'}
+          <div className="relative flex flex-col items-center justify-center h-full gap-5 text-center px-6 pt-10 sm:pt-14 pb-24 sm:pb-40 animate-fade-in overflow-hidden gia-workspace-grid">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-lg flex items-center justify-center"
+                style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border-2)' }}>
+                <GiaIcon size={28} animate={false} color="var(--gia-text)" />
+              </div>
+            </div>
+            <div className="relative space-y-1.5">
+              <p className="gia-display text-[28px] sm:text-[32px] leading-tight" style={{ color: 'var(--gia-text)' }}>
+                {userProfile.name ? `Hey ${userProfile.name}` : 'Welcome to GIA'}
               </p>
-              <p className="text-[13px] max-w-sm leading-relaxed" style={{ color: 'var(--gia-muted)' }}>
+              <p className="text-xs max-w-md leading-relaxed" style={{ color: 'var(--gia-muted)' }}>
                 Pick who you are talking to. Each bot keeps its own chat.
               </p>
             </div>
             {!providerConnected && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowModelSwitcher(true)}
-                  className="px-4 py-2 rounded-full text-[12px] font-medium"
-                  style={{ background: '#f4efe4', color: '#1a1610' }}
-                >
-                  Connect a provider
+              <div className="grid grid-cols-1 gap-2 w-full max-w-xs mt-1">
+                <button onClick={() => setShowModelSwitcher(true)}
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-md text-xs font-semibold transition-opacity tap-feedback hover:opacity-90"
+                  style={{ background: 'var(--gia-accent)', color: 'var(--gia-accent-contrast)' }}>
+                  <PlugZap size={15} /> Connect an AI Provider
                 </button>
-                <button
-                  onClick={() => { useProviderStore.getState().setProviderKey('local-llm', ''); }}
-                  className="px-4 py-2 rounded-full text-[12px]"
-                  style={{ border: '1px solid rgba(255,255,255,0.12)', color: 'var(--gia-muted)' }}
-                >
-                  Use local
+                <button onClick={() => { useProviderStore.getState().setProviderKey('local-llm', ''); }}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-md text-[10px] transition-colors tap-feedback"
+                  style={{ border: '1px dashed var(--gia-border-2)', color: 'var(--gia-muted)' }}>
+                  <Zap size={12} color="var(--gia-muted)" /> Try Local AI — works offline, no keys
                 </button>
+                <div className="flex items-center justify-center gap-2 text-[9px] mt-0.5" style={{ color: 'var(--gia-muted-2)' }}>
+                  <span className="flex items-center gap-1"><Plug size={10} color="var(--gia-muted-2)" />Provider</span>
+                  <span className="opacity-40">→</span>
+                  <span className="flex items-center gap-1"><KeyRound size={10} color="var(--gia-muted-2)" />Your key</span>
+                  <span className="opacity-40">→</span>
+                  <span className="flex items-center gap-1"><MessagesSquare size={10} color="var(--gia-muted-2)" />Chat</span>
+                </div>
               </div>
+            )}
+            {providerConnected && (
+              <>
+                <p className="text-[11px] w-full max-w-2xl text-left" style={{ color: 'var(--gia-muted)' }}>Quick starts</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-2xl mt-1">
+                  {QUICK_STARTS.map((qs, i) => (
+                    <motion.button
+                      key={qs.label}
+                      onClick={() => { setInput(qs.prompt); focusComposer(); }}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05, duration: 0.2 }}
+                      whileHover={{ y: -1 }}
+                      whileTap={{ scale: 0.99 }}
+                      className="flex items-center gap-3 px-4 py-3.5 rounded-md text-left transition-colors shrink-0"
+                      style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)' }}
+                    >
+                      <div className="w-8 h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: 'var(--gia-surface-3)', border: '1px solid var(--gia-border)' }}><qs.icon size={15} style={{ color: 'var(--gia-text)' }} /></div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold" style={{ color: 'var(--gia-text)' }}>{qs.label}</p>
+                        <p className="text-[10px] truncate mt-0.5" style={{ color: 'var(--gia-muted)' }}>{qs.prompt}</p>
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
+              </>
             )}
             <GiaBotRoster />
           </div>
@@ -536,9 +718,11 @@ const [dockOpen, setDockOpen] = React.useState(false);
           </div>
         )}
 
-        <div className="flex items-center gap-2 mb-1">
-          <SessionSwitcher />
-        </div>
+        {sessions.length > 1 && (
+          <div className="flex items-center gap-2 mb-1">
+            <SessionSwitcher />
+          </div>
+        )}
 
         <AgentActivityStrip />
         <QueuedMessages />
@@ -591,8 +775,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
             onDismiss={() => setClarification(null)}
           />
         )}
-        {createPortal(<EngineSheet open={showEngine} onClose={() => setShowEngine(false)} />, document.body)}
-        {createPortal(<ModelSwitcherSheet open={showModelSwitcher} onClose={() => setShowModelSwitcher(false)} onOpenEngine={() => setShowEngine(true)} />, document.body)}
+        {createPortal(<ModelSwitcherSheet open={showModelSwitcher} onClose={() => setShowModelSwitcher(false)} />, document.body)}
         {createPortal(<ToolsCatalogSheet
           open={showToolsCatalog}
           onClose={() => setShowToolsCatalog(false)}
@@ -612,10 +795,10 @@ const [dockOpen, setDockOpen] = React.useState(false);
         </AnimatePresence>
         </div>
         {isDragging && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none" style={{ background: 'rgba(168,85,247,0.08)' }}>
-            <div className="flex flex-col items-center gap-2 px-6 py-4 rounded-2xl backdrop-blur-sm" style={{ background: 'rgba(26,26,36,0.9)', border: '2px dashed rgba(168,85,247,0.4)' }}>
-              <Paperclip size={20} style={{ color: '#a855f7' }} />
-              <p className="text-xs font-medium" style={{ color: '#a855f7' }}>Drop files here</p>
+          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none" style={{ background: 'var(--gia-surface-2)' }}>
+            <div className="flex flex-col items-center gap-2 px-6 py-4 rounded-md" style={{ background: 'var(--gia-surface)', border: '2px dashed var(--gia-border-2)' }}>
+              <Paperclip size={20} style={{ color: 'var(--gia-text)' }} />
+              <p className="text-xs font-medium" style={{ color: 'var(--gia-text)' }}>Drop files here</p>
             </div>
           </div>
         )}
@@ -637,13 +820,13 @@ const [dockOpen, setDockOpen] = React.useState(false);
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             className="absolute left-4 right-4 bottom-28 z-20"
           >
-            <div className="flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl"
-              style={{ background: '#1a1a24', border: '1px solid var(--gia-overlay-2)', backdropFilter: 'blur(20px)' }}>
+            <div className="flex items-center gap-3 px-4 py-3 rounded-md shadow-2xl"
+              style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border-2)' }}>
               <Trash2 size={13} style={{ color: '#f87171' }} />
               <span className="text-xs flex-1" style={{ color: 'var(--gia-text)' }}>Message deleted</span>
               <button onClick={handleUndoDelete}
-                className="text-xs font-semibold flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors"
-                style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                className="text-xs font-semibold flex items-center gap-1 px-3 py-1.5 rounded-md transition-colors"
+                style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}>
                 <Undo2 size={11} /> Undo
               </button>
             </div>
@@ -651,7 +834,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
         )}
       </AnimatePresence>
 
-        <div ref={inputContainerRef} onPaste={handlePaste} className="px-3 pb-4 pt-2 absolute bottom-3 left-3 right-3 z-10 backdrop-blur-2xl rounded-2xl border shadow-2xl transition-all duration-300" style={{ background: messages.length === 0 ? 'rgba(10,10,15,0.7)' : 'rgba(10,10,15,0.2)', borderColor: messages.length === 0 ? 'var(--gia-overlay)' : 'var(--gia-overlay)' }}>
+        <div ref={inputContainerRef} onPaste={handlePaste} className="px-3 pb-4 pt-2 absolute bottom-3 left-3 right-3 z-10 rounded-xl border shadow-lg transition-all duration-300" style={{ background: 'var(--gia-surface)', borderColor: 'var(--gia-border)' }}>
         {showAgentMention && (
           <AgentMentionPicker
             query={agentMentionQuery}
@@ -663,8 +846,8 @@ const [dockOpen, setDockOpen] = React.useState(false);
 
         {processingFiles && (
           <div className="flex items-center gap-2 mb-2.5 px-1">
-            <Loader2 size={12} className="text-amber-400 animate-spin shrink-0" />
-            <span className="text-[10px] text-zinc-400 truncate">
+            <Loader2 size={12} className="animate-spin shrink-0" style={{ color: 'var(--gia-muted)' }} />
+            <span className="text-[10px] truncate" style={{ color: 'var(--gia-muted)' }}>
               Processing {processingFileName}...
             </span>
           </div>
@@ -673,16 +856,22 @@ const [dockOpen, setDockOpen] = React.useState(false);
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2.5">
             {attachments.map((att, idx) => (
-              <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] bg-zinc-800 border border-zinc-700/50">
+              <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px]" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border)' }}>
                 {att.preview ? (
-                  <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0">
+                  <div className="relative w-8 h-8 rounded-md overflow-hidden shrink-0">
                     <img src={att.preview} alt={att.name} className="w-full h-full object-cover" />
                   </div>
                 ) : (
-                  <Paperclip size={10} className="text-zinc-400 shrink-0" />
+                  <Paperclip size={10} className="shrink-0" style={{ color: 'var(--gia-muted)' }} />
                 )}
-                <span className="text-zinc-300 truncate max-w-[100px]">{att.name}</span>
-                <button onClick={() => removeAttachment(idx)} className="text-zinc-600 hover:text-rose-400 ml-0.5">
+                <span className="truncate max-w-[100px]" style={{ color: 'var(--gia-text)' }}>{att.name}</span>
+                <button
+                  onClick={() => removeAttachment(idx)}
+                  className="ml-0.5 transition-colors"
+                  style={{ color: 'var(--gia-muted-2)' }}
+                  aria-label={`Remove ${att.name}`}
+                  title="Remove attachment"
+                >
                   <X size={10} />
                 </button>
               </div>
@@ -695,19 +884,20 @@ const [dockOpen, setDockOpen] = React.useState(false);
             onClick={() => setShowTools(true)}
             className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors tap-feedback"
             style={{ background: 'var(--gia-surface)', border: '1px solid var(--gia-border)', color: 'var(--gia-muted)' }}
+            aria-label="Tools"
             title="Tools"
           >
             <SlidersHorizontal size={14} />
           </button>
 
           {buildMode && sandboxEnvReady === false && (
-            <button type="button" onClick={() => useGiaStore.getState().setModule('settings')} className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-lg self-start transition-colors tap-feedback" style={{ background: 'rgba(249,115,22,0.12)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)' }}>
+            <button type="button" onClick={() => useGiaStore.getState().setModule('settings')} className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-md self-start transition-colors tap-feedback" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}>
               <Terminal size={11} />
               Set up sandbox to preview apps
             </button>
           )}
           {activeToolCount > 0 && (
-            <span className="text-[10px] shrink-0 px-2 py-1 rounded-full" style={{ background: 'rgba(168,85,247,0.12)', color: '#c084fc' }}>
+            <span className="text-[10px] shrink-0 px-2 py-1 rounded-sm" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-muted)', border: '1px solid var(--gia-border)' }}>
               {activeToolCount} active
             </span>
           )}
@@ -715,68 +905,16 @@ const [dockOpen, setDockOpen] = React.useState(false);
             <button
               onClick={() => setShowSkillPicker(true)}
               title={`Active skill: ${activeSkill.name}`}
-              className="flex items-center gap-1 text-[10px] shrink-0 px-2 py-1 rounded-full tap-feedback transition-all"
-              style={{ background: 'rgba(168,85,247,0.12)', color: '#c4b5fd', border: '1px solid rgba(168,85,247,0.3)' }}
+              className="flex items-center gap-1 text-[10px] shrink-0 px-2 py-1 rounded-sm tap-feedback transition-colors"
+              style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}
             >
               <Sparkles size={10} />
               <span className="font-semibold max-w-[80px] truncate">{activeSkill.name}</span>
             </button>
           )}
-          <ComposerToolsSheet
-            open={showTools}
-            onClose={() => setShowTools(false)}
-            items={toolItems}
-            onToggle={(key) => {
-              if (key === 'listen') { openVoice(); return; }
-              toggleFeature(key as 'webSearch' | 'deepSearch' | 'extThinking' | 'handsOff' | 'listen' | 'vision' | 'translate');
-            }}
-            footer={
-              <>
-                {activeSkill && (
-                  <button
-                    onClick={() => { setShowTools(false); setShowSkillPicker(true); }}
-                    className="w-full flex items-center gap-3 px-3 py-3 text-left text-[13px] tap-feedback transition-colors active:bg-white/5"
-                    style={{ color: 'var(--gia-text)' }}
-                  >
-                    <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(168,85,247,0.15)', color: '#c4b5fd' }}>
-                      <Sparkles size={15} />
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <span className="block">Skill: <span className="font-semibold">{activeSkill.name}</span></span>
-                      <span className="block text-[10px]" style={{ color: 'var(--gia-muted-2)' }}>Tap to switch skills</span>
-                    </span>
-                    <ChevronRight size={14} style={{ color: 'var(--gia-muted-2)' }} />
-                  </button>
-                )}
-                <button
-                  onClick={() => { setShowTools(false); setShowToolsCatalog(true); }}
-                  className="w-full flex items-center gap-3 px-3 py-3 text-left text-[13px] tap-feedback transition-colors active:bg-white/5"
-                  style={{ color: 'var(--gia-text)' }}
-                >
-                  <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(168,85,247,0.15)', color: '#c4b5fd' }}>
-                    <Wrench size={15} />
-                  </span>
-                  <span className="flex-1">All Tools</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(168,85,247,0.12)', color: '#c084fc' }}>{giaTools.getAllTools().length}</span>
-                  <ChevronRight size={14} style={{ color: 'var(--gia-muted-2)' }} />
-                </button>
-                <button
-                  onClick={() => { setShowTools(false); useGiaStore.getState().setModule('settings'); }}
-                  className="w-full flex items-center gap-3 px-3 py-3 text-left text-[13px] tap-feedback transition-colors active:bg-white/5"
-                  style={{ color: 'var(--gia-text)' }}
-                >
-                  <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(148,163,184,0.15)', color: 'var(--gia-muted)' }}>
-                    <SettingsIcon size={15} />
-                  </span>
-                  <span className="flex-1">Settings</span>
-                  <ChevronRight size={14} style={{ color: 'var(--gia-muted-2)' }} />
-                </button>
-              </>
-            }
-          />
         </div>
 
-        <AmbientInput value={input} onChange={handleInputChange} onSubmit={handleSend} onStop={loading ? handleStop : undefined} isLoading={loading} onVoiceToggle={openVoice} isVoiceListening={voiceEnabled} placeholder={buildMode ? 'Describe the app. She scaffolds, runs it, and shows a preview.' : webSearch ? 'Ask. She searches, then answers with the source.' : handsOff ? 'She acts. Risky steps still stop for your yes.' : 'Tell her the outcome. She picks the tools.'} prefix={buildMode ? <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 font-medium shrink-0 mr-1"><Hammer size={10} />Build</span> : undefined} />
+        <AmbientInput value={input} onChange={handleInputChange} onSubmit={handleSend} onStop={loading ? handleStop : undefined} isLoading={loading} onVoiceToggle={openVoice} isVoiceListening={voiceEnabled} placeholder={buildMode ? 'Describe the app. She scaffolds, runs it, and shows a preview.' : webSearch ? 'Ask. She searches, then answers with the source.' : handsOff ? 'She acts. Risky steps still stop for your yes.' : 'Tell her the outcome. She picks the tools.'} prefix={buildMode ? <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-sm font-medium shrink-0 mr-1" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}><Hammer size={10} />Build</span> : undefined} />
       </div>
 
       <AnimatePresence>
@@ -857,13 +995,15 @@ const SearchActivityButton: React.FC = () => {
     <button
       onClick={() => setPanelOpen(!panelOpen)}
       className="p-1.5 rounded-lg tap-feedback shrink-0 relative"
-      style={{ color: panelOpen ? '#a855f7' : 'var(--gia-muted)' }}
+      style={{ color: panelOpen ? 'var(--gia-text)' : 'var(--gia-muted)' }}
+      aria-label={`Search activity (${total})`}
+      aria-pressed={panelOpen}
       title={`Search Activity (${total})`}
     >
       <Globe size={13} />
       <span
         className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full"
-        style={{ background: '#a855f7' }}
+        style={{ background: 'var(--gia-text)' }}
       />
     </button>
   );
@@ -872,10 +1012,10 @@ const SearchActivityButton: React.FC = () => {
 const BuildInlinePreview: React.FC<{ url: string; onOpenFull: () => void }> = ({ url, onOpenFull }) => {
   const [refreshKey, setRefreshKey] = React.useState(0);
   return (
-    <div className="mx-1 rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(249,115,22,0.3)', background: '#0a0a0a', boxShadow: '0 8px 30px rgba(0,0,0,0.35)' }}>
-      <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid rgba(249,115,22,0.2)' }}>
-        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#22c55e', boxShadow: '0 0 8px #22c55e' }} />
-        <span className="text-[10px] font-semibold uppercase tracking-wider shrink-0" style={{ color: '#f97316' }}>Live preview</span>
+    <div className="mx-1 rounded-xl overflow-hidden" style={{ border: '1px solid var(--gia-border)', background: 'var(--gia-surface)' }}>
+      <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: '1px solid var(--gia-border)' }}>
+        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--gia-success, #22c55e)' }} />
+        <span className="text-[10px] font-semibold uppercase tracking-wider shrink-0" style={{ color: 'var(--gia-text)' }}>Live preview</span>
         <span className="text-[10px] truncate flex-1 min-w-0" style={{ color: 'var(--gia-muted)' }}>{url}</span>
         <button
           onClick={() => setRefreshKey((k) => k + 1)}
@@ -889,7 +1029,7 @@ const BuildInlinePreview: React.FC<{ url: string; onOpenFull: () => void }> = ({
         <button
           onClick={onOpenFull}
           className="p-1.5 rounded-lg transition-colors hover:bg-white/10 active:bg-white/15 shrink-0"
-          style={{ color: '#f97316' }}
+          style={{ color: 'var(--gia-text)' }}
           aria-label="Open full preview"
           title="Open full preview"
         >

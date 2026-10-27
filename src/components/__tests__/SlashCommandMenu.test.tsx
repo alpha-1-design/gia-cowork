@@ -131,14 +131,14 @@ describe('Slash command autocomplete — selection', () => {
     expect(container.textContent).toContain('/help');
   });
 
-  it('dismisses the menu on Escape and clears the composer', () => {
+  it('dismisses the menu on Escape without clearing the composer', () => {
     const onChange = vi.fn();
     const onSubmit = vi.fn();
     const { input } = renderInput('/hel', onChange, onSubmit);
 
     fireEvent.keyDown(input, { key: 'Escape' });
 
-    expect(onChange).toHaveBeenCalledWith('');
+    expect(onChange).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 

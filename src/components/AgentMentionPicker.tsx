@@ -88,7 +88,8 @@ const AgentMentionPicker: React.FC<AgentMentionPickerProps> = ({ query, onSelect
                 <button
                   onClick={submitTask}
                   className="p-1.5 rounded-lg shrink-0"
-                  style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}
+                  style={{ background: 'var(--gia-accent)', color: 'var(--gia-accent-contrast)' }}
+                  aria-label="Confirm task"
                   title="Confirm task"
                 >
                   <Send size={12} />

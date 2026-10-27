@@ -7,8 +7,8 @@ import { useGiaStore } from '../../store/useGiaStore';
 /**
  * Two things are guarded here.
  *
- * First, that Obsidian Aurora really is the default — including for existing
- * installs, which is what the persist migration is for.
+ * First, that the clean dark theme really is the default, and that Obsidian
+ * Aurora remains available as an explicit choice.
  *
  * Second, and more subtly, that the palettes in this file still match
  * `globals.css`. They are duplicated on purpose (the build flow needs them as
@@ -35,9 +35,9 @@ function varValue(block: string, name: string): string {
 }
 
 describe('theme catalog', () => {
-  it('leads with Obsidian Aurora and defaults to it', () => {
-    expect(DESKTOP_THEMES[0].id).toBe('obsidian-aurora');
-    expect(DEFAULT_THEME).toBe('obsidian-aurora');
+  it('leads with the clean dark theme and defaults to it', () => {
+    expect(DESKTOP_THEMES[0].id).toBe('dark');
+    expect(DEFAULT_THEME).toBe('dark');
   });
 
   it('matches the store default', () => {
@@ -60,9 +60,9 @@ describe('theme catalog', () => {
   });
 
   it('falls back to the default rather than returning undefined', () => {
-    expect(getDesktopTheme('nonsense').id).toBe('obsidian-aurora');
-    expect(getDesktopTheme(null).id).toBe('obsidian-aurora');
-    expect(getDesktopTheme(undefined).id).toBe('obsidian-aurora');
+    expect(getDesktopTheme('nonsense').id).toBe('dark');
+    expect(getDesktopTheme(null).id).toBe('dark');
+    expect(getDesktopTheme(undefined).id).toBe('dark');
   });
 });
 

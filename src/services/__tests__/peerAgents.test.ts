@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   PEER_AGENTS,
   detectPeerAgents,
@@ -7,6 +7,7 @@ import {
   delegateToAgent,
   peerAgentPromptBlock,
   shellQuote,
+  setQuoteStyle,
   setShell,
   MAX_DELEGATE_OUTPUT,
   type ShellResult,
@@ -24,6 +25,7 @@ import {
 
 let calls: string[] = [];
 let respond: (cmd: string) => ShellResult;
+let restoreQuoteStyle: () => void;
 
 const shell = vi.fn(async (cmd: string): Promise<ShellResult> => {
   calls.push(cmd);
@@ -31,10 +33,18 @@ const shell = vi.fn(async (cmd: string): Promise<ShellResult> => {
 });
 
 beforeEach(() => {
+  // These assertions describe POSIX quoting. Pin the dialect so the suite
+  // behaves the same on a Windows host instead of silently switching to the
+  // PowerShell idiom.
+  restoreQuoteStyle = setQuoteStyle('posix');
   calls = [];
   respond = () => ({ output: '', exitCode: 0 });
   shell.mockClear();
   setShell(shell);
+});
+
+afterEach(() => {
+  restoreQuoteStyle();
 });
 
 const claude = () => PEER_AGENTS.find(a => a.id === 'claude')!;

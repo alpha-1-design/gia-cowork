@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useGiaStore } from '../store/useGiaStore';
+import { useGiaStore, type Skill } from '../store/useGiaStore';
 import { useAgentStore } from '../store/useAgentStore';
 import { STUDIO_AGENTS, syncStudioSkills } from '../services/studio/devAgents';
 

@@ -8,7 +8,7 @@ on:
 
 jobs:
   frontend:
-    name: Typecheck + Frontend Build
+    name: Typecheck + Test + Frontend Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +19,8 @@ jobs:
       - run: npm ci --legacy-peer-deps
       - name: Typecheck
         run: npx tsc -b --noEmit
+      - name: Test
+        run: npm test
       - name: Build
         run: npm run build
 

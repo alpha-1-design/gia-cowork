@@ -43,6 +43,7 @@ export interface GiaConfig {
     name: string;
     bio: string;
     goals: string;
+    avatarId?: string;
     customInstructions: string;
   };
   providers: Record<string, {
@@ -100,6 +101,7 @@ export function exportConfig(): GiaConfig {
       name: gia.userProfile.name,
       bio: gia.userProfile.bio,
       goals: gia.userProfile.goals,
+      avatarId: gia.userProfile.avatarId,
       customInstructions: gia.customInstructions,
     },
     providers,
@@ -206,6 +208,7 @@ export function applyConfig(doc: GiaConfig): void {
       name: u.name ?? profile.name,
       bio: u.bio ?? profile.bio,
       goals: u.goals ?? profile.goals,
+      avatarId: u.avatarId ?? profile.avatarId,
     });
     if (u.customInstructions !== undefined) gia.setCustomInstructions(u.customInstructions);
   }

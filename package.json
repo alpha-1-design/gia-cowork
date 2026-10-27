@@ -71,7 +71,7 @@
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^6.0.2",
     "esbuild": "^0.28.0",
-    "happy-dom": "^20.11.1",
+    "happy-dom": "20.11.6",
     "tailwindcss": "^4.1.6",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.24.1",
@@ -80,8 +80,8 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "onnxruntime-node@1.24.3": true,
-    "protobufjs@7.6.5": true,
+    "onnxruntime-node@1.30.0": true,
+    "protobufjs@7.6.6": true,
     "sharp@0.34.5": true
   },
   "overrides": {
