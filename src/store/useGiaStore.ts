@@ -266,18 +266,40 @@ function getPathToMessage(nodes: MessageNode[], msgId: string): MessageNode[] {
 function clonePathAsNewBranch(nodes: MessageNode[], path: MessageNode[], newBranchId: string): MessageNode[] {
   if (!Array.isArray(nodes) || !Array.isArray(path) || path.length === 0) return [];
   
-  // Clone the path, each node gets the new branchId
+  // Clone the path, each node gets a fresh id and the new branchId. Reusing the
+  // original ids made the clone indistinguishable from the source path: a
+  // lookup could land in the wrong branch, and deleting/updating a message
+  // could hit both copies.
   const clonedPath = path.map(p => ({
-    message: { ...p.message, branchId: newBranchId },
+    message: { ...p.message, id: genId(), branchId: newBranchId, parentId: undefined as string | undefined },
     children: [] as MessageNode[]
   }));
   
-  // Link them as parent-child
+  // Link them as parent-child, and keep parentId in sync with the real tree.
   for (let i = clonedPath.length - 1; i > 0; i--) {
+    clonedPath[i].message.parentId = clonedPath[i - 1].message.id;
     clonedPath[i - 1].children = [clonedPath[i]];
   }
   
   return [clonedPath[0]];
+}
+
+/**
+ * Remove a message and everything below it.
+ *
+ * Deleting only the matching node left its children behind as orphans: they
+ * still rendered in the branch but had no parent to attach the next turn to.
+ * Editing a turn wants the same shape — the edited message and the answer it
+ * produced both go, so the replacement starts from the same parent.
+ */
+function removeMessageFromTree(nodes: MessageNode[], msgId: string): MessageNode[] {
+  if (!Array.isArray(nodes)) return [];
+  return nodes
+    .filter(node => node && node.message && node.message.id !== msgId)
+    .map(node => ({
+      ...node,
+      children: removeMessageFromTree(node.children || [], msgId),
+    }));
 }
 
 function flattenBranch(nodes: MessageNode[], branchId: string): Message[] {
@@ -301,6 +323,56 @@ function flattenBranch(nodes: MessageNode[], branchId: string): Message[] {
   }
   
   return result;
+}
+
+/**
+ * Repair the flat trees written before `addMessage` learned to parent.
+ *
+ * Those sessions stored every turn as a top-level root. Reading them still
+ * worked, but branching from an old turn cloned only that one message because
+ * there was no path back to the root. Chain the orphan roots per branch and
+ * fill in the parent links the tree should have had.
+ */
+function normalizeSessionTree(nodes: MessageNode[]): MessageNode[] {
+  if (!Array.isArray(nodes)) return [];
+
+  const normalized = nodes.map(node => ({
+    ...node,
+    message: { ...node.message },
+    children: normalizeSessionTree(node.children || []),
+  }));
+
+  for (const node of normalized) {
+    for (const child of node.children) {
+      child.message.parentId = node.message.id;
+    }
+  }
+
+  const byBranch = new Map<string, MessageNode[]>();
+  const roots: MessageNode[] = [];
+  for (const node of normalized) {
+    const branchId = node.message.branchId;
+    if (!branchId) {
+      roots.push(node);
+      continue;
+    }
+    const list = byBranch.get(branchId) || [];
+    list.push(node);
+    byBranch.set(branchId, list);
+  }
+
+  for (const list of byBranch.values()) {
+    let current = list[0];
+    for (let i = 1; i < list.length; i++) {
+      const next = list[i];
+      next.message.parentId = current.message.id;
+      current.children = [...current.children, next];
+      current = next;
+    }
+    roots.push(list[0]);
+  }
+
+  return roots;
 }
 
 export interface ScheduledTask {
@@ -538,6 +610,8 @@ interface GiaState {
   disableWorktree: (sessionId: string, opts?: { force?: boolean }) => Promise<boolean>;
   setActiveSession: (id: string) => void;
   addMessage: (sessionId: string, msg: Message) => void;
+  /** Remove a message and its descendants, so no orphaned turns are left behind. */
+  deleteMessage: (sessionId: string, msgId: string) => void;
   updateMessage: (sessionId: string, msgId: string, content: string, thoughts?: string) => void;
   setMessageThinking: (sessionId: string, msgId: string, thinking: boolean) => void;
   updateMessageSegments: (sessionId: string, msgId: string, segments: MessageSegment[]) => void;
@@ -1004,9 +1078,27 @@ export const useGiaStore = create<GiaState>()(
 
       addMessage: (sessionId, msg) =>
         set((s) => ({
+          sessions: s.sessions.map((sess) => {
+            if (sess.id !== sessionId) return sess;
+            // Chain new messages to the active branch's leaf. Callers should
+            // not have to remember the previous message id: forgetting it was
+            // why the tree stayed flat and branching lost the earlier turns.
+            const branchMessages = flattenBranch(sess.messages, sess.currentBranchId);
+            const parentId = msg.parentId || branchMessages[branchMessages.length - 1]?.id;
+            const nextMessage = parentId ? { ...msg, parentId } : msg;
+            return {
+              ...sess,
+              messages: addMessageToTree(sess.messages, nextMessage, sess.currentBranchId),
+              updatedAt: Date.now(),
+            };
+          }),
+        })),
+
+      deleteMessage: (sessionId, msgId) =>
+        set((s) => ({
           sessions: s.sessions.map((sess) =>
             sess.id === sessionId
-              ? { ...sess, messages: addMessageToTree(sess.messages, msg, sess.currentBranchId), updatedAt: Date.now() }
+              ? { ...sess, messages: removeMessageFromTree(sess.messages, msgId), updatedAt: Date.now() }
               : sess
           ),
         })),
@@ -1138,15 +1230,15 @@ export const useGiaStore = create<GiaState>()(
         // Clone path as new branch
         const newTree = clonePathAsNewBranch(orig.messages, path, branchId);
         
-        // Get existing root messages that are NOT in this path, keeping them too
-        const otherRoots = orig.messages.filter(m => !path.find(p => p.message.id === m.message.id));
-        
+        // Keep the original tree intact. The old code dropped every root that
+        // appeared in the cloned path, which deleted the original branch's
+        // continuation and any sibling branches with it.
         set((s) => ({
           sessions: s.sessions.map((sess) =>
             sess.id === sessionId
               ? {
                   ...sess,
-                  messages: [...newTree, ...otherRoots],
+                  messages: [...orig.messages, ...newTree],
                   currentBranchId: branchId,
                   updatedAt: Date.now(),
                   branches: {
@@ -1306,7 +1398,7 @@ export const useGiaStore = create<GiaState>()(
     }),
     {
       name: 'gia-store-v3',
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => idbStorage),
       migrate: (persistedState: unknown, version: number) => {
         // v4 no longer rewrites `dark` to Obsidian Aurora. Dark is the clean
@@ -1340,6 +1432,24 @@ export const useGiaStore = create<GiaState>()(
                   s.currentBranchId = branchId;
                   s.branches = s.branches || { [branchId]: { id: branchId, name: 'Main', createdAt: Date.now() } };
                 }
+              }
+              return s;
+            });
+          }
+        }
+        // v5 repairs the flat message trees that predate automatic parent
+        // links. Without this, branching from an old turn still cloned only
+        // that turn because there was no root-to-message path to copy.
+        if (version < 5 && persistedState && typeof persistedState === 'object') {
+          const state = persistedState as Record<string, unknown>;
+          for (const key of ['sessions', 'archivedSessions'] as const) {
+            const sessions = state[key];
+            if (!Array.isArray(sessions)) continue;
+            state[key] = sessions.map((sess: unknown) => {
+              if (!sess || typeof sess !== 'object') return sess;
+              const s = sess as Record<string, unknown>;
+              if (Array.isArray(s.messages)) {
+                s.messages = normalizeSessionTree(s.messages as MessageNode[]);
               }
               return s;
             });

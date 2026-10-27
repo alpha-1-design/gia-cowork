@@ -57,7 +57,7 @@ export function useChatState() {
   const genRef = useRef(gen);
   genRef.current = gen;
   const msgOps = useChatMessages();
-  const editingAssistIdRef = useRef<string | null>(null);
+  const editingMessageIdRef = useRef<string | null>(null);
 
   const {
     sessions,
@@ -455,22 +455,26 @@ export function useChatState() {
       return;
     }
 
-    const editAsstId = editingAssistIdRef.current;
-    if (editAsstId) {
-      editingAssistIdRef.current = null;
+    const editMsgId = editingMessageIdRef.current;
+    if (editMsgId) {
+      editingMessageIdRef.current = null;
       const state = useGiaStore.getState();
-      const msgs = state.getActiveSession()?.messages ?? [];
-      const asstIdx = msgs.findIndex(m => m.message.id === editAsstId);
-      if (asstIdx > 0) {
-        const userMsgId = msgs[asstIdx - 1].message.id;
-        const ids = [userMsgId, editAsstId];
-        useGiaStore.setState({
-          sessions: state.sessions.map(s =>
-            s.id === state.activeSessionId
-              ? { ...s, messages: s.messages.filter(m => !ids.includes(m.message.id)), updatedAt: Date.now() }
-              : s
-          ),
-        });
+      const session = state.getActiveSession();
+      if (session && state.activeSessionId) {
+        // `messages` is a tree, not a flat list. Read the active branch so a
+        // nested message is found, then remove the right turn:
+        //   - editing a user message removes it and the answer it produced
+        //   - editing an assistant message removes its parent user turn and
+        //     the assistant turn, then resends that user text
+        const msgs = state.getBranchMessages(session.id, session.currentBranchId);
+        const msgIndex = msgs.findIndex(m => m.id === editMsgId);
+        if (msgIndex >= 0) {
+          const target = msgs[msgIndex];
+          const removeId = target.role === 'user'
+            ? target.id
+            : target.parentId || (msgIndex > 0 ? msgs[msgIndex - 1].id : target.id);
+          state.deleteMessage(session.id, removeId);
+        }
       }
     }
 
@@ -504,7 +508,7 @@ export function useChatState() {
     // user typed. Queueing is what every competing agent does, and it is what
     // lets someone think out loud while the agent is still working.
     const state = useGiaStore.getState();
-    if (state.generationState.active) {
+    if (gen.loading || state.generationState.active) {
       state.enqueueMessage({
         id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         sessionId: state.activeSessionId ?? '',
@@ -545,8 +549,9 @@ export function useChatState() {
   }, [generationActive, queuedCount, activeSessionId]);
 
   const handleEditResend = useCallback((msgId: string) => {
-    editingAssistIdRef.current = msgId;
-    msgOps.handleEditResend(msgId, setInput);
+    if (msgOps.handleEditResend(msgId, setInput)) {
+      editingMessageIdRef.current = msgId;
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [msgOps.handleEditResend]);
 

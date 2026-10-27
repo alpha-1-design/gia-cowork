@@ -227,6 +227,16 @@ describe('useGiaStore', () => {
       expect(msgs[0].children[0].message.content).toBe('hello!');
     });
 
+    it('chains a message to the active branch leaf when parentId is omitted', () => {
+      const sid = useGiaStore.getState().createSession();
+      useGiaStore.getState().addMessage(sid, userMsg({ id: 'm1', content: 'hi' }));
+      useGiaStore.getState().addMessage(sid, asstMsg({ id: 'm2', content: 'hello!' }));
+      const msgs = useGiaStore.getState().sessions[0].messages;
+      expect(msgs).toHaveLength(1);
+      expect(msgs[0].children).toHaveLength(1);
+      expect(msgs[0].children[0].message.parentId).toBe('m1');
+    });
+
     it('updateMessage updates content and thoughts', () => {
       const sid = useGiaStore.getState().createSession();
       useGiaStore.getState().addMessage(sid, asstMsg({ id: 'm1', content: '', thinking: true }));
@@ -281,6 +291,24 @@ describe('useGiaStore', () => {
       expect(session.branches?.[branchId]?.name).toBe('Experiment');
     });
 
+    it('addBranch keeps the original branch and clones the full path with new ids', () => {
+      const sid = useGiaStore.getState().createSession();
+      const originalBranchId = useGiaStore.getState().sessions[0].currentBranchId;
+      useGiaStore.getState().addMessage(sid, userMsg({ id: 'm1', content: 'one' }));
+      useGiaStore.getState().addMessage(sid, asstMsg({ id: 'm2', content: 'two' }));
+      useGiaStore.getState().addMessage(sid, userMsg({ id: 'm3', content: 'three' }));
+
+      const branchId = useGiaStore.getState().addBranch(sid, 'm2', 'Experiment');
+
+      const original = useGiaStore.getState().getBranchMessages(sid, originalBranchId);
+      expect(original.map(m => m.id)).toEqual(['m1', 'm2', 'm3']);
+
+      const cloned = useGiaStore.getState().getBranchMessages(sid, branchId);
+      expect(cloned.map(m => m.content)).toEqual(['one', 'two']);
+      expect(cloned[0].id).not.toBe('m1');
+      expect(cloned[1].parentId).toBe(cloned[0].id);
+    });
+
     it('renameBranch sets branch name', () => {
       const sid = useGiaStore.getState().createSession();
       useGiaStore.getState().addMessage(sid, userMsg({ id: 'm1' }));
@@ -325,6 +353,21 @@ describe('useGiaStore', () => {
       const newSess = useGiaStore.getState().sessions.find(s => s.id === newId);
       expect(newSess).toBeDefined();
       expect(newSess!.title).toContain('Branch:');
+    });
+
+    it('forkSession clones the full path from the root to the message', () => {
+      const sid = useGiaStore.getState().createSession();
+      useGiaStore.getState().addMessage(sid, userMsg({ id: 'm1', content: 'one' }));
+      useGiaStore.getState().addMessage(sid, asstMsg({ id: 'm2', content: 'two' }));
+      useGiaStore.getState().addMessage(sid, userMsg({ id: 'm3', content: 'three' }));
+
+      const newId = useGiaStore.getState().forkSession(sid, 'm2');
+      const newSess = useGiaStore.getState().sessions.find(s => s.id === newId)!;
+      const cloned = useGiaStore.getState().getBranchMessages(newId, newSess.currentBranchId);
+
+      expect(cloned.map(m => m.content)).toEqual(['one', 'two']);
+      expect(cloned[0].id).not.toBe('m1');
+      expect(cloned[1].parentId).toBe(cloned[0].id);
     });
   });
 

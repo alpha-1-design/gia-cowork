@@ -16,7 +16,11 @@ interface WorkLogStep {
   status: 'pending' | 'running' | 'done' | 'error';
   detail?: string;
   toolId?: string;
-  startedAt: number;
+  /**
+   * Only set when a real start time is known. Parsed thought lines carry no
+   * timestamps, so inventing one here would display a fabricated duration.
+   */
+  startedAt?: number;
   endedAt?: number;
   subSteps?: string[];
 }
@@ -158,8 +162,6 @@ function buildStepsFromThoughts(thoughts: string, currentTool?: string | null): 
         status: isRunning ? 'running' : 'done',
         detail: tool.args,
         toolId: tool.toolId,
-        startedAt: Date.now() - (steps.length * 200),
-        endedAt: isRunning ? undefined : Date.now() - (steps.length * 100),
       });
       continue;
     }
@@ -167,7 +169,6 @@ function buildStepsFromThoughts(thoughts: string, currentTool?: string | null): 
       const lastStep = steps[steps.length - 1];
       if (lastStep && lastStep.status === 'running') {
         lastStep.status = line.includes('Success') ? 'done' : 'error';
-        lastStep.endedAt = Date.now();
         lastStep.detail = line.length > 120 ? line.slice(0, 117) + '…' : line;
       }
       continue;
@@ -185,7 +186,6 @@ function buildStepsFromThoughts(thoughts: string, currentTool?: string | null): 
       const lastStep = steps[steps.length - 1];
       if (lastStep && lastStep.status === 'running') {
         lastStep.status = 'error';
-        lastStep.endedAt = Date.now();
       }
       continue;
     }
@@ -202,7 +202,6 @@ function buildStepsFromThoughts(thoughts: string, currentTool?: string | null): 
         color: meta.color,
         status: 'running',
         toolId: currentTool,
-        startedAt: Date.now(),
       });
     }
   }
@@ -374,9 +373,11 @@ export const WorkLog: React.FC<WorkLogProps> = ({
                             {step.detail}
                           </span>
                         )}
-                        <span className="ml-auto shrink-0">
-                          <ElapsedTimer startedAt={step.startedAt} endedAt={step.endedAt} />
-                        </span>
+                        {step.startedAt !== undefined && (
+                          <span className="ml-auto shrink-0">
+                            <ElapsedTimer startedAt={step.startedAt} endedAt={step.endedAt} />
+                          </span>
+                        )}
                       </div>
 
                       {/* Sub-steps */}

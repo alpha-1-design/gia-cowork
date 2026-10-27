@@ -43,3 +43,32 @@ describe('AmbientInput — paste should never auto-send', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('AmbientInput — queue while GIA is working', () => {
+  it('keeps the composer enabled and queues on Enter', () => {
+    const onSubmit = vi.fn();
+    const { getByPlaceholderText } = render(
+      <AmbientInput value="next task" onChange={() => {}} onSubmit={onSubmit} isLoading placeholder="Message GIA…" />,
+    );
+    const input = getByPlaceholderText('Type to queue a follow-up…');
+    expect(input).not.toBeDisabled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('turns the action into Queue when text is present and Stop when it is empty', () => {
+    const onSubmit = vi.fn();
+    const onStop = vi.fn();
+    const { getByLabelText, rerender } = render(
+      <AmbientInput value="next task" onChange={() => {}} onSubmit={onSubmit} onStop={onStop} isLoading placeholder="Message GIA…" />,
+    );
+    fireEvent.click(getByLabelText('Queue message'));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <AmbientInput value="" onChange={() => {}} onSubmit={onSubmit} onStop={onStop} isLoading placeholder="Message GIA…" />,
+    );
+    fireEvent.click(getByLabelText('Stop generating'));
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+});

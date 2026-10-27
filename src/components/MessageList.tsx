@@ -149,6 +149,22 @@ const MessageList: React.FC<MessageListProps> = ({
   const [fullScreenMsgId, setFullScreenMsgId] = useState<string | null>(null);
   const reactions = useGiaStore(s => s.reactions);
   const consoleProtocols = useProtocolStore(s => s.consoleProtocols);
+
+  // `all` is a real global flag, not a message id. Per-message toggles expand
+  // it into the explicit set first, so one message can still be closed while
+  // the rest stay open.
+  const isThoughtsOpen = (id: string) => showThoughts.has('all') || showThoughts.has(id);
+  const toggleThoughts = (id: string) => setShowThoughts(prev => {
+    const next = new Set(prev);
+    if (next.has('all')) {
+      next.delete('all');
+      for (const m of messages) next.add(m.id);
+    }
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+
   return (
     <>
       {loading && messages.length === 0 && (
@@ -203,13 +219,8 @@ const MessageList: React.FC<MessageListProps> = ({
                     <WorkLog
                       thoughts={liveThoughts[msg.id] || msg.thoughts || ''}
                       isLive={!!liveThoughts[msg.id]}
-                      isExpanded={showThoughts.has(msg.id)}
-                      onToggle={() => setShowThoughts(prev => {
-                          const next = new Set(prev);
-                          if (next.has(msg.id)) next.delete(msg.id);
-                          else next.add(msg.id);
-                          return next;
-                        })}
+                      isExpanded={isThoughtsOpen(msg.id)}
+                      onToggle={() => toggleThoughts(msg.id)}
                       currentTool={currentTool}
                       thinkingPhase={thinkingPhase}
                       startTime={msg.timestamp}
@@ -266,13 +277,8 @@ const MessageList: React.FC<MessageListProps> = ({
                         <WorkLog
                           thoughts={liveThoughts[msg.id] || msg.thoughts || ''}
                           isLive={!!liveThoughts[msg.id]}
-                          isExpanded={showThoughts.has(msg.id)}
-                          onToggle={() => setShowThoughts(prev => {
-                            const next = new Set(prev);
-                            if (next.has(msg.id)) next.delete(msg.id);
-                            else next.add(msg.id);
-                            return next;
-                          })}
+                          isExpanded={isThoughtsOpen(msg.id)}
+                          onToggle={() => toggleThoughts(msg.id)}
                           currentTool={currentTool}
                           thinkingPhase={thinkingPhase}
                           startTime={msg.timestamp}
@@ -297,32 +303,22 @@ const MessageList: React.FC<MessageListProps> = ({
                         background: 'var(--gia-surface-2)',
                       }}>
                         <button
-                          onClick={() => setShowThoughts(prev => {
-                            const next = new Set(prev);
-                            if (next.has(msg.id)) next.delete(msg.id);
-                            else next.add(msg.id);
-                            return next;
-                          })}
+                          onClick={() => toggleThoughts(msg.id)}
                           className="w-full flex items-center gap-2 px-3 py-2 text-left hover:opacity-80 transition-opacity"
                           style={{ color: 'var(--gia-text)' }}
                         >
                           <Brain size={12} />
                           <span className="text-[11px] font-medium flex-1">
-                            {showThoughts.has(msg.id) ? 'Hide' : 'Show'} reasoning ({(liveThoughts[msg.id] || msg.thoughts || '').split(' ').length} words)
+                            {isThoughtsOpen(msg.id) ? 'Hide' : 'Show'} reasoning ({(liveThoughts[msg.id] || msg.thoughts || '').split(' ').length} words)
                           </span>
-                          {showThoughts.has(msg.id) ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                          {isThoughtsOpen(msg.id) ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                         </button>
                         <ReasoningChain
                           messageId={msg.id}
                           thoughts={liveThoughts[msg.id] || msg.thoughts || ''}
                           isLive={!!liveThoughts[msg.id]}
-                          isExpanded={showThoughts.has(msg.id)}
-                          onToggle={() => setShowThoughts(prev => {
-                            const next = new Set(prev);
-                            if (next.has(msg.id)) next.delete(msg.id);
-                            else next.add(msg.id);
-                            return next;
-                          })}
+                          isExpanded={isThoughtsOpen(msg.id)}
+                          onToggle={() => toggleThoughts(msg.id)}
                         />
                       </div>
                       ) : null;

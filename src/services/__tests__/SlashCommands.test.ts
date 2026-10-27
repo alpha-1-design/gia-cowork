@@ -209,7 +209,9 @@ describe('SlashCommands registry', () => {
     const copy = state.sessions.find(s => s.title.includes('(copy)'))!;
     expect(copy).toBeTruthy();
     expect(state.activeSessionId).toBe(copy.id);
-    expect(copy.messages).toHaveLength(2);
+    // Messages are a tree now, so the copied turns live on the active branch
+    // rather than as two top-level roots.
+    expect(state.getBranchMessages(copy.id, copy.currentBranchId)).toHaveLength(2);
   });
 
   it('deletes a session by index', () => {

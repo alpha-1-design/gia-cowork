@@ -548,6 +548,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
                     { icon: <Upload size={13} />, label: 'Files', onClick: () => { setShowFileManager(true); setShowMoreMenu(false); } },
                     { icon: <Brain size={13} />, label: 'Knowledge', onClick: () => { setShowKnowledge(true); setShowMoreMenu(false); } },
                     { icon: <Download size={13} />, label: 'Export chat', onClick: () => { exportChat(); setShowMoreMenu(false); } },
+                    { icon: <Eye size={13} />, label: 'Toggle thoughts', onClick: () => { setShowThoughts(v => v.size > 0 ? new Set() : new Set(['all'])); setShowMoreMenu(false); } },
                     { icon: <History size={13} />, label: 'Chat history', onClick: () => { setShowHistory(true); setShowMoreMenu(false); } },
                     { icon: <Paperclip size={13} />, label: 'Attach a file', onClick: () => { fileRef.current?.click(); setShowMoreMenu(false); } },
                     { icon: <ImageIcon size={13} />, label: 'Photo', onClick: () => { imgRef.current?.click(); setShowMoreMenu(false); } },

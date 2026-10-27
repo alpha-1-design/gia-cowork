@@ -17,7 +17,6 @@ import { crossDeviceMesh } from '../services/CrossDeviceMesh';
 import { skillAuthor } from './SkillAuthor';
 import { useProjectContextStore, getInjectedContext } from '../store/useProjectContextStore';
 import { buildBuilderPrompt } from './build/builderPrompt';
-import { getBuildStyle } from './build/giaThemes';
 import { thinkingPromptBlock } from './system/thinkingLevels';
 import { compliancePromptBlock } from './system/compliance';
 import { modePromptFor } from './system/modePrompts';
@@ -115,7 +114,7 @@ function peerAgentBlock(): string {
 }
 
 export const buildGiaSystem = (query?: string) => {
-    const { userProfile, activeSkillId, skills, customInstructions, pinnedMemories, handsOff, localTranslate } = useGiaStore.getState();
+    const { userProfile, activeSkillId, skills, customInstructions, pinnedMemories, handsOff, localTranslate, theme, buildStyleId } = useGiaStore.getState();
 const connectedSocials = socialManager.getPlatforms().filter(p => p.connected).map(p => `${p.name}${p.accountName ? ` (${p.accountName})` : ''}`);
 const connectedConnectors = connectorManager.getAll().filter(c => c.status === 'connected').map(c => `${c.name}`);
   const activeSkill = skills.find(s => s.id === activeSkillId);
@@ -894,7 +893,13 @@ When a skill matches, follow its specialized instructions precisely. The skill's
 ${localTranslate ? '- Local on-device translation is enabled. For translation requests, use the local ML model (m2m100) via the LocalAI service in the sandbox rather than a cloud API. It supports 100+ language pairs.' : ''}
 
 ${(() => {
-  const m = modePromptFor(currentMode);
+  // BUILD has no entry in modePrompts: its brief is assembled from the active
+  // skill, the chosen build style and the desktop theme. Calling
+  // modePromptFor('build') returned '' and silently dropped the entire
+  // master-builder checklist, including "finished means it runs".
+  const m = currentMode === 'build'
+    ? buildBuilderPrompt({ skill: activeSkill ?? null, themeId: theme, styleId: buildStyleId })
+    : modePromptFor(currentMode);
   return m ? `## Current mode: ${currentMode.toUpperCase()}\n${m}` : '';
 })()}
 

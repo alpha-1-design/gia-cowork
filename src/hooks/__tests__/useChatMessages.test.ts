@@ -26,12 +26,25 @@ const { useChatMessages } = await import('../useChatMessages');
 describe('useChatMessages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const flatMessages = [
+      { id: 'm1', role: 'user', content: 'hi', timestamp: 1000 },
+      { id: 'm2', role: 'assistant', content: 'hello', timestamp: 2000, parentId: 'm1' },
+    ];
     storeState = {
-      sessions: [{ id: 'sess-1', title: 'Test', messages: [{ message: { id: 'm1', role: 'user', content: 'hi', timestamp: 1000 }, children: [] }, { message: { id: 'm2', role: 'assistant', content: 'hello', timestamp: 2000 }, children: [] }], createdAt: 100, updatedAt: 100 }],
+      sessions: [{
+        id: 'sess-1',
+        title: 'Test',
+        messages: [{ message: flatMessages[0], children: [{ message: flatMessages[1], children: [] }] }],
+        currentBranchId: 'b1',
+        createdAt: 100,
+        updatedAt: 100,
+      }],
       activeSessionId: 'sess-1',
       addNotification: mockAddNotification,
       forkSession: vi.fn(),
       addBranch: vi.fn(),
+      deleteMessage: vi.fn(),
+      getBranchMessages: vi.fn(() => flatMessages),
       getActiveSession: vi.fn(() => (storeState.sessions as Array<{ id: string; messages: Array<{ id: string; role: string; content: string }> }>)[0]),
     };
   });
@@ -53,6 +66,28 @@ describe('useChatMessages', () => {
     const { result } = renderHook(() => useChatMessages());
     act(() => result.current.handleCreateBranch('m1'));
     expect(storeState.addBranch).toHaveBeenCalledWith('sess-1', 'm1');
+  });
+
+  it('handleEditResend finds a nested message in the active branch', () => {
+    const { result } = renderHook(() => useChatMessages());
+    const setInput = vi.fn();
+    let handled = false;
+    act(() => {
+      handled = result.current.handleEditResend('m2', setInput);
+    });
+    expect(handled).toBe(true);
+    expect(setInput).toHaveBeenCalledWith('hi');
+  });
+
+  it('handleEditResend returns false when the message is not in the branch', () => {
+    const { result } = renderHook(() => useChatMessages());
+    const setInput = vi.fn();
+    let handled = true;
+    act(() => {
+      handled = result.current.handleEditResend('missing', setInput);
+    });
+    expect(handled).toBe(false);
+    expect(setInput).not.toHaveBeenCalled();
   });
 
   it('handleDeleteWithUndo removes message and stores backup', () => {

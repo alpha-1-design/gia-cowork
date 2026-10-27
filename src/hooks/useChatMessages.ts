@@ -14,13 +14,10 @@ export function useChatMessages() {
     if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
     const msgs = state.getActiveSession()?.messages ?? [];
     const backup = [...msgs];
-    useGiaStore.setState({
-      sessions: state.sessions.map(s =>
-        s.id === state.activeSessionId
-          ? { ...s, messages: s.messages.filter(m => m.message.id !== msgId), updatedAt: Date.now() }
-          : s
-      ),
-    });
+    // Remove the whole subtree. A message's answer belongs to it; deleting the
+    // question while leaving the answer behind is how a thread ends up with an
+    // orphaned assistant turn.
+    state.deleteMessage(state.activeSessionId, msgId);
     setUndoMsg({ id: msgId, sessionId: state.activeSessionId, backup });
     undoTimeoutRef.current = setTimeout(() => {
       setUndoMsg(null);
@@ -56,15 +53,22 @@ export function useChatMessages() {
 
   const handleEditResend = useCallback((msgId: string, setInput: (v: string) => void) => {
     const state = useGiaStore.getState();
-    const currMsgs = state.getActiveSession()?.messages ?? [];
-    const msgIndex = currMsgs.findIndex(m => m.message.id === msgId);
-    if (msgIndex < 0 || !state.activeSessionId) return;
-    if (currMsgs[msgIndex].message.role === 'user') {
-      setInput(currMsgs[msgIndex].message.content);
+    const session = state.getActiveSession();
+    if (!session || !state.activeSessionId) return false;
+    // The message tree is nested; looking only at the roots found nothing once
+    // a turn had a parent. Read the active branch instead.
+    const currMsgs = state.getBranchMessages(session.id, session.currentBranchId);
+    const msgIndex = currMsgs.findIndex(m => m.id === msgId);
+    if (msgIndex < 0) return false;
+    if (currMsgs[msgIndex].role === 'user') {
+      setInput(currMsgs[msgIndex].content);
     } else if (msgIndex > 0) {
-      setInput(currMsgs[msgIndex - 1].message.content);
+      setInput(currMsgs[msgIndex - 1].content);
+    } else {
+      return false;
     }
     state.addNotification('Edit and resend');
+    return true;
   }, []);
 
   const copyMessage = async (id: string, content: string) => {

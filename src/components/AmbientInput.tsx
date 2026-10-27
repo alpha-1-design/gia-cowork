@@ -115,7 +115,10 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
     const isPlainEnter = e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey;
     if (isPlainEnter || isCmdEnter) {
       e.preventDefault();
-      if (!value.trim() || isLoading || disabled) return;
+      if (!value.trim() || disabled) return;
+      // While a turn is running this queues the text instead of starting a
+      // second generation; handleSend owns that decision. Keeping the input
+      // enabled is what makes the queue reachable at all.
       onSubmit();
     }
   };
@@ -130,8 +133,8 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
     },
     onKeyDown: handleKeyDown,
     onPasteCapture: handlePasteCapture,
-    placeholder,
-    disabled: disabled || isLoading,
+    placeholder: isLoading ? 'Type to queue a follow-up…' : placeholder,
+    disabled,
     autoComplete: 'on',
     autoCorrect: 'on',
     autoCapitalize: 'sentences' as const,
@@ -147,8 +150,15 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
     },
   };
 
-  const sendDisabled = !isLoading && (!value.trim() || disabled);
-  const sendLabel = isLoading ? 'Stop generating' : 'Send message';
+  const hasText = !!value.trim();
+  // While GIA is working, text in the composer means "queue this", and an
+  // empty composer means "stop". Previously the button was always Stop and the
+  // input was disabled, so the queue branch could never be reached.
+  const canQueue = isLoading && hasText && !disabled;
+  const canStop = isLoading && !canQueue && !!onStop;
+  const sendDisabled = disabled || (!isLoading && !hasText) || (isLoading && !canQueue && !canStop);
+  const sendLabel = canQueue ? 'Queue message' : isLoading ? 'Stop generating' : 'Send message';
+  const sendAction = canQueue ? onSubmit : isLoading && onStop ? onStop : onSubmit;
 
   return (
     <div className="relative w-full">
@@ -215,26 +225,32 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
         {/* Send / Stop button */}
         <button
           type="button"
-          onClick={isLoading && onStop ? onStop : onSubmit}
+          onClick={sendAction}
           disabled={sendDisabled}
           className="absolute right-2 bottom-2 w-9 h-9 rounded-md flex items-center justify-center transition-all disabled:opacity-30"
           style={{
-            background: isLoading
+            background: canQueue
+              ? 'var(--gia-accent)'
+              : isLoading
               ? 'rgba(239, 68, 68, 0.8)'
-              : value.trim()
+              : hasText
               ? 'var(--gia-accent)'
               : 'var(--gia-surface-3)',
-            color: isLoading
+            color: canQueue
+              ? 'var(--gia-accent-contrast)'
+              : isLoading
               ? '#ffffff'
-              : value.trim()
+              : hasText
               ? 'var(--gia-accent-contrast)'
               : 'var(--gia-muted)',
-            transform: value.trim() || isLoading ? 'scale(1)' : 'scale(0.85)',
+            transform: hasText || isLoading ? 'scale(1)' : 'scale(0.85)',
           }}
           aria-label={sendLabel}
           title={sendLabel}
         >
-          {isLoading
+          {canQueue
+            ? <Send size={13} style={{ transform: 'translateX(1px)' }} />
+            : isLoading
             ? onStop
               ? <Square size={12} className="fill-current" />
               : <Loader2 size={14} className="animate-spin" />

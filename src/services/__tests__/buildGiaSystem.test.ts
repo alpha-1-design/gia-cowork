@@ -107,6 +107,19 @@ describe('buildGiaSystem', () => {
     expect(result).toContain('GIA');
   });
 
+  it('sends the master-builder brief in BUILD mode', () => {
+    mockGetState.gia = {
+      ...mockGiaState,
+      sharedData: { currentMode: 'build' },
+      theme: 'dark',
+      buildStyleId: 'obsidian',
+    };
+    const result = buildGiaSystem();
+    expect(result).toContain('## Current mode: BUILD');
+    expect(result).toContain('you are the master builder');
+    expect(result).toContain('It **runs**');
+  });
+
   it('tells the model to work inside the active session worktree', () => {
     // The anti-theater check. A per-session worktree that never reaches the
     // prompt means GIA still edits the main checkout while the sidebar shows a
