@@ -32,3 +32,9 @@ tokio = { version = "1", features = ["macros", "net", "time", "sync", "rt", "io-
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 futures-util = "0.3"
 keyring = "3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# tauri-plugin-deep-link 2.6.2 builds `ini::ParseOption` exhaustively, but rust-ini
+# 0.21.3 added two fields to that struct without a semver bump, so the plugin no
+# longer compiles against it (E0063 on the Linux build). Pin the version it expects.
+rust-ini = "=0.21.1"
