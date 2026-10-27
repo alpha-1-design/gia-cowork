@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, Smartphone, Plug, PlugZap, RefreshCw, Lock, Unlock, Users, Link2, Copy, Server, Check } from 'lucide-react';
+import QRCode from 'qrcode';
 import { unimindClient } from '../../services/unimindClient';
 import { isFollowLockEnabled, setFollowLockEnabled, isRemoteUnlockEnabled, setRemoteUnlockEnabled } from '../../services/tools/systemControl';
 import type { UnimindStatus } from '../../services/unimindClient';
+import { buildUnimindPairingUrl } from '../../services/unimindPairing';
 import { isTauri } from '../../platform';
 
 interface Props {
@@ -25,6 +27,8 @@ export const UnimindPage: React.FC<Props> = ({ onBack }) => {
   const [busy, setBusy] = useState(false);
   const [relayInfo, setRelayInfo] = useState<RelayInfo | null>(null);
   const [copied, setCopied] = useState(false);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [pairingUrl, setPairingUrl] = useState('');
 
   const refresh = useCallback(() => setStatus(unimindClient.getStatus()), []);
 
@@ -49,6 +53,16 @@ export const UnimindPage: React.FC<Props> = ({ onBack }) => {
   useEffect(() => {
     refreshRelay();
   }, [refreshRelay]);
+
+  useEffect(() => {
+    const relay = relayInfo?.lan_url ?? relayInfo?.ws_url ?? '';
+    setPairingUrl(relay && status.unimindId ? buildUnimindPairingUrl({ relay, id: status.unimindId }) : '');
+  }, [relayInfo, status.unimindId]);
+
+  useEffect(() => {
+    if (!pairingUrl || !qrCanvasRef.current) return;
+    QRCode.toCanvas(qrCanvasRef.current, pairingUrl, { width: 168, margin: 1, errorCorrectionLevel: 'M' }, () => {});
+  }, [pairingUrl]);
 
   useEffect(() => {
     const timer = setInterval(refresh, 2000);
@@ -161,6 +175,14 @@ export const UnimindPage: React.FC<Props> = ({ onBack }) => {
               </div>
               {relayInfo.secret_required && (
                 <p className="text-[10px]" style={{ color: '#fbbf24' }}>Shared secret required (UNIMIND_RELAY_SECRET set).</p>
+              )}
+              {pairingUrl && (
+                <div className="mt-3 flex flex-col items-center gap-1">
+                  <canvas ref={qrCanvasRef} className="rounded-lg" style={{ background: '#fff', padding: 6 }} />
+                  <p className="text-[10px]" style={{ color: 'var(--gia-muted-2)' }}>
+                    In GIA on your phone → Settings → Unimind → <strong>Scan to pair</strong>, point the camera here.
+                  </p>
+                </div>
               )}
             </div>
           )}
