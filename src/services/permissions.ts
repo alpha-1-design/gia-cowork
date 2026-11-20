@@ -212,6 +212,27 @@ const SEGMENT_RULES: CommandRule[] = [
     risk: 'moderate', reason: 'Sourcing or evaluating a file runs whatever it contains.' },
   { test: /\bchmod\s+[0-7]*7[0-7]{2}\b/,
     risk: 'moderate', reason: 'Loosens file permissions.' },
+
+  // ── Windows / PowerShell ──────────────────────────────────────────
+  // The desktop shell is powershell.exe -Command, so the dangerous strings
+  // here are PowerShell cmdlets and cmd.exe switches, not rm/dd/mkfs.
+  // Patterns are written against the LOWERCASED segment (the loop below
+  // tests both the raw and lowered copy), so cmdlet casing is irrelevant
+  // but 'C:\Users' still matches as 'c:\users'.
+  { test: /(^|\s)(remove-item|ri|del|erase|rd|rmdir)\b[^|;&]*(recurse|\s\/s)[^|;&]*\s+(c:\\\s*$|c:\\\*|\*|c:\\users|c:\\windows|c:\\program files|\$home|\~)/,
+    risk: 'critical', reason: 'Recursive delete aimed at the filesystem root, your home directory, or everything in it (Windows).' },
+  { test: /\b(set-content|add-content|out-file|new-item|export-clixml)\b[^|;&]*\s+c:\\(windows|program files)/,
+    risk: 'high', reason: 'Writes inside a Windows system directory — this can break the machine.' },
+  { test: /\b(reg\.exe\s|reg\s+(add|delete|import|restore|load)\b|remove-itemproperty\b|set-itemproperty\b)/,
+    risk: 'high', reason: 'Changes the Windows registry, which can break Windows or installed software.' },
+  { test: /\b(bcdedit|bcdboot)\b/,
+    risk: 'high', reason: 'Modifies the Windows boot configuration.' },
+  { test: /\bvssadmin\b[^|;&]*\bdelete\b|\bdelete\s+shadows\b/,
+    risk: 'critical', reason: 'Deletes volume shadow copies — destroys System Restore points and prior file versions.' },
+  { test: /\b(set-mppreference|add-mppreference|remove-mppreference)\b/,
+    risk: 'high', reason: 'Changes Windows Defender protection settings.' },
+  { test: /\bsc(\.exe)?\s+(config|delete|stop)\b|\bstop-service\b/,
+    risk: 'moderate', reason: 'Stops or reconfigures a Windows service, which can break running software.' },
 ];
 
 /** Segments that are pure read-only navigation and raise nothing on their own. */
@@ -618,10 +639,28 @@ function normalizeScopeRoot(path: string): string {
  * `git status` and `git push` must not share a grant, so the key is the first
  * two words — binary plus subcommand. That is exactly the granularity a person
  * would say out loud: "yes, let it run git status without asking".
+ *
+ * But a bare `git push` and `git push --force` are NOT the same sentence, and
+ * the destructive one must never ride in under a grant given to the benign
+ * one. So after the two-word stem, any token from GRANT_DISCRIMINATORS found
+ * in the first segment is appended to the key. A session grant of
+ * "command:git push" therefore cannot satisfy "git push --force"; the model
+ * has to come back and ask. The list is deliberately small and exact-match:
+ * a fuzzy rule here would silently widen every grant, which is the failure
+ * this exists to prevent.
  */
+const GRANT_DISCRIMINATORS = [
+  '--force', '--force-with-lease', '--hard', '--no-verify',
+  '-f', '-F', '-D', '-d',
+];
+
 export function commandPrefix(command: string): string {
   const segments = splitSegments(command || '');
   if (!segments.length) return '';
-  const words = segments[0].split(/\s+/).filter(Boolean).slice(0, 2);
-  return words.join(' ').toLowerCase();
+  const words = segments[0].split(/\s+/).filter(Boolean);
+  const stem = words.slice(0, 2).join(' ').toLowerCase();
+  const discriminator = words
+    .slice(2)
+    .find(w => GRANT_DISCRIMINATORS.includes(w.toLowerCase()));
+  return discriminator ? `${stem} ${discriminator.toLowerCase()}` : stem;
 }

@@ -29,6 +29,7 @@ import type { WhatsAppIncomingMessage } from './services/WhatsAppBridgeService';
 import messagingBridge from './services/MessagingBridge';
 import { giaCoreServices } from './services/GIACoreServices';
 import { TrustGate } from './components/TrustGate';
+import { CodexApprovalBridge } from './components/CodexApprovalBridge';
 import { useTrustStore } from './store/useTrustStore';
 import smartNotificationEngine from './services/SmartNotificationEngine';
 import { whatsAppBridgeService } from './services/WhatsAppBridgeService';
@@ -515,9 +516,15 @@ const App: React.FC = () => {
 
       try {
         const { listen } = await import('@tauri-apps/api/event');
-        void listen('whatsapp://incoming', (e) => {
+        void listen('whatsapp://incoming', async (e) => {
           const m = (e.payload as { message?: WhatsAppIncomingMessage })?.message;
-          if (m) whatsAppSession.enqueue(m);
+          if (m) {
+            // Live push path must meet the same labeling the catch-up fetch
+            // gets (see WhatsAppBridgeService.messages): incoming WhatsApp
+            // text is data, never instructions (W2 known-gap fix).
+            const { labelObservation } = await import('./services/untrusted');
+            whatsAppSession.enqueue({ ...m, text: labelObservation('whatsapp', m.text) });
+          }
         });
         void listen('whatsapp://status', (e) => {
           const status = (e.payload as { status?: { connected?: boolean; jid?: string | null; pairing?: boolean; loggedOut?: boolean } })?.status;
@@ -631,6 +638,19 @@ const App: React.FC = () => {
 
     // Long-running mode: wake lock + keepalive + idle model unload + messaging polling + fast autonomy
     const cleanupFns: (() => void)[] = [];
+
+    // The boot health check runs once, 3s in — a key entered AFTER it left the
+    // status pill stuck on "Awaiting a key" until the next reload. Re-check
+    // whenever the active provider's key appears or changes.
+    let lastHealthKey = '';
+    const unsubKeyWatch = useProviderStore.subscribe((s) => {
+      const key = s.providers[s.activeProvider]?.apiKey ?? '';
+      if (key && key !== lastHealthKey) {
+        lastHealthKey = key;
+        void checkProvider();
+      }
+    });
+    cleanupFns.push(() => unsubKeyWatch());
     servicesReady.then(({ wakeLockService, keepaliveService, idleManager, proactiveEngine, messagingBridge }) => {
       const startLongRunning = async () => {
         if (!useGiaStore.getState().longRunningMode) return;
@@ -743,6 +763,7 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
         <ProfileDrawer />
       </Suspense>
       <TrustGate />
+      <CodexApprovalBridge />
       {/* Global Notifications */}
       <div data-presenter-hide="" className="fixed top-16 left-0 right-0 z-[60] px-4 pointer-events-none space-y-2">
         <AnimatePresence>

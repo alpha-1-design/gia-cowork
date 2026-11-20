@@ -2,11 +2,18 @@ import ToolRegistry from '../ToolRegistry';
 import type { Tool } from './types';
 
 import { advancedTools } from './advanced';
+// Deferred tool loading (W3): tool_search must be registered like any other
+// tool so toolRunner can resolve it by id from the live registry.
+import { deferredTools } from './deferred';
 import { autonomyTools } from './autonomy';
 import { brainCloudTools } from './brainCloud';
 import { browserSessionTools } from './browserSession';
 import { peerAgentTools } from './peerAgents';
 import { buildTools } from './build';
+// Self-build (W4): GIA editing itself — plan/validate/rollback over the
+// normal gated tool path. Anchored here, away from the deferred (W3) line,
+// so the two integration edits never share an anchor.
+import { selfBuildTools } from './selfbuild';
 import { calendarTools } from './calendar';
 import { cameraTools } from './camera';
 import { capabilityTools } from './capabilities';
@@ -64,6 +71,10 @@ import { sshTools } from './ssh';
 import { taskTools } from './tasks';
 import { telegramTools } from './telegram';
 import { terminalTools } from './terminal';
+// TESTIMONY (W13): the provenance tool — GIA's own hash-chained record as
+// evidence. Anchored next to terminal (the last read surface), away from the
+// W3/W4 anchor lines so no two integration edits share a seam.
+import { testimonyTools } from './testimony';
 import { webSearchTools } from './webSearch';
 import { websocketTools } from './websocket';
 import { whatsAppBridgeTools } from './whatsappBridge';
@@ -78,6 +89,7 @@ export function registerAllTools(): void {
     browserSessionTools,
     peerAgentTools,
     buildTools,
+    selfBuildTools,
     calendarTools,
     cameraTools,
     capabilityTools,
@@ -135,11 +147,13 @@ export function registerAllTools(): void {
     taskTools,
     telegramTools,
     terminalTools,
+    testimonyTools,
     webSearchTools,
     websocketTools,
     whatsAppBridgeTools,
     systemControlTools,
     unimindTools,
+    deferredTools,
   ];
 
   for (const item of allToolsLists) {

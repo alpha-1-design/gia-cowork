@@ -1,5 +1,10 @@
 import GiaTools from '../GiaTools';
 import { ProtocolType, ProtocolImpact } from '../../types/protocol';
+// Deferred tool loading (W3): when the registry outgrows DEFERRED_THRESHOLD,
+// the builders advertise only the always-on core set + tool_search instead of
+// ~290 full schemas. Logic lives in tools/deferred.ts; this file only routes
+// the builders' record through it.
+import { applyDeferredMode } from '../tools/deferred';
 
 // NOTE (legacy): this hand-written schema map predates defineTool(). The
 // registry-derived schemas (GiaTools.getAllToolSchemas) win in the merge
@@ -552,8 +557,11 @@ export function getAllToolSchemas(): Record<string, { description: string; requi
   return { ...toolSchemas, ...mcpSchemas };
 }
 
-export function buildOpenAITools(): Record<string, unknown>[] {
-  return Object.entries(getAllToolSchemas()).map(([id, schema]) => ({
+// `forceFull` opts a caller out of deferred mode (full payload regardless of
+// registry size). Default undefined = decide by registry size, which keeps the
+// non-deferred path byte-identical to before this param existed.
+export function buildOpenAITools(forceFull?: boolean): Record<string, unknown>[] {
+  return Object.entries(applyDeferredMode(getAllToolSchemas(), forceFull)).map(([id, schema]) => ({
     type: 'function',
     function: {
       name: id,
@@ -569,8 +577,9 @@ export function buildOpenAITools(): Record<string, unknown>[] {
   }));
 }
 
-export function buildAnthropicTools(): Record<string, unknown>[] {
-  return Object.entries(getAllToolSchemas()).map(([id, schema]) => ({
+// forceFull: see buildOpenAITools.
+export function buildAnthropicTools(forceFull?: boolean): Record<string, unknown>[] {
+  return Object.entries(applyDeferredMode(getAllToolSchemas(), forceFull)).map(([id, schema]) => ({
     name: id,
     description: schema.description,
     input_schema: {
@@ -583,8 +592,9 @@ export function buildAnthropicTools(): Record<string, unknown>[] {
   }));
 }
 
-export function buildGeminiTools(): Record<string, unknown>[] {
-  return Object.entries(getAllToolSchemas()).map(([id, schema]) => ({
+// forceFull: see buildOpenAITools.
+export function buildGeminiTools(forceFull?: boolean): Record<string, unknown>[] {
+  return Object.entries(applyDeferredMode(getAllToolSchemas(), forceFull)).map(([id, schema]) => ({
     name: id,
     description: schema.description,
     parameters: {

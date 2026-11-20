@@ -278,4 +278,48 @@ describe('scope keys', () => {
     const r = classifyToolRequest('terminal_run', 'terminal_run', { command: 'git status' });
     expect(r.scopeLabel).toMatch(/git status/);
   });
+
+  it('never lets a force flag ride in under a benign grant', () => {
+    expect(commandPrefix('git push')).not.toBe(commandPrefix('git push --force'));
+    expect(commandPrefix('git push --force')).toBe('git push --force');
+    expect(commandPrefix('git reset')).not.toBe(commandPrefix('git reset --hard'));
+    // Benign flags do not fragment the grant — the key stays sayable.
+    expect(commandPrefix('git push origin main')).toBe('git push');
+    expect(commandPrefix('git status --short')).toBe('git status');
+  });
+});
+
+describe('analyzeCommand — Windows / PowerShell rules', () => {
+  it('flags recursive deletes aimed at roots, home, or wildcards', () => {
+    expect(analyzeCommand('Remove-Item -Recurse -Force C:\\Users').risk).toBe('critical');
+    expect(analyzeCommand('del /s /q C:\\').risk).toBe('critical');
+    expect(analyzeCommand('rd /s /q C:\\Program Files').risk).toBe('critical');
+    expect(analyzeCommand('remove-item -recurse ~').risk).toBe('critical');
+  });
+
+  it('does not cry wolf on routine project cleanup', () => {
+    expect(analyzeCommand('Remove-Item -Recurse node_modules').risk).toBe('low');
+    expect(analyzeCommand('rd /s /q build').risk).toBe('low');
+  });
+
+  it('flags writes into Windows system directories', () => {
+    expect(analyzeCommand('Set-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value x').risk).toBe('high');
+    expect(analyzeCommand('New-Item C:\\Windows\\evil.ps1').risk).toBe('high');
+  });
+
+  it('flags registry, boot, shadow-copy and defender changes', () => {
+    expect(analyzeCommand('reg delete HKLM\\SAM').risk).toBe('high');
+    expect(analyzeCommand('bcdedit /set testsigning on').risk).toBe('high');
+    expect(analyzeCommand('vssadmin delete shadows /all').risk).toBe('critical');
+    expect(analyzeCommand('Set-MpPreference -DisableRealtimeMonitoring $true').risk).toBe('high');
+  });
+
+  it('treats service stops as reviewable, not catastrophic', () => {
+    expect(analyzeCommand('Stop-Service -Name Spooler').risk).toBe('moderate');
+  });
+
+  it('keeps Unix rules intact alongside the Windows ones', () => {
+    expect(analyzeCommand('rm -rf /').risk).toBe('critical');
+    expect(analyzeCommand('dd if=zero of=/dev/sda').risk).toBe('critical');
+  });
 });

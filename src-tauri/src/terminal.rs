@@ -167,9 +167,82 @@ fn new_session_id() -> String {
     format!("sess-{}-{}", now_ms(), n)
 }
 
+/// Drain one pipe to EOF on a background thread, returning the captured
+/// bytes through the JoinHandle.
+///
+/// This must run CONCURRENTLY with the child, not after it exits: an OS
+/// pipe buffer is only ~64KB, so a child that writes more than that blocks
+/// in write() until somebody reads. The old code read stdout/stderr only
+/// after try_wait() returned, so any chatty command deadlocked until the
+/// timeout killed it -- and then the read still lost whatever exceeded the
+/// pipe buffer. This thread is that somebody.
+///
+/// The thread keeps reading (and discarding) even after `cap` bytes are
+/// stored: stopping the drain would re-block the child on a full pipe and
+/// hang the very process we are trying to reap. Memory stays bounded
+/// because only the first `cap` bytes are kept; the COMBINED
+/// MAX_OUTPUT_BYTES cap is enforced later by `combine_capped`.
+///
+/// The thread always terminates: at process death the pipe write-ends
+/// close, read() returns EOF (or an error when kill_process_tree tears
+/// the pipe down), and the loop breaks. That is what makes join() after
+/// the wait loop safe even on the timeout/kill paths.
+fn drain_pipe<R: Read + Send + 'static>(mut pipe: R, cap: usize) -> std::thread::JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut captured: Vec<u8> = Vec::new();
+        let mut chunk = [0u8; 8192];
+        loop {
+            match pipe.read(&mut chunk) {
+                Ok(0) => break, // EOF: the child (or its whole tree) is gone.
+                Ok(n) => {
+                    // Store only what fits; the excess is drained and
+                    // dropped so the child can never block on a full pipe.
+                    let room = cap.saturating_sub(captured.len());
+                    captured.extend_from_slice(&chunk[..n.min(room)]);
+                }
+                // A read error (pipe torn down mid-flight by
+                // kill_process_tree) counts as end-of-stream; whatever was
+                // captured so far is kept.
+                Err(_) => break,
+            }
+        }
+        captured
+    })
+}
+
+/// Merge captured stdout and stderr under a combined cap, mirroring the
+/// historical on-disk behaviour: stdout first, stderr fills whatever room
+/// is left, and a single '\n' separates the two streams.
+///
+/// Returns the combined text plus whether the captured output met or
+/// exceeded the cap (the caller turns that into the "[output truncated]"
+/// marker). Pure and cap-parameterized so the unit tests can exercise the
+/// boundary logic with a tiny cap instead of 10MB buffers.
+fn combine_capped(stdout: &[u8], stderr: &[u8], cap: usize) -> (String, bool) {
+    let stdout = &stdout[..stdout.len().min(cap)];
+    let stderr = &stderr[..stderr.len().min(cap.saturating_sub(stdout.len()))];
+    // "Cap hit" means truncated, even if nothing had to be discarded at
+    // exactly the boundary -- matching the old `>=` behaviour so existing
+    // frontend expectations about the marker do not change.
+    let truncated = stdout.len() + stderr.len() >= cap;
+    let mut combined = Vec::with_capacity(stdout.len() + stderr.len() + 1);
+    combined.extend_from_slice(stdout);
+    if !stderr.is_empty() {
+        if !stdout.is_empty() {
+            combined.push(b'\n');
+        }
+        combined.extend_from_slice(stderr);
+    }
+    // from_utf8_lossy instead of read_to_string: shell output is not
+    // guaranteed UTF-8, and the old read_to_string silently DROPPED every
+    // byte captured the moment a single invalid byte appeared.
+    (String::from_utf8_lossy(&combined).into_owned(), truncated)
+}
+
 #[tauri::command]
 pub async fn terminal_exec(
     state: tauri::State<'_, Arc<TerminalState>>,
+    gate: tauri::State<'_, crate::gate::GateState>,
     command: String,
     workdir: Option<String>,
     env: Option<HashMap<String, String>>,
@@ -178,6 +251,8 @@ pub async fn terminal_exec(
     if command.trim().is_empty() {
         return Err("Command is required".into());
     }
+    // Enforcement gate FIRST, before anything is spawned (see gate.rs).
+    gate.check(&command)?;
     let timeout_ms = timeout
         .unwrap_or(DEFAULT_TIMEOUT_MS)
         .clamp(1, MAX_TIMEOUT_MS);
@@ -224,8 +299,14 @@ pub async fn terminal_exec(
     // read them from this call while terminal_kill/terminal_list_sessions
     // can concurrently see and act on the same process from another
     // invocation (e.g. the UI's "stop" button while a command is running).
-    let mut stdout = child.stdout.take();
-    let mut stderr = child.stderr.take();
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    // Spawn the drain threads BEFORE the wait loop (see drain_pipe for
+    // why). Each stream gets the full MAX_OUTPUT_BYTES as its per-stream
+    // storage cap -- the combined cap is enforced once, downstream, so a
+    // command that writes everything to stderr is not clipped twice.
+    let stdout_reader = stdout.map(|s| drain_pipe(s, MAX_OUTPUT_BYTES));
+    let stderr_reader = stderr.map(|s| drain_pipe(s, MAX_OUTPUT_BYTES));
     let created_at = now_ms();
 
     {
@@ -275,24 +356,18 @@ pub async fn terminal_exec(
         std::thread::sleep(Duration::from_millis(25));
     }
 
-    let mut out = String::new();
-    if let Some(s) = stdout.as_mut() {
-        let mut limited = s.take(MAX_OUTPUT_BYTES as u64);
-        let _ = limited.read_to_string(&mut out);
-    }
-    let mut err = String::new();
-    if let Some(s) = stderr.as_mut() {
-        let remaining = MAX_OUTPUT_BYTES.saturating_sub(out.len());
-        let mut limited = s.take(remaining as u64);
-        let _ = limited.read_to_string(&mut err);
-    }
-    let output_truncated = out.len() + err.len() >= MAX_OUTPUT_BYTES;
-    if !err.is_empty() {
-        if !out.is_empty() {
-            out.push('\n');
-        }
-        out.push_str(&err);
-    }
+    // join() waits for EOF on each pipe; both threads end at process
+    // death because the pipe write-ends close (kill_process_tree takes
+    // down the whole tree on the timeout and external-kill paths too), so
+    // this cannot deadlock even when we killed the child ourselves.
+    let stdout_bytes = stdout_reader
+        .and_then(|h| h.join().ok())
+        .unwrap_or_default();
+    let stderr_bytes = stderr_reader
+        .and_then(|h| h.join().ok())
+        .unwrap_or_default();
+    let (mut out, output_truncated) =
+        combine_capped(&stdout_bytes, &stderr_bytes, MAX_OUTPUT_BYTES);
     if timed_out {
         out.push_str(&format!(
             "\n[timeout] command exceeded {timeout_ms}ms and was killed"
@@ -426,4 +501,85 @@ pub fn terminal_reinstall_rootfs() -> Result<ReinstallResult, String> {
         success: true,
         message: "GIA Desktop runs directly on your Linux shell -- no sandbox to reinstall.".into(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    // Tiny cap so the boundary tests do not have to allocate 10MB.
+    const TEST_CAP: usize = 1024;
+
+    #[test]
+    fn combine_keeps_plain_stdout_intact() {
+        let (out, truncated) = combine_capped(b"hello", b"", TEST_CAP);
+        assert_eq!(out, "hello");
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn combine_joins_streams_with_a_single_newline() {
+        let (out, truncated) = combine_capped(b"out", b"err", TEST_CAP);
+        assert_eq!(out, "out\nerr");
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn combine_adds_no_separator_when_stdout_is_empty() {
+        let (out, truncated) = combine_capped(b"", b"err", TEST_CAP);
+        assert_eq!(out, "err");
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn combine_stderr_fills_only_the_remainder_after_stdout() {
+        let stdout = vec![b'a'; TEST_CAP - 3];
+        let stderr = vec![b'b'; 100];
+        let (out, truncated) = combine_capped(&stdout, &stderr, TEST_CAP);
+        // Combined output stops exactly at the cap: stdout first, then
+        // only the 3 bytes of stderr that still fit.
+        assert_eq!(out.len(), TEST_CAP);
+        assert!(out.starts_with(&"a".repeat(TEST_CAP - 3)));
+        assert!(out.ends_with("bbb"));
+        assert!(truncated);
+    }
+
+    #[test]
+    fn combine_stdout_beyond_cap_leaves_no_room_for_stderr() {
+        let stdout = vec![b'x'; TEST_CAP + 50];
+        let (out, truncated) = combine_capped(&stdout, b"hidden", TEST_CAP);
+        assert_eq!(out.len(), TEST_CAP);
+        assert!(!out.contains("hidden"));
+        assert!(truncated);
+    }
+
+    #[test]
+    fn combine_flags_truncation_exactly_at_the_cap() {
+        // Hitting the cap exactly counts as truncated, matching the old
+        // `>=` semantics.
+        let stdout = vec![b'x'; TEST_CAP];
+        let (out, truncated) = combine_capped(&stdout, b"", TEST_CAP);
+        assert_eq!(out.len(), TEST_CAP);
+        assert!(truncated);
+    }
+
+    #[test]
+    fn drain_pipe_discards_beyond_cap_but_drains_to_eof() {
+        // A stream larger than both the cap and the OS pipe buffer: the
+        // reader must keep draining past the cap (otherwise the child
+        // would block on write and deadlock) while storing only the first
+        // `cap` bytes.
+        let big = vec![7u8; 4 * TEST_CAP];
+        let captured = drain_pipe(Cursor::new(big), TEST_CAP).join().unwrap();
+        assert_eq!(captured, vec![7u8; TEST_CAP]);
+    }
+
+    #[test]
+    fn drain_pipe_handles_empty_stream() {
+        let captured = drain_pipe(Cursor::new(Vec::new()), TEST_CAP)
+            .join()
+            .unwrap();
+        assert!(captured.is_empty());
+    }
 }

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type { Tool, ToolContext } from './types';
+import { defineTool } from './defineTool';
+import { crawlerService } from '../crawler/CrawlerService';
 import { useSearchStore } from '../../store/useSearchStore';
 import { useGiaStore } from '../../store/useGiaStore';
 import { useKnowledgeGraphStore } from '../../store/useKnowledgeGraphStore';
@@ -198,4 +200,95 @@ const pageInfoTool: Tool = {
   }
 };
 
-export const webSearchTools: Tool[] = [webSearchTool, readUrlTool, browserNavigateTool, pageInfoTool];
+/**
+ * web_crawl — built-in crawler (W12). Sits beside read_url with a clear
+ * split: read_url fetches ONE page through the full proxy ladder;
+ * web_crawl maps a SITE — same-host BFS from a seed, depth/page/size
+ * budgets, robots.txt respected, per-host rate limit, cancellable. The
+ * result is a compact per-page summary list for the model plus a crawl id
+ * that keys the structured artifact; every excerpt arrives pre-labeled by
+ * CrawlerService in the UNTRUSTED-CONTENT envelope — crawled pages are
+ * remote text, the same threat class as a single read_url response.
+ */
+const webCrawlTool: Tool = defineTool({
+  id: 'web_crawl',
+  name: 'web_crawl',
+  description:
+    'Crawl a website from a seed URL: follows same-host links breadth-first and returns a compact page list (title + short excerpt per page) for mapping a site or gathering across multiple pages. Use read_url instead when you need ONE page in full depth. Respects robots.txt, caps pages (default 25) and depth (default 2), rate-limits per host.',
+  category: 'web',
+  input: z.object({
+    seed: z.string().url().describe('Seed URL to start the crawl from (https://...)'),
+    maxPages: z.number().int().min(1).max(100).optional()
+      .describe('Max pages to fetch (default 25, hard cap 100)'),
+    maxDepth: z.number().int().min(0).max(4).optional()
+      .describe('Link depth below the seed (default 2, hard cap 4)'),
+    sameHostOnly: z.boolean().optional()
+      .describe('Stay on the seed host (default true) — set false to follow cross-host links within the caps'),
+    query: z.string().optional()
+      .describe('Keep only pages whose title or text contains this — non-matching pages are still fetched for their links but omitted from the result'),
+  }),
+  execute: async ({ seed, maxPages, maxDepth, sameHostOnly, query }, ctx) => {
+    try {
+      ctx?.onProgress?.(0.1, 'Starting crawl...');
+      ctx?.onThought?.(`🕷️ Crawling from ${new URL(seed).hostname}...`);
+      const result = await crawlerService.crawl([seed], {
+        maxPages,
+        maxDepth,
+        sameHostOnly,
+        query,
+        onProgress: ({ fetched }) => {
+          if (fetched % 5 === 0) {
+            ctx?.onProgress?.(Math.min(0.9, 0.1 + fetched / Math.max(1, maxPages ?? 25) * 0.8), `Crawled ${fetched} pages...`);
+          }
+        },
+      });
+      ctx?.onProgress?.(1, 'Crawl complete');
+      ctx?.onThought?.(`✅ Crawl finished — ${result.pages.length} page(s)`);
+
+      if (result.pages.length === 0) {
+        return {
+          success: true,
+          content: `CRAWL ${result.crawlId} found no usable pages.\n${result.notes.map((n) => `- ${n}`).join('\n')}`,
+          sources: [],
+        };
+      }
+
+      // Compact per-page summaries. Excerpts arrive pre-enveloped from
+      // CrawlerService (one UNTRUSTED-CONTENT tag per page, never nested);
+      // titles are clipped and flattened because they come from the remote
+      // publisher too. The crawl id keys the full structured artifact for
+      // the UI: the model renders it by emitting a ```visual block with
+      // type "crawl_result" and the page list.
+      const safeTitle = (p: { title: string; url: string }) =>
+        (p.title || p.url).replace(/\s+/g, ' ').slice(0, 120);
+      const lines = result.pages.map((p, i) => {
+        const status = p.error ? ` [${p.error}]` : ` [status ${p.status}]`;
+        return `${i + 1}. ${safeTitle(p)}\n   ${p.url}${status}\n   ${p.excerpt}`;
+      });
+      const notes = result.notes.length
+        ? `\nNOTES:\n${result.notes.map((n) => `- ${n}`).join('\n')}`
+        : '';
+      const visualData = {
+        type: 'crawl_result',
+        crawlId: result.crawlId,
+        pages: result.pages.map((p) => ({ url: p.url, title: safeTitle(p), status: p.status })),
+        cancelled: result.cancelled === true,
+      };
+      const content = `WEB CRAWL RESULT — crawl id: ${result.crawlId} `
+        + `(${result.pages.length} pages, ${result.budgetUsed.pages} fetched, `
+        + `~${result.budgetUsed.bytes} bytes, ${result.finishedAt - result.startedAt}ms)`
+        + `${result.cancelled ? ' — CANCELLED' : ''}\n\n${lines.join('\n\n')}${notes}\n\n`
+        + `Use read_url for the full text of any single page above. To show this crawl in the UI, emit a visual block with this exact JSON:\n${JSON.stringify(visualData)}`;
+
+      return {
+        success: true,
+        content,
+        sources: result.pages.map((p) => ({ title: safeTitle(p), url: p.url })),
+      };
+    } catch (e) {
+      return { success: false, content: '', error: e instanceof Error ? e.message : 'Crawl failed' };
+    }
+  },
+});
+
+export const webSearchTools: Tool[] = [webSearchTool, readUrlTool, browserNavigateTool, pageInfoTool, webCrawlTool];

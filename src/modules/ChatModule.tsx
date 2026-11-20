@@ -22,6 +22,11 @@ import { useProtocolStore } from '../store/useProtocolStore';
 import { useSearchActivity } from '../store/useSearchActivity';
 import { useChatState } from '../hooks/useChatState';
 import { useProactiveMessage } from '../hooks/useProactiveMessage';
+// TESTIMONY (W13): the voice and its secret surface. Mounted once per chat
+// mount; the moment may simply never arrive — that silence is the feature.
+import { TestimonyCard } from '../components/testimony/TestimonyCard';
+import { maybeSpeakTestimony } from '../services/testimony/voice';
+import type { TestimonyMoment } from '../store/useTestimonyStore';
 import GiaIcon from '../components/GiaIcon';
 import giaTools from '../services/GiaTools';
 import SandboxEnvService from '../services/SandboxEnvService';
@@ -37,14 +42,11 @@ import { ClarificationBottomSheet } from '../components/chat/ClarificationBottom
 import ModelSwitcherSheet from '../components/chat/ModelSwitcherSheet';
 import ToolsCatalogSheet from '../components/chat/ToolsCatalogSheet';
 import { GiaBotRoster, botPortrait, agentName } from '../components/GiaBots';
-import Council from '../components/Council';
-import AgentPrompts from '../components/AgentPrompts';
 import ProviderIcon from '../components/ProviderIcon';
 import { BranchView } from '../components/chat/BranchView';
 import { SummaryBanner } from '../components/chat/SummaryBanner';
 import AgentMentionPicker from '../components/AgentMentionPicker';
 import { useProviderStore } from '../store/useProviderStore';
-import AgentSwarmDashboard from '../components/AgentSwarmDashboard';
 import { TemplateSelector } from '../components/TemplateSelector';
 import { LiveFileEditor } from '../components/LiveFileEditor';
 import VoiceMode from '../components/VoiceMode';
@@ -185,8 +187,8 @@ const sidePanelOpen = useGiaStore(s => s.sidePanelOpen);
 const setSidePanelOpen = useGiaStore(s => s.setSidePanelOpen);
 const [dockOpen, setDockOpen] = React.useState(false);
   const [showMoreMenu, setShowMoreMenu] = React.useState(false);
-  const [showCouncil, setShowCouncil] = React.useState(false);
-  const [showPrompts, setShowPrompts] = React.useState(false);
+  // Council + AgentPrompts + the swarm dashboard moved to the Agents module —
+  // one feature, one home (chat keeps AgentActivityStrip / AgentMentionPicker / GiaBots).
   // Voice is its own full-screen surface. It used to toggle the app-wide
   // fullscreen flag on the way in and out, which left the shell in the wrong
   // state whenever the two disagreed (and made the close button toggle it a
@@ -231,6 +233,18 @@ const [dockOpen, setDockOpen] = React.useState(false);
   }, [addFiles]);
 
   useProactiveMessage();
+
+  // TESTIMONY (W13): one quiet check per mount. The voice decides, the ledger
+  // records, and the card renders only when a moment was actually spoken.
+  const [testimonyMoment, setTestimonyMoment] = React.useState<TestimonyMoment | null>(null);
+  const testimonyCheckedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (testimonyCheckedRef.current) return;
+    testimonyCheckedRef.current = true;
+    void maybeSpeakTestimony().then((m) => {
+      if (m) setTestimonyMoment(m);
+    }).catch(() => { /* a failed check is silence, never an error card */ });
+  }, []);
 
   // A blank chat is already a new chat. Plus must not stack another empty one,
   // and leftover blanks should not sit in the list.
@@ -495,36 +509,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
             )}
             <ChevronDown size={11} className="shrink-0 opacity-70" />
           </button>
-          <button
-            onClick={() => { setShowPrompts(v => !v); setShowCouncil(false); }}
-            className="h-7 px-2 sm:px-2.5 rounded-sm text-[11px] flex items-center gap-1"
-            style={{
-              border: '1px solid var(--gia-border)',
-              color: showPrompts ? 'var(--gia-accent-contrast)' : 'var(--gia-text)',
-              background: showPrompts ? 'var(--gia-accent)' : 'transparent',
-            }}
-            aria-pressed={showPrompts}
-            aria-label="Agent prompts"
-            title="Agent prompts"
-          >
-            <PenLine size={11} className="sm:hidden" />
-            <span className="hidden sm:inline">Prompts</span>
-          </button>
-          <button
-            onClick={() => { setShowCouncil(v => !v); setShowPrompts(false); }}
-            className="h-7 px-2 sm:px-2.5 rounded-sm text-[11px] flex items-center gap-1"
-            style={{
-              border: '1px solid var(--gia-border)',
-              color: showCouncil ? 'var(--gia-accent-contrast)' : 'var(--gia-text)',
-              background: showCouncil ? 'var(--gia-accent)' : 'transparent',
-            }}
-            aria-pressed={showCouncil}
-            aria-label="Council"
-            title="Council"
-          >
-            <MessagesSquare size={11} className="sm:hidden" />
-            <span className="hidden sm:inline">Council</span>
-          </button>
+
           <button onClick={startFreshChat} className="p-1.5 rounded-md" style={{ color: 'var(--gia-muted)' }} aria-label="New chat" title="New chat"><Plus size={15} /></button>
           <div className="relative">
             <button
@@ -607,16 +592,6 @@ const [dockOpen, setDockOpen] = React.useState(false);
           </div>
         </div>
       </div>
-      {showPrompts && (
-        <div className="absolute inset-0 top-12 z-20" style={{ background: 'var(--gia-bg)' }}>
-          <AgentPrompts />
-        </div>
-      )}
-      {showCouncil && !showPrompts && (
-        <div className="absolute inset-0 top-12 z-20" style={{ background: 'var(--gia-bg)' }}>
-          <Council initialPrompt={input} />
-        </div>
-      )}
 
       <div ref={scrollRef} onScroll={handleScroll} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop} className="flex-1 overflow-y-auto pt-4 relative z-0" style={{ paddingBottom: `${inputContainerHeight + 120}px` }}>
         {messages.length === 0 && buildMode && (
@@ -728,8 +703,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
         <AgentActivityStrip />
         <QueuedMessages />
         <UpdateBanner />
-
-        <AgentSwarmDashboard />
+        {testimonyMoment && <TestimonyCard moment={testimonyMoment} />}
 
         <MessageList
           messages={messages}
@@ -891,6 +865,33 @@ const [dockOpen, setDockOpen] = React.useState(false);
             <SlidersHorizontal size={14} />
           </button>
 
+          {createPortal(
+            <ComposerToolsSheet
+              open={showTools}
+              onClose={() => setShowTools(false)}
+              items={toolItems}
+              onToggle={(key) => toggleFeature(key as 'webSearch' | 'deepSearch' | 'extThinking' | 'handsOff' | 'listen' | 'vision' | 'translate')}
+              footer={(
+                <div className="flex items-center justify-between gap-2 px-4 pb-4 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowTools(false); setShowToolsCatalog(true); }}
+                    className="flex items-center gap-1.5 text-[11px] px-3 py-2 rounded-lg transition-colors tap-feedback"
+                    style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}
+                  >
+                    <Wrench size={12} /> All tools…
+                  </button>
+                  {activeSkill && (
+                    <span className="text-[10px] truncate" style={{ color: 'var(--gia-muted)' }}>
+                      Skill: {activeSkill.name}
+                    </span>
+                  )}
+                </div>
+              )}
+            />,
+            document.body,
+          )}
+
           {buildMode && sandboxEnvReady === false && (
             <button type="button" onClick={() => useGiaStore.getState().setModule('settings')} className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-md self-start transition-colors tap-feedback" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}>
               <Terminal size={11} />
@@ -915,7 +916,12 @@ const [dockOpen, setDockOpen] = React.useState(false);
           )}
         </div>
 
-        <AmbientInput value={input} onChange={handleInputChange} onSubmit={handleSend} onStop={loading ? handleStop : undefined} isLoading={loading} onVoiceToggle={openVoice} isVoiceListening={voiceEnabled} placeholder={buildMode ? 'Describe the app. She scaffolds, runs it, and shows a preview.' : webSearch ? 'Ask. She searches, then answers with the source.' : handsOff ? 'She acts. Risky steps still stop for your yes.' : 'Tell her the outcome. She picks the tools.'} prefix={buildMode ? <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-sm font-medium shrink-0 mr-1" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}><Hammer size={10} />Build</span> : undefined} />
+        <AmbientInput value={input} onChange={handleInputChange} onSubmit={handleSend} onStop={loading ? handleStop : undefined} isLoading={loading} onVoiceToggle={openVoice} isVoiceListening={voiceEnabled} placeholder={buildMode ? 'Describe the app. She scaffolds, runs it, and shows a preview.' : webSearch ? 'Ask. She searches, then answers with the source.' : handsOff ? 'She acts. Risky steps still stop for your yes.' : 'Tell her the outcome. She picks the tools.'} prefix={buildMode ? <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-sm font-medium shrink-0 mr-1" style={{ background: 'var(--gia-surface-2)', color: 'var(--gia-text)', border: '1px solid var(--gia-border)' }}><Hammer size={10} />Build</span> : undefined} onSelectSkill={(skillId) => {
+          // Unified-menu skill activation — the same outcome the SkillPicker
+          // chip produces, reachable from the merged "/" layer.
+          setSkill(skillId);
+          addNotification(`Skill active: ${skills.find((s: { id: string; name: string }) => s.id === skillId)?.name}`);
+        }} />
       </div>
 
       <AnimatePresence>

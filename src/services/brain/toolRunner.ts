@@ -18,7 +18,12 @@ import AnalyticsTracker from '../AnalyticsTracker';
 import { toolRateLimiter, globalToolLimiter } from '../ToolRateLimiter';
 import { analyzeShellCommand } from './shellConcurrency';
 import { gateToolCall } from './permissionGate';
-import { useTrustStore } from '../../store/useTrustStore';
+import { useTrustStore, type PermissionOutcome } from '../../store/useTrustStore';
+import { classifyToolRequest } from '../permissions';
+import { reviewAction } from './guardian';
+// Untrusted-content envelopes on remote-tool observations — see the obs block
+// below for why this lives at assembly time, not inside the tools.
+import { isUntrustedToolOutput, labelObservation, sourceForToolId } from '../untrusted';
 
 import type { BrainRequest } from '../providers/types';
 
@@ -222,6 +227,35 @@ async function executeSingleTool(
     return { result: 'validation_error', observations };
   }
 
+  // Guardian advisory review (W1, R1 #3) — runs AFTER the compliance and
+  // project-boundary checks and BEFORE the permission gate, because its
+  // whole job is to catch what the grants never encoded: an action whose
+  // justification was read out of tool output. The review is pure and
+  // deterministic; the enforcement happens down in the gate section.
+  //
+  // The authorization fingerprint needs recent tool output. The runner's
+  // history already holds it: observations land as user-role messages
+  // between turns, so the last few matching entries are the outputs of the
+  // tools that just ran. Steering notes and user rejections are deliberately
+  // excluded — those are the user's own words, which ARE authorization.
+  const recentToolOutputs = state.history
+    .filter((h): h is { role: 'user'; content: string } =>
+      h.role === 'user' &&
+      typeof h.content === 'string' &&
+      /^(OBSERVATION:|SUB-AGENT|TOOL FAILED:)/.test(h.content))
+    .slice(-4)
+    .map((h) => h.content);
+  const guardian = reviewAction(toolCall.id, tool.name, toolCall.args as Record<string, unknown>, {
+    recentToolOutputs,
+  });
+  // A hold fires on EITHER axis: high risk, or authority the grants can't
+  // vouch for. The escalation may only force a prompt; it never widens
+  // authority and never denies on its own (see guardian.ts).
+  const guardianHold = guardian.risk === 'high' || guardian.authorization === 'unknown';
+  if (guardianHold) {
+    onThought?.(`🛡️ Guardian: ${guardian.reason}`);
+  }
+
   const protocolId = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const protocol: ProtocolProposal = {
     id: protocolId,
@@ -263,7 +297,38 @@ async function executeSingleTool(
   if (useProtocolStore.getState().fullAutonomy) {
     onThought?.('⏩ Full Autonomy — running without a permission prompt');
   } else {
-    const gate = await gateToolCall(toolCall.id, tool.name, toolCall.args);
+    let gate: PermissionOutcome;
+    if (guardianHold) {
+      // Guardian hold. Compute the request ourselves so we can see the
+      // verdict BEFORE gateToolCall consumes it: if the gate would have
+      // auto-allowed (a standing grant or a below-threshold risk), that
+      // grant never saw what Guardian saw, so it is bypassed and the user
+      // is asked directly via the store's request() promise.
+      const request = classifyToolRequest(toolCall.id, tool.name, toolCall.args);
+      const preVerdict = useTrustStore.getState().verdict(request);
+      if (preVerdict === 'allow') {
+        observations.push(`GUARDIAN HOLD: ${guardian.reason} — user confirmation required`);
+        const choice = await useTrustStore.getState().request(request);
+        if (choice === 'deny') {
+          const reason = guardian.reason;
+          observations.push(`PERMISSION DENIED: ${toolCall.id} — ${reason} Do not retry this action; ask the user what they want instead.`);
+          useProtocolStore.getState().setFailed(protocolId, reason);
+          useGiaStore.getState().setCurrentTool(null);
+          onThought?.(`🚫 Blocked: ${tool.name} — ${reason}`);
+          return { result: 'rejected', observations };
+        }
+        // resolve() already recorded the grant and audit entry; the tool
+        // proceeds on the user's explicit answer, not on the old grant.
+        gate = { allowed: true, choice, request };
+      } else {
+        // 'ask' prompts through the normal path anyway, and 'block' is the
+        // kill switch, which checkTool refuses with its typed reason —
+        // neither needs the bypass.
+        gate = await gateToolCall(toolCall.id, tool.name, toolCall.args);
+      }
+    } else {
+      gate = await gateToolCall(toolCall.id, tool.name, toolCall.args);
+    }
     if (!gate.allowed) {
       const reason = gate.refusalReason ?? 'Permission denied';
       observations.push(`PERMISSION DENIED: ${toolCall.id} — ${reason} Do not retry this action; ask the user what they want instead.`);
@@ -352,8 +417,22 @@ async function executeSingleTool(
   AnalyticsTracker.trackToolExecuted(toolCall.id, result!.success, Math.round(performance.now() - execStartTime), result!.error);
 
   const hint = FALLBACK_HINTS[toolCall.id];
+  // Why: web/browser/MCP/WhatsApp tool output is written by whoever owns the
+  // remote resource, not by the user — it arrives in the same channel as the
+  // user's own words, so it gets an explicit UNTRUSTED-CONTENT envelope (data
+  // for the model, never instructions). Done here at observation assembly,
+  // not inside each tool, so every current and future tool with a remote
+  // source is covered by one rule.
+  const observationBody = result!.success && result!.content.length > 0
+    && isUntrustedToolOutput(toolCall.id)
+    // Some remote-content paths (web scrape via WebContentSanitizer) already
+    // leave the tool pre-labeled; skip the second envelope so the model sees
+    // one clean tag instead of nested ones.
+    && !result!.content.includes('[UNTRUSTED-CONTENT')
+    ? labelObservation(sourceForToolId(toolCall.id), result!.content)
+    : result!.content;
   const obs = result!.success
-    ? `OBSERVATION: Success\n${result!.content}`
+    ? `OBSERVATION: Success\n${observationBody}`
     : `TOOL FAILED: ${toolCall.id} — ${result!.error || 'Unknown error'}. ${hint ? `Try using '${hint}' instead or use a completely different approach.` : 'Use a different approach or tool to achieve the same goal.'} If no alternative works, inform the user about the failure and suggest next steps.`;
   onThought?.(result!.success ? `✅ ${toolCall.id} completed successfully` : `⚠️ ${toolCall.id} failed — trying alternative...`);
 

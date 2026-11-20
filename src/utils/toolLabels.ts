@@ -4,4 +4,5 @@ export const TOOL_LABELS: Record<string, string> = {
   vibrate: 'Vibrate', screen_brightness: 'Brightness', device_info: 'Device Info',
   open_url: 'Open URL', web_search: 'Web Search',
   web_scrape: 'Web Scrape', http_request: 'HTTP Request',
+  web_crawl: 'Web Crawl',
 };

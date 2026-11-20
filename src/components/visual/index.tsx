@@ -1,7 +1,10 @@
 import React, { useMemo } from 'react';
 import { parseVisualBlock } from './parseVisualBlock';
-import { ErrorVisual, VisualLoading } from './common';
+import { VisualLoading } from './common';
 import VisualErrorBoundary from './VisualErrorBoundary';
+import { ArtifactVisual } from './ArtifactVisual';
+import { DataFrameVisual } from './DataFrameVisual';
+import { ExecResultVisual } from './ExecResultVisual';
 import { ChartVisual } from './ChartVisual';
 import { MindMapVisual } from './MindMapVisual';
 import { DiffVisual } from './DiffVisual';
@@ -18,11 +21,31 @@ import { CanvasVisual } from './CanvasVisual';
 import ThreeVisual from './ThreeVisual';
 import GraphVisual from './GraphVisual';
 import { FileVisual } from './FileVisual';
+import { CrawlResultVisual } from './CrawlResultVisual';
 
-const RenderVisualByType: React.FC<{ code: string }> = ({ code }) => {
+export interface VisualRendererProps {
+  code: string;
+  /** True while the source fence is still streaming (no closing ``` yet).
+   * Unparseable or unknown content is then far more likely to be "the rest
+   * of the block hasn't arrived", so we show the rendering placeholder
+   * instead of degrading to the artifact card and flashing back. */
+  incomplete?: boolean;
+}
+
+const RenderVisualByType: React.FC<VisualRendererProps> = ({ code, incomplete }) => {
   const parsed = useMemo(() => parseVisualBlock(code), [code]);
 
-    if ('error' in parsed) return <VisualLoading />;
+  // W9 render-anything guarantee: a block the pipeline can't confidently
+  // draw — JSON that won't parse, or a type no renderer claims — never
+  // surfaces as a red error, raw JSON, or a broken nothing. While streaming
+  // it gets the rendering placeholder; once the fence is complete it degrades
+  // to the generic artifact card. A renderer crash is still caught by the
+  // boundary below as the true last resort.
+  if ('error' in parsed) {
+    return incomplete
+      ? <VisualLoading label="Rendering visualization…" />
+      : <ArtifactVisual source={code} error={parsed.error} />;
+  }
 
   const { type, data } = parsed;
 
@@ -41,6 +64,11 @@ const RenderVisualByType: React.FC<{ code: string }> = ({ code }) => {
     case 'data_table':
     case 'data-table':
       return <DataTableVisual data={data} />;
+    case 'dataframe':
+    case 'csv':
+    case 'dataframe_preview':
+    case 'dataframe-preview':
+      return <DataFrameVisual data={data} />;
     case 'gallery':
     case 'image_gallery':
     case 'image-gallery':
@@ -51,6 +79,14 @@ const RenderVisualByType: React.FC<{ code: string }> = ({ code }) => {
     case 'terminal_output':
     case 'terminal-output':
       return <TerminalVisual data={data} />;
+    case 'exec_result':
+    case 'exec-result':
+    case 'execution':
+    case 'code_execution':
+    case 'code-execution':
+    case 'code_result':
+    case 'code-result':
+      return <ExecResultVisual data={data} />;
     case 'widget':
     case 'metric':
     case 'metrics':
@@ -88,14 +124,19 @@ const RenderVisualByType: React.FC<{ code: string }> = ({ code }) => {
     case 'file_preview':
     case 'file-preview':
       return <FileVisual data={data as never} />;
+    case 'crawl_result':
+    case 'crawl-result':
+      return <CrawlResultVisual data={data} />;
     default:
-      return <ErrorVisual message={`Unknown visual type: "${type}". Supported: chart, mindmap, diff, table, gallery, timeline, terminal, widget, waveform, outline, map, slides, canvas, 3d, graph, file_preview`} />;
+      return incomplete
+        ? <VisualLoading label="Rendering visualization…" />
+        : <ArtifactVisual type={type} data={data} source={code} />;
   }
 };
 
-const VisualRenderer: React.FC<{ code: string }> = ({ code }) => (
+const VisualRenderer: React.FC<VisualRendererProps> = ({ code, incomplete }) => (
   <VisualErrorBoundary>
-    <RenderVisualByType code={code} />
+    <RenderVisualByType code={code} incomplete={incomplete} />
   </VisualErrorBoundary>
 );
 

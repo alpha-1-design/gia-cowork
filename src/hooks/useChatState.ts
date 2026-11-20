@@ -384,7 +384,10 @@ export function useChatState() {
 
   const handleInputChange = useCallback((value: string) => {
     setInput(value);
-    if (value === '/') setShowSkillPicker(true);
+    // NOTE: the SkillPicker modal no longer opens on bare "/" — the unified
+    // composer menu (services/UnifiedComposer.ts) covers skills inline, and
+    // stacking a modal ON TOP of the inline menu was the two-layer mess this
+    // replaces. The chip in the composer still opens the picker directly.
 
     // Detect @-mention for agents
     const atIdx = value.lastIndexOf('@');

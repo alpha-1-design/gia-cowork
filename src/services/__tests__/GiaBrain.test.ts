@@ -9,6 +9,10 @@ vi.mock('../../store/useProviderStore', () => ({
     getState: vi.fn(() => ({
       providers: { openai: { apiKey: 'sk-test', model: 'gpt-4o', enabled: true } },
       activeProvider: 'openai',
+      // W11: generate() compacts against the active model's real window —
+      // compaction.ts reads availableModels[provider] off this store, so the
+      // mock must carry the field (empty = fallback window, which is fine).
+      availableModels: {},
       deductTokens,
       setProviderModel,
     })),
@@ -161,6 +165,34 @@ describe('GiaBrain (integration)', () => {
     expect(result.text).toBe('Final answer after tool');
     expect(callProvider).toHaveBeenCalledTimes(2);
     expect(executeTool).toHaveBeenCalledTimes(2);
+  });
+
+  it('announces every parsed tool-call format, not just quoted-id ```tool fences (S2-4)', async () => {
+    const callProvider = vi.mocked(ProviderService.callProvider);
+    const executeTool = vi.mocked(ToolExecutionService.execute);
+
+    // One text exercising every parser format the old regex missed:
+    // an unquoted-id fence (bare tool name + line args), a ```json fence, and an XML tag.
+    const text = [
+      '```tool\n{"id": "web_search", "args": {"query": "a"}}\n```',
+      '```tool\nfilesystem_read\npath: "x"\n```',
+      '```json\n{"tool": "list_files", "args": {}}\n```',
+      '<tool_call>\n{"id": "read_url", "args": {"url": "https://x"}}\n</tool_call>',
+    ].join('\n\n');
+    callProvider.mockResolvedValueOnce({ text, provider: 'openai', model: 'gpt-4o' });
+    executeTool.mockResolvedValueOnce({ didExecute: true, result: undefined });
+    callProvider.mockResolvedValueOnce({ text: 'done', provider: 'openai', model: 'gpt-4o' });
+    executeTool.mockResolvedValueOnce({ didExecute: false, result: undefined });
+
+    const onThought = vi.fn();
+    await GiaBrain.generate({ prompt: 'Use tools', onThought });
+
+    // Every parsed id was announced BEFORE ToolExecutionService.execute —
+    // the contract SwarmCoordinator's allow-list enforcement listens for.
+    for (const id of ['web_search', 'filesystem_read', 'list_files', 'read_url']) {
+      expect(onThought).toHaveBeenCalledWith(`⚙️ Executing ${id}...`);
+    }
+    expect(executeTool).toHaveBeenCalled();
   });
 
   it('throws when max iterations reached', async () => {

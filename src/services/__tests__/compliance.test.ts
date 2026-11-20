@@ -111,6 +111,32 @@ describe('prompt block', () => {
   it('tells the model it is being watched when armed', () => {
     expect(compliancePromptBlock(true)).toMatch(/checked|enforced/i);
   });
+
+  it('points BELOW at rules that are actually rendered into the block (S2-8)', () => {
+    const block = compliancePromptBlock(true, 'plan');
+    // The referent must exist: no "the rules above" pointing at nothing.
+    expect(block).toMatch(/rules below/);
+    expect(block).not.toMatch(/rules above/);
+    // The applicable rows are rendered, statement lines only.
+    expect(block).toContain(SYSTEM_RULES.find(r => r.id === 'plan-no-mutation')!.statement);
+  });
+
+  it('renders only the rows for the current mode', () => {
+    const askBlock = compliancePromptBlock(true, 'ask');
+    expect(askBlock).toContain(SYSTEM_RULES.find(r => r.id === 'ask-no-tools')!.statement);
+    expect(askBlock).not.toContain(SYSTEM_RULES.find(r => r.id === 'plan-no-mutation')!.statement);
+
+    const buildBlock = compliancePromptBlock(true, 'build');
+    expect(buildBlock).toContain(SYSTEM_RULES.find(r => r.id === 'build-no-placeholders')!.statement);
+  });
+
+  it('omits the list cleanly for a mode with no declared rules', () => {
+    // 'code' has no rules yet — the block must not render an empty
+    // "Rules for the current mode:" heading pointing at nothing.
+    const block = compliancePromptBlock(true, 'code');
+    expect(block).toMatch(/checked|enforced/i);
+    expect(block).not.toContain('Rules for the current mode');
+  });
 });
 
 describe('rule data integrity', () => {

@@ -11,8 +11,49 @@ import AnalyticsTracker from './AnalyticsTracker';
 import { costTracker } from './CostTracker';
 import ProviderService from './ProviderService';
 import ToolExecutionService from './ToolExecutionService';
+import { extractToolCalls } from '../utils/jsonRepair';
 import ErrorHandlingService from './ErrorHandlingService';
 import CollaborativeGenerationService from './CollaborativeGenerationService';
+import {
+  compactIfNeeded,
+  resolveActiveContextWindow,
+  COMPACTION_SUMMARY_PROMPT,
+  renderEvictedForSummary,
+  type CompactionMessage,
+} from './brain/compaction';
+
+/**
+ * Default compaction summarizer — the brain summarizes with itself: a bare
+ * same-provider/same-model call, NOT GiaBrain.generate, on purpose. A
+ * summary must not run the tool loop (no tools inside a summary) and must
+ * not recurse into the very loop that is overflowing. compactIfNeeded has
+ * already elided UNTRUSTED-CONTENT payloads from the slice before this sees
+ * it (see brain/compaction.ts) — that is the safety-critical step, so this
+ * rendering must never bypass it.
+ */
+function makeCompactionSummarizer(providerId: string, model: string, signal?: AbortSignal) {
+  return async (evicted: CompactionMessage[]): Promise<string> => {
+    const res = await ProviderService.callProvider(
+      {
+        prompt: `${COMPACTION_SUMMARY_PROMPT}\n\n${renderEvictedForSummary(evicted)}`,
+        // A focused system prompt, NOT the full buildGiaSystem persona: a
+        // summary needs neither the 90KB tool catalog nor the persona voice,
+        // and the governor's budget belongs to real work, not bookkeeping.
+        // 'replace' is required — the default 'append' mode still builds the
+        // full persona and merely appends to it.
+        systemPrompt:
+          'You are the context-compaction summarizer inside the GIA agent. Produce only the summary requested; no tool calls, no questions to the user.',
+        systemPromptMode: 'replace',
+        modelOverride: model,
+        temperature: 0.3,
+        maxTokens: 1024,
+        signal,
+      },
+      providerId,
+    );
+    return res.text;
+  };
+}
 
 export { setSystemContext };
 export type { BrainRequest, BrainResponse } from './providers/types';
@@ -55,6 +96,30 @@ class GiaBrain {
 
     while (iterations < maxIterations) {
       iterations++;
+
+      // ── Context compaction (W11) — measured against the ACTIVE model's
+      //    real window (resolveCapabilities), not a settings slider. The
+      //    loop below grows `history` with tool output without bound, and
+      //    the chat path's autoSummarizeIfNeeded only runs once per user
+      //    turn, before this loop — so a long agentic task overflowed the
+      //    window mid-loop with nothing to catch it. Compacting here covers
+      //    every seam that runs through generate(): chat AND every
+      //    SwarmCoordinator lane (the swarm executor delegates to this call).
+      //    In-place splice: toolRunner's ExecutionState holds the same array
+      //    reference, so both stay in step.
+      const compaction = await compactIfNeeded(history, resolveActiveContextWindow(effectiveProvider), {
+        summarize: makeCompactionSummarizer(effectiveProvider, finalModel, req.signal),
+        onNotice: (notice) => req.onThought?.(notice),
+      });
+      if (compaction.compacted) {
+        history.length = 0;
+        // compactIfNeeded only reinserts roles that came from the request
+        // history (user/assistant) plus its own 'user' summary marker; a
+        // leading system message is preserved verbatim only if the caller
+        // supplied one, which BrainRequest.history never does.
+        for (const m of compaction.history) history.push(m as (typeof history)[number]);
+      }
+
       const loopReq: BrainRequest = { ...req, prompt: currentPrompt, history };
       let res: BrainResponse | undefined;
       const callStart = performance.now();
@@ -78,16 +143,20 @@ class GiaBrain {
         }
       }
 
-      // Emit tool execution status so the user sees what GIA is doing
+      // Emit tool execution status so the user sees what GIA is doing.
+      // Single-sourced from the parser (utils/jsonRepair.ts): the executor
+      // (toolRunner.ts) runs extractToolCalls, so the announce must cover
+      // exactly the same formats — quoted AND unquoted ids inside ```tool
+      // fences, ```json fences, and the XML tag variants — or a call in an
+      // unannounced format would execute unenforced (SwarmCoordinator's
+      // allow-list enforcement listens for this announce). Deduped by id:
+      // the same tool announced once is still a policy trip if disallowed.
       if (req.onThought) {
-        const toolNameRegex = /```tool\s*\n?\s*"?id"?\s*:\s*"([^"]+)"/g;
-        const toolNames = new Set<string>();
-        let tnMatch;
-        while ((tnMatch = toolNameRegex.exec(text)) !== null) {
-          toolNames.add(tnMatch[1]);
-        }
-        for (const toolName of toolNames) {
-          req.onThought(`⚙️ Executing ${toolName}...`);
+        const announced = new Set<string>();
+        for (const tc of extractToolCalls(text)) {
+          if (announced.has(tc.id)) continue;
+          announced.add(tc.id);
+          req.onThought(`⚙️ Executing ${tc.id}...`);
         }
       }
 

@@ -1,4 +1,6 @@
 mod terminal;
+mod gate;
+mod codex_client;
 mod presence;
 mod desktop_fs;
 mod whatsapp_bridge;
@@ -11,6 +13,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager};
 use terminal::TerminalState;
+use codex_client::CodexClientState;
 use whatsapp_bridge::WhatsAppBridgeState;
 
 /// Whether presenter mode currently owns the window visibility.
@@ -192,6 +195,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .manage(Arc::new(TerminalState::default()))
+        // Enforcement gate for terminal_exec: the webview records grants and
+        // answers prompts, Rust holds the wall (see gate.rs module doc).
+        .manage(gate::GateState::default())
+        .manage(CodexClientState::default())
         .manage(WhatsAppBridgeState::default())
         .manage(Arc::new(PresenterState::default()))
         .invoke_handler(tauri::generate_handler![
@@ -201,6 +208,16 @@ pub fn run() {
             terminal::terminal_get_fs_info,
             terminal::terminal_get_status,
             terminal::terminal_reinstall_rootfs,
+            gate::gate_state,
+            gate::gate_grant,
+            gate::gate_revoke_all,
+            gate::gate_decide,
+            codex_client::codex_start,
+            codex_client::codex_stop,
+            codex_client::codex_status,
+            codex_client::codex_thread_start,
+            codex_client::codex_approval_respond,
+            codex_client::codex_interrupt,
             desktop_fs::fs_read,
             desktop_fs::fs_write,
             desktop_fs::fs_write_bytes,

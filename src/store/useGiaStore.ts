@@ -5,6 +5,10 @@ import { genId } from '../utils/id';
 import { useMemoryStore } from './useMemoryStore';
 import type { MessageSegment } from '../utils/streamParser';
 import { createWorktree, removeWorktree } from '../services/git/worktree';
+// TESTIMONY (W13): the flight recorder installed — every message add schedules
+// a debounced full-session rollout write. Session passed in, so this stays a
+// one-way edge and the recorder never imports the store back.
+import { scheduleRollout } from '../services/brain/rolloutRecorder';
 
 export type { MessageSegment };
 
@@ -1086,11 +1090,15 @@ export const useGiaStore = create<GiaState>()(
             const branchMessages = flattenBranch(sess.messages, sess.currentBranchId);
             const parentId = msg.parentId || branchMessages[branchMessages.length - 1]?.id;
             const nextMessage = parentId ? { ...msg, parentId } : msg;
-            return {
+            const updated = {
               ...sess,
               messages: addMessageToTree(sess.messages, nextMessage, sess.currentBranchId),
               updatedAt: Date.now(),
             };
+            // The recorder rides the same mutation it records (best-effort;
+            // on web it no-ops at the scheduling point).
+            scheduleRollout(updated);
+            return updated;
           }),
         })),
 

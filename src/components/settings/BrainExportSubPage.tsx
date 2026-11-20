@@ -2,12 +2,14 @@ import React, { useState, useRef } from 'react';
 import { Download, Upload } from 'lucide-react';
 import { useGiaStore } from '../../store/useGiaStore';
 import { exportBrainToFile, importBrainFromFile, exportBrainToCloud, loadCloudConfig, saveCloudConfig, CloudConfig } from '../../services/BrainExport';
+import { rolloutSerialize, rolloutWrite } from '../../services/brain/rollout';
 import { SubPageHeader } from './SubPageHeader';
 
 export const BrainExportSubPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
   const [cloudConfig, setCloudConfig] = useState<CloudConfig>(loadCloudConfig);
   const [uploadStatus, setUploadStatus] = useState('');
+  const [rolloutStatus, setRolloutStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
@@ -27,6 +29,20 @@ export const BrainExportSubPage: React.FC<{ onBack: () => void }> = ({ onBack })
     setImportResult(result);
     useGiaStore.getState().addNotification(result.message);
     e.target.value = '';
+  };
+
+  // Rollout export writes the ACTIVE session's transcript as JSONL via the
+  // desktop host filesystem; on web rolloutWrite degrades to a null no-op.
+  const handleRolloutExport = async () => {
+    const { sessions, activeSessionId } = useGiaStore.getState();
+    const session = sessions.find((s) => s.id === activeSessionId);
+    if (!session) {
+      setRolloutStatus('No active session to export');
+      return;
+    }
+    setRolloutStatus('Exporting…');
+    const path = await rolloutWrite(session.id, rolloutSerialize(session));
+    setRolloutStatus(path ? `Rollout written to ${path}` : 'Rollout export needs the GIA Cowork desktop app');
   };
 
   const saveCloud = () => {
@@ -104,6 +120,23 @@ export const BrainExportSubPage: React.FC<{ onBack: () => void }> = ({ onBack })
               </p>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="gia-card p-4 flex flex-col gap-3">
+        <div>
+          <label className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--gia-muted)' }}>Session Rollout (JSONL)</label>
+          <p className="text-[10px] mt-1 mb-3" style={{ color: 'var(--gia-muted-2)' }}>
+            Export the current conversation as a one-JSON-object-per-line rollout transcript (messages, tool calls, tool outputs) for replay and inspection.
+          </p>
+          <button onClick={handleRolloutExport} className="gia-btn flex items-center gap-2" style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa' }}>
+            <Download size={13} /> Export Active Session Rollout
+          </button>
+          {rolloutStatus && (
+            <p className="text-[11px] mt-2 break-all" style={{ color: rolloutStatus.startsWith('Rollout written') ? '#34d399' : 'var(--gia-muted)' }}>
+              {rolloutStatus}
+            </p>
+          )}
         </div>
       </div>
     </div>

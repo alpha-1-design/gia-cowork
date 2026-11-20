@@ -186,13 +186,26 @@ function toResult(violations: SystemRule[]): ComplianceResult {
  * Telling the model the auditor exists matters as much as running it: a model
  * that knows it is being checked self-corrects more often *before* the action,
  * which is where the correction is actually useful.
+ *
+ * The rules themselves are rendered here too, not just referenced: a block
+ * that says "the rules below" without showing them points at nothing (the
+ * referent must exist in the prompt, or the model can never anticipate what
+ * is enforced and every violation is caught after the fact). Only the rows
+ * whose `modes` match the current mode are shown — statement lines only,
+ * compact, so the block stays small enough to read.
  */
-export function compliancePromptBlock(enabled: boolean): string {
+export function compliancePromptBlock(enabled: boolean, mode: ModeId = 'code'): string {
   if (!enabled) return '';
+  const applicable = SYSTEM_RULES.filter((r) => ruleApplies(r, mode));
+  const rules = applicable.map((r) => `- ${r.statement}`).join('\n');
   return `## Your rules are enforced
-Every tool call and every response you produce is checked against the rules above before it is allowed through. If you break one, you will be told immediately and asked to correct it. This is not a formality — assume it is active.
+Every tool call and every response you produce is checked against the rules below before it is allowed through. If you break one, you will be told immediately and asked to correct it. This is not a formality — assume it is active.
 
-So do not plan to break a rule and explain it afterwards. If a rule genuinely blocks what the user asked for, say that BEFORE acting and offer the nearest thing you can do inside the rules.`;
+So do not plan to break a rule and explain it afterwards. If a rule genuinely blocks what the user asked for, say that BEFORE acting and offer the nearest thing you can do inside the rules.${
+  applicable.length > 0
+    ? `\n\nRules for the current mode:\n${rules}`
+    : ''
+}`;
 }
 
 /**

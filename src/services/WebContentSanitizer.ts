@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { sanitizeForContext } from './untrusted';
 
 export interface SanitizeResult {
   safe: boolean;
@@ -205,6 +206,12 @@ class WebContentSanitizer {
     if (warnings.length > 0) {
       logger.warn(`[WebContentSanitizer] ${source}: ${warnings.join('; ')}`);
     }
+
+    // Final step — why: passing every check above only means the page contains
+    // no *known* injection trick, not that it is trusted. Whatever survives is
+    // still written by an outside publisher, so it leaves this module in an
+    // UNTRUSTED-CONTENT envelope (data for the model, never instructions).
+    content = sanitizeForContext('web', content);
 
     return {
       safe: highestRisk !== 'dangerous',

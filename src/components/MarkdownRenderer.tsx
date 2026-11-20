@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { Copy, Check, ExternalLink } from 'lucide-react';
 import CodeBlock from './CodeBlock';
 import VisualRenderer from './visual';
+import { VISUAL_TYPES } from './visual/parseVisualBlock';
 import MermaidRenderer from './MermaidRenderer';
 
 /**
@@ -255,7 +256,8 @@ const parseTaskList = (line: string): React.ReactNode => {
   );
 };
 
-const VISUAL_TYPES = new Set(['chart', 'mindmap', 'mind_map', 'mind-map', 'diff', 'code_diff', 'code-diff', 'table', 'data_table', 'data-table', 'gallery', 'image_gallery', 'image-gallery', 'timeline', 'terminal', 'terminal_output', 'terminal-output', 'widget', 'metric', 'metrics', 'waveform', 'audio', 'outline', 'document_outline', 'toc', 'map', 'openstreetmap', 'slides', 'presentation', 'slide_deck', 'slide-deck', 'canvas', 'drawing', 'diagram', '3d', 'three', 'threejs', 'scene', 'graph', 'network', 'node_graph', 'node-graph', 'topology', 'file_preview', 'file-preview']);
+// The supported-type set lives in visual/parseVisualBlock.ts as the single
+// source of truth shared with the dispatch switch — extend it there.
 
 const wrapBareVisualBlocks = (text: string): string => {
   const blocks = text.split(/(\n\n+)/);
@@ -346,12 +348,17 @@ const MarkdownRenderer: React.FC<Props> = ({ content, className = '', sources })
         codeLines.push(lines[i]);
         i++;
       }
+      // Closed only if the loop stopped on a real closing fence; hitting the
+      // end of the message means the fence is still streaming (or got cut off
+      // by the token limit), which VisualRenderer needs to know so it shows a
+      // placeholder instead of an error.
+      const fenceClosed = i < lines.length;
       if (lang === 'mermaid') {
         nodes.push(<MermaidRenderer key={`mm-${i}`} definition={codeLines.join('\n')} />);
       } else if (lang === 'svg' || lang === 'svg+xml') {
         nodes.push(<InlineSvg key={`svg-${i}`} svg={codeLines.join('\n')} />);
       } else if (lang === 'visual') {
-        nodes.push(<VisualRenderer key={`vis-${i}`} code={codeLines.join('\n')} />);
+        nodes.push(<VisualRenderer key={`vis-${i}`} code={codeLines.join('\n')} incomplete={!fenceClosed} />);
       } else if (lang === 'suggestions') {
         const items = codeLines.join('\n').split('\n').filter(s => s.trim());
         nodes.push(

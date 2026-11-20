@@ -28,8 +28,12 @@ export const FALLBACK_PROVIDERS: ProviderDef[] = [
   // Primary / cloud providers
   { id: 'openai',       label: 'OpenAI',        baseUrl: 'https://api.openai.com/v1',                 defaultModel: 'gpt-4o-mini',      needsApiKey: true,  listingType: 'openai',     aliases: ['oai'] },
   { id: 'anthropic',    label: 'Anthropic',     baseUrl: 'https://api.anthropic.com/v1',               defaultModel: 'claude-sonnet-4-6', needsApiKey: true,  listingType: 'anthropic', aliases: ['ant', 'claude'] },
-  { id: 'gemini',       label: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com',  defaultModel: 'gemini-2.5-flash', needsApiKey: true,  listingType: 'gemini',    aliases: ['gmi', 'google'] },
+  { id: 'gemini',       label: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com',  defaultModel: 'gemini-3.5-flash', needsApiKey: true,  listingType: 'gemini',    aliases: ['gmi', 'google'] },
   { id: 'opencode',     label: 'OpenCode Zen',  baseUrl: 'https://opencode.ai/zen/v1',                 defaultModel: 'deepseek-v4-flash-free',    needsApiKey: true,  listingType: 'openai',     aliases: ['oc', 'zen'] },
+  // Local testing relay: gia-bridge (tools/gia-bridge/bridge.mjs) adapts the
+  // machine's OpenCode service into an OpenAI-compatible endpoint. Not a
+  // product provider — localhost only, and only meaningful on this box.
+  { id: 'relay',        label: 'Local Relay',   baseUrl: 'http://127.0.0.1:8791/v1',                   defaultModel: 'opencode-relay',            needsApiKey: true,  listingType: 'openai',     aliases: [] },
   { id: 'openrouter',   label: 'OpenRouter',    baseUrl: 'https://openrouter.ai/api/v1',               defaultModel: 'google/gemma-3-27b-it:free', needsApiKey: true, listingType: 'openai', aliases: ['or'] },
   { id: 'groq',         label: 'Groq',          baseUrl: 'https://api.groq.com/openai/v1',            defaultModel: 'llama3-70b-8192',  needsApiKey: true,  listingType: 'openai',     aliases: [] },
   { id: 'deepseek',     label: 'DeepSeek',      baseUrl: 'https://api.deepseek.com/v1',                defaultModel: 'deepseek-chat',    needsApiKey: true,  listingType: 'openai',     aliases: ['ds'] },
@@ -138,6 +142,9 @@ const FALLBACK_MODELS: Record<string, StaticModelOption[]> = {
     { id: 'deepseek-v4-flash-free',    label: 'DeepSeek V4 Flash',   free: true,  context: '64k',  tools: true, vision: true  },
     { id: 'gpt-4o-mini',               label: 'GPT-4o Mini',         free: false, context: '128k', tools: true, vision: true  },
   ],
+  relay: [
+    { id: 'opencode-relay', label: 'OpenCode Relay', free: true, context: '128k', tools: false, vision: false },
+  ],
   openrouter: [
     { id: 'google/gemma-3-27b-it:free',         label: 'Gemma 3 27B',     free: true,  context: '96k',  tools: true, vision: true  },
     { id: 'deepseek/deepseek-chat:free',        label: 'DeepSeek V3',     free: true,  context: '64k',  tools: true, vision: true  },
@@ -171,11 +178,15 @@ const FALLBACK_MODELS: Record<string, StaticModelOption[]> = {
     { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', free: false, context: '1M', tools: true, vision: true },
   ],
   gemini: [
+    // 2.5-flash 404s for keys issued after Google retired it for new users
+    // ("no longer available to new users"); 3.5-flash is the verified stable
+    // replacement, 3.8-flash was 503 at check time.
+    { id: 'gemini-3.5-flash',      label: 'Gemini 3.5 Flash', free: true,  context: '1M', tools: true, vision: true },
+    { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite', free: true, context: '1M', tools: true, vision: true },
+    { id: 'gemini-3.8-flash',      label: 'Gemini 3.8 Flash', free: true,  context: '1M', tools: true, vision: true },
     { id: 'gemini-2.5-flash',     label: 'Gemini 2.5 Flash', free: true,  context: '1M', tools: true, vision: true },
     { id: 'gemini-2.5-pro',       label: 'Gemini 2.5 Pro',   free: false, context: '1M', tools: true, vision: true },
     { id: 'gemini-2.0-flash',     label: 'Gemini 2.0 Flash', free: true,  context: '1M', tools: true, vision: true },
-    { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', free: true, context: '1M', tools: true, vision: false },
-    { id: 'gemini-1.5-pro',       label: 'Gemini 1.5 Pro',   free: false, context: '2M', tools: true, vision: true },
   ],
   groq: [
     { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', free: true, context: '128k', tools: true, vision: false },
@@ -409,3 +420,14 @@ class ProviderRegistry {
 }
 
 export const providerRegistry = new ProviderRegistry();
+
+/**
+ * Models Google retired for keys issued after the retirement date. Keys
+ * issued earlier keep working, so these stay in the catalog for existing
+ * users — but a provider record still holding one as its saved model gets
+ * bumped to the current default on load, because a fresh key + this saved
+ * model is exactly the "she answers nothing" failure mode.
+ */
+export const RETIRED_DEFAULT_MODELS: Record<string, string> = {
+  gemini: 'gemini-2.5-flash',
+};

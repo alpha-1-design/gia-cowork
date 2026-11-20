@@ -91,6 +91,13 @@ interface TrustStore {
   armed: boolean;
   /** Ungranted calls at or above this risk always prompt. */
   askThreshold: RiskLevel;
+  /**
+   * Prompts waiting for the user, first-in first-out. A swarm runs several
+   * lanes at once, so several cards can be owed at the same time — the older
+   * one must wait its turn, not get answered for the user.
+   */
+  pendingQueue: Pending[];
+  /** The head of the queue — the one card TrustGate renders right now. */
   pending: Pending | null;
 
   /** Non-blocking check. Decides whether a request needs the user at all. */
@@ -130,6 +137,7 @@ export const useTrustStore = create<TrustStore>()(
       // rate 'none' and never prompt, so this does not mean a dialog on every
       // web search — it means a write always asks until you grant the scope.
       askThreshold: 'low',
+      pendingQueue: [],
       pending: null,
 
       verdict: (request) => {
@@ -144,28 +152,27 @@ export const useTrustStore = create<TrustStore>()(
       },
 
       request: (request) => new Promise<PermissionChoice>((resolve) => {
-        const state = get();
-        if (state.pending) {
-          // A second prompt arriving while one is open means two things are in
-          // flight at once. Answering the older one with 'deny' is the safe
-          // resolution — never leave a promise hanging.
-          state.pending.resolve('deny');
-          if (state.pending.timer) clearTimeout(state.pending.timer);
-        }
-        const timer = setTimeout(() => {
-          set({ pending: null });
+        const entry: Pending = { request, resolve };
+        // Timeouts are per entry, counted from enqueue: a card queued behind
+        // two others still expires on its own clock, so a lane cannot be held
+        // hostage by the prompts in front of it.
+        entry.timer = setTimeout(() => {
+          set((s) => dropPending(s.pendingQueue, entry));
           resolve('deny');
         }, PERMISSION_TIMEOUT_MS);
-        set({ pending: { request, resolve, timer } });
+        // Queue, don't displace. Whatever is already on the card stays there
+        // until it is answered; this caller waits its turn.
+        set((s) => pushPending(s.pendingQueue, entry));
       }),
 
       resolve: (choice) => {
-        const pending = get().pending;
-        if (!pending) return;
-        if (pending.timer) clearTimeout(pending.timer);
-        set({ pending: null });
-        get().grant(pending.request, choice);
-        pending.resolve(choice);
+        const queue = get().pendingQueue;
+        const head = queue[0];
+        if (!head) return;
+        if (head.timer) clearTimeout(head.timer);
+        set((s) => shiftPending(s.pendingQueue));
+        get().grant(head.request, choice);
+        head.resolve(choice);
       },
 
       checkTool: async (toolId, toolName, args, options) => {
@@ -256,15 +263,15 @@ export const useTrustStore = create<TrustStore>()(
 
       toggleArmed: () => {
         const next = !get().armed;
-        // Disarming should also clear anything the user was about to answer:
-        // an open prompt is a decision waiting to be made on stale terms.
+        // Disarming should also clear everything the user was about to answer:
+        // an open prompt is a decision waiting to be made on stale terms — and
+        // that goes for every queued one, not just the card on top.
         if (!next) {
-          const pending = get().pending;
-          if (pending) {
-            if (pending.timer) clearTimeout(pending.timer);
-            set({ pending: null });
-            pending.resolve('deny');
+          for (const entry of get().pendingQueue) {
+            if (entry.timer) clearTimeout(entry.timer);
+            entry.resolve('deny');
           }
+          set({ pendingQueue: [], pending: null });
         }
         set({ armed: next });
         return next;
@@ -309,6 +316,26 @@ function bumpUse(grants: Grant[], scope: string): Grant[] {
 function appendAudit(audit: AuditEntry[], entry: AuditEntry): AuditEntry[] {
   const next = [entry, ...audit];
   return next.length > MAX_AUDIT ? next.slice(0, MAX_AUDIT) : next;
+}
+
+// ── the prompt queue ───────────────────────────────────────────────────
+
+/** The queue and its head are one shape — every update keeps both in step. */
+type QueueSlice = Pick<TrustStore, 'pendingQueue' | 'pending'>;
+
+function pushPending(queue: Pending[], entry: Pending): QueueSlice {
+  const next = [...queue, entry];
+  return { pendingQueue: next, pending: next[0] ?? null };
+}
+
+function dropPending(queue: Pending[], entry: Pending): QueueSlice {
+  const next = queue.filter(p => p !== entry);
+  return { pendingQueue: next, pending: next[0] ?? null };
+}
+
+function shiftPending(queue: Pending[]): QueueSlice {
+  const next = queue.slice(1);
+  return { pendingQueue: next, pending: next[0] ?? null };
 }
 
 /** Non-reactive read, for callers outside React. */

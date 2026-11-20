@@ -20,13 +20,14 @@ import OrbAvatar from '../components/OrbAvatar';
 import { GIA_BOTS, botPortrait } from '../components/GiaBots';
 import DevStudio from '../components/DevStudio';
 import Council from '../components/Council';
+import SwarmPanel from '../components/swarm/SwarmPanel';
 import AgentDispatchBoard from '../components/AgentDispatchBoard';
 import { useAgentTaskStore } from '../store/useAgentTaskStore';
 
 // ── Max messages per agent chat session stored in IDB ──────────────────────
 const MAX_MESSAGES_PER_SESSION = 100;
 
-type ViewState = 'list' | 'chat' | 'dispatch' | 'council';
+type ViewState = 'list' | 'chat' | 'dispatch' | 'council' | 'swarm';
 type SortOption = 'newest' | 'alphabetical' | 'tools' | 'files';
 
 const AGENT_ICONS: { name: string; color: string }[] = [
@@ -221,6 +222,7 @@ const AgentsModule: React.FC = () => {
             onOpenChat={openChat}
             onOpenDispatch={() => setView('dispatch')}
             onOpenCouncil={() => setView('council')}
+            onOpenSwarm={() => setView('swarm')}
             onCreateNew={() => setShowCreate(true)}
             onEdit={(id) => setEditAgentId(id)}
             onDelete={removeAgent}
@@ -233,6 +235,16 @@ const AgentsModule: React.FC = () => {
             </div>
             <div className="flex-1 min-h-0">
               <Council />
+            </div>
+          </div>
+        )}
+        {view === 'swarm' && (
+          <div className="flex flex-col h-full">
+            <div className="px-3 py-1.5 shrink-0" style={{ borderBottom: '1px solid var(--gia-border)' }}>
+              <button onClick={() => setView('list')} className="text-[11px] px-2 py-1" style={{ color: 'var(--gia-muted)' }}>← Agents</button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <SwarmPanel />
             </div>
           </div>
         )}
@@ -290,10 +302,11 @@ const AgentListView: React.FC<{
   onOpenChat: (id: string) => void;
   onOpenDispatch: () => void;
   onOpenCouncil: () => void;
+  onOpenSwarm: () => void;
   onCreateNew: () => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-}> = ({ agents, onOpenChat, onOpenDispatch, onOpenCouncil, onCreateNew, onEdit, onDelete }) => {
+}> = ({ agents, onOpenChat, onOpenDispatch, onOpenCouncil, onOpenSwarm, onCreateNew, onEdit, onDelete }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
@@ -351,6 +364,13 @@ const AgentListView: React.FC<{
             <p className="text-[12px] mt-0.5" style={{ color: 'var(--gia-muted)' }}>House bots answer in chat. Yours keep their own files.</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenSwarm}
+              className="h-8 px-3 rounded-full text-[12px]"
+              style={{ border: '1px solid rgba(244,239,228,0.35)', color: '#f4efe4' }}
+            >
+              Swarm
+            </button>
             <button
               onClick={onOpenCouncil}
               className="h-8 px-3 rounded-full text-[12px]"

@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { labelObservation } from './untrusted';
 
 export interface MarketplaceSkill {
   id: string;
@@ -934,7 +935,16 @@ class SkillsMarketplace {
         const timeout = setTimeout(() => controller.abort(), 10000);
         const res = await fetch(skill.sourceUrl, { signal: controller.signal });
         clearTimeout(timeout);
-        if (res.ok) skillMd = await res.text();
+        if (res.ok) {
+          // A fetched SKILL.md is REMOTE TEXT, same threat class as a web
+          // page: a malicious file could otherwise install itself as GIA's
+          // trusted operating instructions (the prompt interpolation at
+          // buildGiaSystem's skillPrompt seam treats systemPrompt as
+          // instructions). Envelope it before it ever reaches the store —
+          // instruction-following inside it is then flagged as untrusted
+          // content by the prompt constitution and Guardian.
+          skillMd = labelObservation('web', await res.text());
+        }
       } catch { /* use what we have */ }
     }
 

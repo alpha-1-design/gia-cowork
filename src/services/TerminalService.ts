@@ -10,6 +10,8 @@
  */
 
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import type { PermissionRequest } from './permissions';
+import type { PermissionChoice } from '../store/useTrustStore';
 
 // ---------------------------------------------------------------------------
 // Tauri detection + adapter
@@ -17,6 +19,11 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const mod = await import('@tauri-apps/api/core');
+  return mod.invoke<T>(cmd, args);
 }
 
 /**
@@ -29,10 +36,7 @@ function isTauri(): boolean {
  * race where an early exec() sees a not-yet-ready plugin.
  */
 function makeTauriPlugin(): GiaTerminalPlugin {
-  const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
-    const mod = await import('@tauri-apps/api/core');
-    return mod.invoke<T>(cmd, args);
-  };
+  const invoke = tauriInvoke;
   return {
     exec: (opts) =>
       invoke('terminal_exec', {
@@ -47,6 +51,92 @@ function makeTauriPlugin(): GiaTerminalPlugin {
     getStatus: () => invoke('terminal_get_status'),
     reinstallRootfs: () => invoke('terminal_reinstall_rootfs'),
   };
+}
+
+// ---------------------------------------------------------------------------
+// The desktop command gate (src-tauri/src/gate.rs)
+// ---------------------------------------------------------------------------
+
+export type GateError =
+  | { kind: 'prompt'; requestId: string; scope: string }
+  | { kind: 'deny'; scope: string };
+
+/**
+ * Parse the gate's typed-error protocol. The prompt form is
+ * `GIA_GATE_PROMPT:<request_id>:<scope>` and the scope is a command prefix
+ * that may itself contain ':' — so split on the FIRST TWO colons only, and
+ * everything after the second colon is the scope (the contract note in
+ * gate.rs check()). Anything else is not ours; return null and let the
+ * caller treat it as an ordinary exec failure.
+ */
+export function parseGateError(raw: string): GateError | null {
+  if (raw.startsWith('GIA_GATE_PROMPT:')) {
+    const body = raw.slice('GIA_GATE_PROMPT:'.length);
+    // The two colons that matter are the marker's own and the one after the
+    // request id; everything after that is scope, colons included.
+    const idEnd = body.indexOf(':');
+    if (idEnd <= 0) return null;
+    const scope = body.slice(idEnd + 1);
+    if (!scope) return null;
+    return { kind: 'prompt', requestId: body.slice(0, idEnd), scope };
+  }
+  if (raw.startsWith('GIA_GATE_DENY:')) {
+    const scope = raw.slice('GIA_GATE_DENY:'.length);
+    return scope ? { kind: 'deny', scope } : null;
+  }
+  return null;
+}
+
+let gateRequestSeq = 0;
+
+/**
+ * The PermissionRequest the gate round-trip shows on the standard TrustGate
+ * card. A Deny-classified scope gets the critical card (explicit two-click
+ * allow, no standing buttons) — the same weight the TS rule table gives a
+ * destructive command.
+ */
+function gatePermissionRequest(gate: GateError, command: string): PermissionRequest {
+  return {
+    id: `gate-${++gateRequestSeq}`,
+    toolId: 'terminal_run',
+    toolName: 'run a terminal command',
+    risk: gate.kind === 'deny' ? 'critical' : 'moderate',
+    headline: 'The desktop command gate needs a decision on a command.',
+    reasons: [
+      gate.kind === 'deny'
+        ? 'The desktop command gate hard-blocked this command; it only runs if you allow it explicitly.'
+        : 'The desktop command gate flagged this command for your review.',
+      `Gate scope: ${gate.scope}`,
+    ],
+    scope: gate.scope,
+    scopeLabel: gate.scope,
+    preview: { kind: 'command', command },
+    args: { command },
+  };
+}
+
+/**
+ * Get a decision for a gate-flagged command through the existing trust flow.
+ *
+ * The Rust gate and the TS trust layer keep separate grant stores, so an
+ * approval only counts if it exists in both: a scope the TS layer has already
+ * granted skips a second card (one approval should be one approval), while
+ * anything ungranted shows the standard card. The kill switch answers for the
+ * user, as everywhere else. The returned choice is what gets mirrored
+ * rust-side — 'deny' stays 'deny', and an allow keeps its weight so 'always'
+ * can be recorded as a persistent grant rather than a session one.
+ */
+async function requestGateDecision(gate: GateError, command: string): Promise<PermissionChoice> {
+  // Imported on demand: the trust store pulls in the whole classification
+  // layer, and this path only runs on the desktop build when the gate
+  // actually refuses a command.
+  const { useTrustStore } = await import('../store/useTrustStore');
+  const trust = useTrustStore.getState();
+  const request = gatePermissionRequest(gate, command);
+  const verdict = trust.verdict(request);
+  if (verdict === 'block') return 'deny';
+  if (verdict === 'allow') return 'session';
+  return trust.request(request);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,6 +272,22 @@ class TerminalService {
     env?: Record<string, string>,
     timeout?: number,
   ): Promise<ExecResult> {
+    return this.execInternal(command, workdir, env, timeout, true);
+  }
+
+  /**
+   * Run the command. `allowGateRoundTrip` is the once-only guard against an
+   * infinite retry: after a gate decision has been mirrored rust-side, a
+   * second gate error on the same command means the grant did not take, and
+   * the only honest answer is a plain refusal — not another card.
+   */
+  private async execInternal(
+    command: string,
+    workdir: string | undefined,
+    env: Record<string, string> | undefined,
+    timeout: number | undefined,
+    allowGateRoundTrip: boolean,
+  ): Promise<ExecResult> {
     if (!this.plugin) {
       console.warn('[TerminalService] exec() called but plugin unavailable', {
         command,
@@ -210,7 +316,64 @@ class TerminalService {
       };
     } catch (error) {
       console.error('[TerminalService] exec() failed:', error);
-      throw new Error(`Terminal exec failed: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      // The desktop gate answers flagged commands with a typed error instead
+      // of running them (see src-tauri/src/gate.rs). Without this round-trip
+      // every Prompt- or Deny-classified command would fail on the desktop
+      // build no matter what the user approved TS-side.
+      const gate = parseGateError(message);
+      if (gate && allowGateRoundTrip) {
+        return this.execAfterGateDecision(command, workdir, env, timeout, gate);
+      }
+      if (gate) {
+        // Never loop, and never hand the model the raw protocol token.
+        throw new Error(`Blocked by the desktop command gate: ${gate.scope}`);
+      }
+      throw new Error(`Terminal exec failed: ${message}`);
+    }
+  }
+
+  /**
+   * The gate refused to run the command until someone answers. Ask through
+   * the standard TrustGate card (or the TS grant, if one already covers the
+   * scope), mirror the answer rust-side, and retry exactly once — a granted
+   * scope passes the gate's check() hook, so the retry runs.
+   */
+  private async execAfterGateDecision(
+    command: string,
+    workdir: string | undefined,
+    env: Record<string, string> | undefined,
+    timeout: number | undefined,
+    gate: GateError,
+  ): Promise<ExecResult> {
+    const choice = await requestGateDecision(gate, command);
+    if (choice === 'deny') {
+      // Drop the gate's pending prompt so it does not sit in Rust state
+      // forever (a Deny classification never registered one). 'deny' resolves
+      // to a refusal either way.
+      await this.dropGatePrompt(gate);
+      throw new Error(`Blocked by the desktop command gate: ${gate.scope}`);
+    }
+    // Mirror the approval into the gate's own grant store so the immediate
+    // retry passes: gate_grant(scope, session_only). An 'always' from the
+    // card is recorded persistent, matching the weight the user chose.
+    await tauriInvoke('gate_grant', { scope: gate.scope, sessionOnly: choice !== 'always' });
+    await this.dropGatePrompt(gate);
+    return this.execInternal(command, workdir, env, timeout, false);
+  }
+
+  /**
+   * Consume the gate's pending prompt for a Prompt-classified error. A grant
+   * already covers the run; this only clears the card from Rust state so
+   * gate_state() does not advertise a prompt that has been answered.
+   */
+  private async dropGatePrompt(gate: GateError): Promise<void> {
+    if (gate.kind !== 'prompt') return;
+    try {
+      // allow:false just drops the prompt — the grant came from gate_grant.
+      await tauriInvoke('gate_decide', { requestId: gate.requestId, allow: false });
+    } catch {
+      // Unknown-request means the prompt was already consumed; nothing to do.
     }
   }
 

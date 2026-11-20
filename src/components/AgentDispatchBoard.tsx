@@ -8,7 +8,7 @@ import { useAgentTaskStore, type AgentDispatchTask } from '../store/useAgentTask
 import { useProviderStore } from '../store/useProviderStore';
 import { useAgentStore, type CustomAgent } from '../store/useAgentStore';
 import { AGENT_ROLES } from '../services/brain/SubAgentManager';
-import GiaBrain from '../services/GiaBrain';
+import { swarmCoordinator } from '../services/swarm/SwarmCoordinator';
 import { useGiaStore } from '../store/useGiaStore';
 import { genId } from '../utils/id';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -151,7 +151,7 @@ function TaskCard({ task }: { task: AgentDispatchTask }) {
           )}
           {isRunning && (
             <button
-              onClick={(e) => { e.stopPropagation(); cancel(task.id); }}
+              onClick={(e) => { e.stopPropagation(); swarmCoordinator.cancel(task.id) || cancel(task.id); }}
               className="w-5 h-5 rounded flex items-center justify-center hover:bg-red-500/10"
               style={{ color: '#f87171' }}
             >
@@ -263,11 +263,10 @@ export default function AgentDispatchBoard() {
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const abortRefs = useRef<Map<string, AbortController>>(new Map());
 
   const {
     tasks, runningIds, subAgentProviders, agentProviders,
-    dispatch, markRunning, setActivity, appendResult, setResult, setFailed,
+    dispatch,
     setSubAgentProvider, setAgentProvider, resolveProvider,
   } = useAgentTaskStore();
   const { providers, getActiveProviders, getBestProviderForTask } = useProviderStore();
@@ -320,7 +319,10 @@ export default function AgentDispatchBoard() {
     }
   }, [selectedAgentIds.length, allAgents]);
 
-  // Dispatch a single task to one agent
+  // Dispatch a single task to one agent — through the SwarmCoordinator (the
+  // ONE agent engine). The coordinator owns the AbortController, so the ✕
+  // button genuinely aborts the underlying generation (V1 audit finding #1:
+  // the old inline controller was created but never aborted).
   const dispatchToAgent = useCallback(async (agentDef: typeof allAgents[number], taskPrompt: string) => {
     const taskId = dispatch({
       prompt: taskPrompt,
@@ -334,49 +336,24 @@ export default function AgentDispatchBoard() {
         : (agentProviders[agentDef.name] || ''),
     });
 
-    const controller = new AbortController();
-    abortRefs.current.set(taskId, controller);
-
     // Resolve effective provider
     const providerId = resolveProvider(taskId);
-    const providerConfig = providerId ? providers[providerId] : null;
 
     const custom = agentDef.type === 'custom' ? customAgents.find(a => a.id === agentDef.id) : undefined;
     const systemPrompt = systemPromptFor(agentDef, custom);
-    const enrichedPrompt = `${systemPrompt}\n\nTask:\n${taskPrompt}`;
 
-    markRunning(taskId);
-    setActivity(taskId, `Using ${providerId || 'auto'}…`);
-
-    try {
-      // Use GiaBrain with provider override
-      const result = await GiaBrain.generate({
-        prompt: enrichedPrompt,
+    swarmCoordinator.startSwarm({
+      tasks: [{
+        id: taskId,
+        prompt: taskPrompt,
+        persona: `${agentDef.name} — ${agentDef.role}`,
         systemPrompt,
         providerId: providerId || undefined,
-        signal: controller.signal,
-        onStream: (chunk) => {
-          appendResult(taskId, chunk);
-          setActivity(taskId, 'Generating…');
-        },
-        onThought: (thought) => {
-          setActivity(taskId, thought.slice(0, 80));
-        },
-      });
-
-      if (!controller.signal.aborted) {
-        setResult(taskId, result.text, result.tokenUsage ? { input: result.tokenUsage.input, output: result.tokenUsage.output } : undefined);
-      }
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === 'AbortError') {
-        useAgentTaskStore.getState().cancel(taskId);
-        return;
-      }
-      setFailed(taskId, e instanceof Error ? e.message : 'Unknown error');
-    } finally {
-      abortRefs.current.delete(taskId);
-    }
-  }, [dispatch, markRunning, setActivity, appendResult, setResult, setFailed, resolveProvider, providers, subAgentProviders, agentProviders, customAgents]);
+      }],
+      concurrency: 1,
+      profile: 'ask',
+    });
+  }, [dispatch, resolveProvider, customAgents, subAgentProviders, agentProviders]);
 
   // Handle dispatch button / Enter
   const handleDispatch = useCallback(() => {

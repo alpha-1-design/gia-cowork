@@ -14,7 +14,8 @@ function open(toolId: string, args: Record<string, unknown>, beforeContent?: str
 describe('TrustGate', () => {
   beforeEach(() => {
     useTrustStore.setState({
-      grants: [], sessionGrants: [], audit: [], armed: true, askThreshold: 'low', pending: null,
+      grants: [], sessionGrants: [], audit: [], armed: true, askThreshold: 'low',
+      pendingQueue: [], pending: null,
     });
   });
 

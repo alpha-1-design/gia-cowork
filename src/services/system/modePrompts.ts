@@ -132,6 +132,11 @@ export function modePromptFor(mode: string): string {
     case 'build': return ''; // handled by buildBuilderPrompt
     case 'exam': return EXAM_PROMPT;
     case 'analyst': return ANALYST_PROMPT;
-    default: return CODE_PROMPT;
+    case 'code': return CODE_PROMPT;
+    default:
+      // Unknown mode id: emit no mode block rather than silently granting
+      // CODE's full access. A typo'd mode id used to become "full access"
+      // with no signal anywhere (V2 clarity audit, (e)).
+      return '';
   }
 }

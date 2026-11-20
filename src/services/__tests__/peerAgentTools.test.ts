@@ -42,12 +42,15 @@ describe('peer agent tools reach the model', () => {
   });
 
   it('is advertised to OpenAI-compatible providers', () => {
-    const names = buildOpenAITools().map(t => (t.function as { name: string }).name);
+    // forceFull: deferred mode (W3) hides non-core tools from the default
+    // payload once the registry passes DEFERRED_THRESHOLD; these tests assert
+    // full advertisement, which is exactly what forceFull requests.
+    const names = buildOpenAITools(true).map(t => (t.function as { name: string }).name);
     for (const id of NEW_TOOLS) expect(names).toContain(id);
   });
 
   it('is advertised to Anthropic-compatible providers', () => {
-    const names = buildAnthropicTools().map(t => (t as { name: string }).name);
+    const names = buildAnthropicTools(true).map(t => (t as { name: string }).name);
     for (const id of NEW_TOOLS) expect(names).toContain(id);
   });
 

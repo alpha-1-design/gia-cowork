@@ -2,7 +2,7 @@ import { logger } from '../utils/logger';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { idbStorage } from './idb-storage';
-import { providerRegistry } from '../services/ProviderRegistry';
+import { providerRegistry, RETIRED_DEFAULT_MODELS } from '../services/ProviderRegistry';
 import { corsProxy } from '../services/CorsProxy';
 import CredentialVault from '../services/CredentialVault';
 
@@ -113,6 +113,16 @@ export const useProviderStore = create<GiaProviderState>()(
             }
             if (!availableModels[id] || availableModels[id].length === 0) {
               availableModels[id] = providerRegistry.getModels(id);
+            }
+          }
+          // A provider record saved under a since-retired default model
+          // (e.g. gemini-2.5-flash written to idb before Google retired it
+          // for new keys) never recovers on its own — every turn 404s. Bump
+          // it to the current default so the app boots usable again.
+          for (const id of ids) {
+            const retired = RETIRED_DEFAULT_MODELS[id];
+            if (retired && providers[id]?.model === retired) {
+              providers[id] = { ...providers[id], model: providerRegistry.getDefaultModel(id) };
             }
           }
           // Remove stale providers that no longer exist

@@ -1,8 +1,15 @@
-import GiaBrain from '../GiaBrain';
+import { swarmCoordinator } from '../swarm/SwarmCoordinator';
 import { useAgentTaskStore } from '../../store/useAgentTaskStore';
 import type { StudioAgent } from './devAgents';
 
-/** Run one studio agent. Parallel callers share the task board. */
+/**
+ * Run one studio agent through the SwarmCoordinator — the ONE agent engine.
+ * Each lane is a one-task swarm so the coordinator owns the AbortController:
+ * cancelling from the task board actually aborts the underlying generation
+ * (the old inline controller was dead — nothing ever called .abort()).
+ * The studio persona instruction rides the task's systemPrompt override;
+ * the coordinator still appends its persona/tool-policy context.
+ */
 export function runStudioLane(agent: StudioAgent, task: string, systemPrompt: string): string {
   const store = useAgentTaskStore.getState();
   const taskId = store.dispatch({
@@ -13,33 +20,18 @@ export function runStudioLane(agent: StudioAgent, task: string, systemPrompt: st
     agentColor: agent.color,
     agentIcon: agent.icon,
   });
-  const controller = new AbortController();
-  store.markRunning(taskId);
-  store.setActivity(taskId, 'Starting…');
   const providerId = store.resolveProvider(taskId);
 
-  void GiaBrain.generate({
-    prompt: task,
-    systemPrompt,
-    providerId: providerId || undefined,
-    signal: controller.signal,
-    onStream: (chunk) => {
-      useAgentTaskStore.getState().appendResult(taskId, chunk);
-      useAgentTaskStore.getState().setActivity(taskId, 'Writing…');
-    },
-  }).then((result) => {
-    if (controller.signal.aborted) return;
-    useAgentTaskStore.getState().setResult(
-      taskId,
-      result.text,
-      result.tokenUsage ? { input: result.tokenUsage.input, output: result.tokenUsage.output } : undefined,
-    );
-  }).catch((e: unknown) => {
-    if (e instanceof Error && e.name === 'AbortError') {
-      useAgentTaskStore.getState().cancel(taskId);
-      return;
-    }
-    useAgentTaskStore.getState().setFailed(taskId, e instanceof Error ? e.message : 'The lane failed');
+  swarmCoordinator.startSwarm({
+    tasks: [{
+      id: taskId,
+      prompt: task,
+      persona: `${agent.name} — ${agent.role}`,
+      systemPrompt,
+      providerId: providerId || undefined,
+    }],
+    concurrency: 1,
+    profile: 'ask',
   });
 
   return taskId;

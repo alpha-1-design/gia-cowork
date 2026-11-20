@@ -69,11 +69,13 @@ export class AutonomousAgent {
       const store = useAutonomyStore.getState();
       store.updateStepStatus(plan.id, step.id, 'in_progress');
 
-      // Heartbeat — log every 60s that the step is still running
+      // Heartbeat — log every 60s that the step is still running. Progress
+      // comes from completed steps, NOT wall-clock: an elapsed-time percentage
+      // is a fabricated metric (V1 audit) — a 2-minute step and a 2-hour step
+      // would "reach" the same fake progress at the same wall-clock moment.
       record.heartbeat = setInterval(() => {
         const elapsed = Date.now() - record.startTime;
         logger.log(`[AutonomousAgent] Step "${step.description.slice(0, 40)}" still running (${formatDuration(elapsed)})`);
-        store.setGoalProgress(goal.id, Math.min(99, Math.round((elapsed / 600000) * 100)));
       }, 60000);
 
       const stepNum = plan.steps.indexOf(step) + 1;

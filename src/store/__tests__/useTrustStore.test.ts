@@ -10,7 +10,8 @@ function req(toolId: string, args: Record<string, unknown> = {}, risk?: Permissi
 
 function reset() {
   useTrustStore.setState({
-    grants: [], sessionGrants: [], audit: [], armed: true, askThreshold: 'low', pending: null,
+    grants: [], sessionGrants: [], audit: [], armed: true, askThreshold: 'low',
+    pendingQueue: [], pending: null,
   });
 }
 
@@ -101,6 +102,17 @@ describe('trust store — the kill switch', () => {
     expect(useTrustStore.getState().pending).toBeNull();
   });
 
+  it('denies every queued prompt, not just the one on the card', async () => {
+    const store = useTrustStore.getState();
+    const first = store.request(req('terminal_run', { command: 'npm publish' }));
+    const second = store.request(req('terminal_run', { command: 'rm -rf build' }));
+
+    useTrustStore.getState().toggleArmed();
+    await expect(first).resolves.toBe('deny');
+    await expect(second).resolves.toBe('deny');
+    expect(useTrustStore.getState().pendingQueue).toHaveLength(0);
+  });
+
   it('toggles back', () => {
     expect(useTrustStore.getState().toggleArmed()).toBe(false);
     expect(useTrustStore.getState().toggleArmed()).toBe(true);
@@ -128,12 +140,45 @@ describe('trust store — the prompt queue', () => {
     expect(useTrustStore.getState().sessionGrants).toHaveLength(1);
   });
 
-  it('denies the older prompt when a second arrives', async () => {
+  it('queues a second prompt instead of answering it for the user', async () => {
     const first = useTrustStore.getState().request(req('terminal_run', { command: 'rm -rf build' }));
     const second = useTrustStore.getState().request(req('terminal_run', { command: 'npm publish' }));
+
+    // Nothing is answered just because something else asked. The first card
+    // stays up; the second lane waits its turn — under a 4-lane 'ask' swarm,
+    // denying the older card would fail a lane the user never saw.
+    expect(useTrustStore.getState().pendingQueue).toHaveLength(2);
+    expect(useTrustStore.getState().pending?.request.headline)
+      .toBe(useTrustStore.getState().pendingQueue[0].request.headline);
+
+    useTrustStore.getState().resolve('deny');
     await expect(first).resolves.toBe('deny');
+    // The next entry is promoted to the card, and it is still answerable.
+    expect(useTrustStore.getState().pending?.request.args.command).toBe('npm publish');
     useTrustStore.getState().resolve('once');
     await expect(second).resolves.toBe('once');
+    expect(useTrustStore.getState().pending).toBeNull();
+  });
+
+  it('times out each queued entry on its own clock', async () => {
+    vi.useFakeTimers();
+    const head = useTrustStore.getState().request(req('terminal_run', { command: 'npm publish' }));
+
+    // The second card is enqueued a minute later, so the two clocks differ:
+    // each entry expires 120s after ITS enqueue, not after it reaches the head.
+    vi.advanceTimersByTime(100_000);
+    const queued = useTrustStore.getState().request(req('terminal_run', { command: 'rm -rf build' }));
+
+    vi.advanceTimersByTime(20_001);
+    // Silence is consent to nothing — the head expires on schedule, and the
+    // buried card is promoted rather than dragged down with it.
+    await expect(head).resolves.toBe('deny');
+    expect(useTrustStore.getState().pendingQueue).toHaveLength(1);
+    expect(useTrustStore.getState().pending?.request.args.command).toBe('rm -rf build');
+
+    vi.advanceTimersByTime(99_999);
+    await expect(queued).resolves.toBe('deny');
+    expect(useTrustStore.getState().pendingQueue).toHaveLength(0);
   });
 
   it('defaults to deny when nobody answers', async () => {

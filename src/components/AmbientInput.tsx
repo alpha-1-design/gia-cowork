@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Send, Loader2, Square, Mic, MicOff } from 'lucide-react';
 import { SlashCommandMenu, isCommandNameActive } from './SlashCommandMenu';
-import { getCommandSuggestions, getCommandByName, type CommandSpec } from '../services/SlashCommands';
+import { getCommandByName, type CommandSpec } from '../services/SlashCommands';
+import { getUnifiedComposerEntries, type UnifiedComposerEntry } from '../services/UnifiedComposer';
 
 
 interface AmbientInputProps {
@@ -18,6 +19,8 @@ interface AmbientInputProps {
   multiline?: boolean;
   autoFocus?: boolean;
   prefix?: React.ReactNode;
+  /** Unified-menu skill activation. Absent → skill entries insert nothing. */
+  onSelectSkill?: (skillId: string) => void;
 }
 
 const AmbientInput: React.FC<AmbientInputProps> = ({
@@ -28,34 +31,43 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
   isLoading = false,
   multiline = false,
   prefix,
+  onSelectSkill,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Slash-command autocomplete. The menu is open only while the composer
-  // holds a bare command name, so `/note my thing` does not get a popup
-  // fighting the text the user is typing.
+  // Unified composer menu (personas + slash commands + skills in ONE layer).
+  // The menu is open only while the composer holds a bare command name, so
+  // `/note my thing` does not get a popup fighting the text the user types.
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandDismissed, setCommandDismissed] = useState(false);
   const commandMenuOpen = isCommandNameActive(value) && !commandDismissed;
   const commandMatches = useMemo(
-    () => (commandMenuOpen ? getCommandSuggestions(value.trimStart()) : []),
+    () => (commandMenuOpen ? getUnifiedComposerEntries(value) : []),
     [commandMenuOpen, value],
   );
   const commandActive = commandMenuOpen && commandMatches.length > 0;
-  // When the text is already an exact command (the user typed `/help`, not a
-  // prefix of it), Enter should run it rather than complete it — otherwise
-  // completing a command you already finished by typing is an extra keypress
-  // that looks like the app ignored you.
+  // When the text is already an exact COMMAND (the user typed `/help`, not a
+  // prefix of it), Enter should run it rather than complete it. Personas and
+  // skills have no "run" semantics from a bare name, so they always complete.
   const commandIsExact = commandMenuOpen && getCommandByName(value.trimStart()) !== undefined;
 
-  const selectCommand = useCallback((c: CommandSpec) => {
-    // Keep the space: a command with no argument can be sent straight away,
-    // and one that takes arguments needs the cursor already in place.
-    onChange(`/${c.name} `);
+  const selectEntry = useCallback((entry: UnifiedComposerEntry) => {
+    if (entry.kind === 'persona') {
+      // Insert the @mention: the send path parses it into an agent turn, and
+      // the user can keep typing a task after the name.
+      onChange(`@${entry.name} `);
+    } else if (entry.kind === 'skill') {
+      if (onSelectSkill) onSelectSkill(entry.skillId!);
+      onChange('');
+    } else {
+      // Keep the space: a command with no argument can be sent straight away,
+      // and one that takes arguments needs the cursor already in place.
+      onChange(`/${entry.command!.name} `);
+    }
     setCommandIndex(0);
     setCommandDismissed(false);
-  }, [onChange]);
+  }, [onChange, onSelectSkill]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -93,7 +105,7 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
       }
       if (e.key === 'Tab') {
         e.preventDefault();
-        selectCommand(commandMatches[commandIndex]);
+        selectEntry(commandMatches[commandIndex]);
         return;
       }
       if (e.key === 'Escape') {
@@ -106,7 +118,7 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
       }
       if (e.key === 'Enter' && !e.shiftKey && !commandIsExact) {
         e.preventDefault();
-        selectCommand(commandMatches[commandIndex]);
+        selectEntry(commandMatches[commandIndex]);
         return;
       }
     }
@@ -164,11 +176,12 @@ const AmbientInput: React.FC<AmbientInputProps> = ({
     <div className="relative w-full">
       <div className="relative flex items-end gap-2">
         <SlashCommandMenu
-          input={value}
+          entries={commandMatches}
+          open={commandActive}
           activeIndex={commandIndex}
           onHover={setCommandIndex}
-          onSelect={selectCommand}
-          footer="↑↓ to navigate · Tab to complete · Enter to run"
+          onSelect={selectEntry}
+          footer="↑↓ to navigate · Tab/Enter to select · Esc to dismiss"
         />
         {prefix && (
           <div className="absolute left-3 bottom-2.5 z-10 flex items-center">

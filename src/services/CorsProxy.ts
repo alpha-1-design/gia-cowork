@@ -69,6 +69,10 @@ export class CorsProxy {
   }
 
   proxyUrl = (url: string): string => {
+    // A relative URL (dev-server proxy path) cannot be wrapped by a public
+    // CORS proxy — that would produce 'https://proxy/?url=%2Fgemini-proxy...'.
+    // Return it unchanged so the retry goes direct to the dev proxy.
+    if (!/^https?:\/\//i.test(url)) return url;
     if (this.customProxy) {
       return this.customProxy + encodeURIComponent(url);
     }

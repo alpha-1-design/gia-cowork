@@ -13,6 +13,8 @@
  * sidecar's messages.update handler.
  */
 
+import { labelObservation } from './untrusted';
+
 function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
@@ -81,7 +83,19 @@ export const whatsAppBridgeService = {
   async messages(since: number): Promise<{ messages: WhatsAppIncomingMessage[]; now: number } | null> {
     if (!isTauri()) return null;
     const { invoke } = await import('@tauri-apps/api/core');
-    return invoke('whatsapp_messages', { since });
+    const res = await invoke<{ messages: WhatsAppIncomingMessage[]; now: number }>('whatsapp_messages', { since });
+    // Why: a WhatsApp message is written by whoever holds the paired chat, not
+    // by the user at the keyboard — so the text gets an UNTRUSTED-CONTENT
+    // envelope (data for the model, never instructions) at the moment it
+    // enters the TS layer. Callers that put message text in front of the model
+    // (catch-up bursts, auto-respond prompts) then quote labeled text by
+    // default; notification bodies carrying the marker prefix is a cosmetic
+    // cost we accept for that default.
+    if (!res) return null;
+    return {
+      ...res,
+      messages: res.messages.map((m) => ({ ...m, text: labelObservation('whatsapp', m.text) })),
+    };
   },
 
   /** Known contact names (jid -> display name). */

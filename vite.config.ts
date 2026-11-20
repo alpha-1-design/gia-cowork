@@ -38,6 +38,19 @@ export default defineConfig({
     hmr: host
       ? { protocol: 'ws', host, port: 1421 }
       : undefined,
+    proxy: {
+      // Browser dev server (no Tauri shell): the renderer's fetch to Gemini's
+      // streaming endpoint dies on CORS (net::ERR_FAILED) and the public CORS
+      // proxies are unreliable — a chat message just hangs. Proxing
+      // server-side here has no CORS restriction. Tauri/desktop keeps the
+      // absolute URL (see providers/gemini.ts resolveGeminiBase).
+      '/gemini-proxy': {
+        target: 'https://generativelanguage.googleapis.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/gemini-proxy/, ''),
+        secure: true,
+      },
+    },
     watch: {
       // Don't reload the frontend when Rust files change under src-tauri.
       ignored: ['**/src-tauri/**'],

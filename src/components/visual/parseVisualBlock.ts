@@ -6,6 +6,40 @@ export interface VisualBlock {
 }
 
 /**
+ * Canonical set of visual block types the render pipeline accepts, including
+ * every alias the dispatch switch maps to a real renderer. This is the single
+ * source of truth for "can we draw this": index.tsx's dispatch and
+ * MarkdownRenderer's bare-JSON wrapper both derive their decisions from it, so
+ * the two lists can no longer drift apart when a new renderer (or a W-module
+ * component like crawl_result) is added — extend this set and the switch.
+ */
+export const VISUAL_TYPES: ReadonlySet<string> = new Set([
+  'chart',
+  'mindmap', 'mind_map', 'mind-map',
+  'diff', 'code_diff', 'code-diff',
+  'table', 'data_table', 'data-table',
+  'dataframe', 'csv', 'dataframe_preview', 'dataframe-preview',
+  'gallery', 'image_gallery', 'image-gallery',
+  'timeline',
+  'terminal', 'terminal_output', 'terminal-output',
+  'exec_result', 'exec-result', 'execution', 'code_execution', 'code-execution', 'code_result', 'code-result',
+  'crawl_result', 'crawl-result',
+  'widget', 'metric', 'metrics',
+  'waveform', 'audio',
+  'outline', 'document_outline', 'toc',
+  'map', 'openstreetmap',
+  'slides', 'presentation', 'slide_deck', 'slide-deck',
+  'canvas', 'drawing', 'diagram',
+  '3d', 'three', 'threejs', 'scene',
+  'graph', 'network', 'node_graph', 'node-graph', 'topology',
+  'file_preview', 'file-preview',
+]);
+
+export function isSupportedVisualType(type: unknown): type is string {
+  return typeof type === 'string' && VISUAL_TYPES.has(type);
+}
+
+/**
  * Parse a visual block from a JSON string.
  * Uses jsonRepair as a fallback before giving up, so minor AI formatting
  * mistakes (trailing commas, unquoted keys, markdown fences) don't kill rendering.

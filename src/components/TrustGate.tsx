@@ -84,7 +84,11 @@ export function TrustGate() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[240] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          // z-[400]: ABOVE VoiceMode (z-[300]) and module overlays — permission
+          // cards were previously invisible behind VoiceMode and auto-denied
+          // after the 120s timeout while the user never saw them (W13/voice
+          // research, real bug).
           onClick={() => resolve('deny')}
         >
           <motion.div

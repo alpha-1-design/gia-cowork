@@ -2,14 +2,28 @@ import { logger } from '../../utils/logger';
 import { useProviderStore } from '../../store/useProviderStore';
 import { providerRegistry } from '../ProviderRegistry';
 import { corsProxy } from '../CorsProxy';
+import { isTauri } from '../../platform';
 import { useGiaStore } from '../../store/useGiaStore';
 import type { BrainRequest, BrainResponse, BrainContext } from './types';
+
+/**
+ * In the plain browser (no Tauri shell), the renderer's fetch to Gemini's
+ * streaming endpoint dies on CORS — net::ERR_FAILED on the POST — and the
+ * public CORS-proxy fallbacks are unreliable, so a chat message just hangs.
+ * The Vite dev server proxies /gemini-proxy to Gemini server-side, where CORS
+ * does not exist (see vite.config.ts). Tauri/desktop and production web keep
+ * the absolute URL; the proxy fallback chain still exists for those cases.
+ */
+function resolveGeminiBase(fallback: string): string {
+  if (!isTauri() && import.meta.env.DEV) return '/gemini-proxy/v1beta';
+  return fallback;
+}
 
 export async function callGeminiNative(req: BrainRequest, ctx: BrainContext): Promise<BrainResponse> {
   const { providers } = useProviderStore.getState();
   const config = providers.gemini;
 
-  const baseUrl = providerRegistry.getBaseUrl('gemini') || 'https://generativelanguage.googleapis.com/v1beta';
+  const baseUrl = resolveGeminiBase(providerRegistry.getBaseUrl('gemini') || 'https://generativelanguage.googleapis.com/v1beta');
 
   const contents: { role: string; parts: { text: string }[] }[] = [];
   if (req.history) {

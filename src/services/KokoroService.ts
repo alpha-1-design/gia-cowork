@@ -166,9 +166,14 @@ class KokoroService {
 
   /**
    * Synthesize and play. Returns a promise that resolves when playback finishes.
+   *
+   * Uses the prefetch slot when it matches: TTSService asks for the NEXT
+   * sentence's synthesis while the current one plays, so a sentence boundary
+   * costs zero synthesis dead-air. (Measured gap without prefetch: ~1-3 s on
+   * WASM Kokoro, ~300-750 ms on WebGPU — every sentence boundary.)
    */
   async speak(text: string, voice: string = this._voice): Promise<boolean> {
-    const audioBuffer = await this.synthesize(text, voice);
+    const audioBuffer = await this.takePrefetch(text, voice);
     if (!audioBuffer) return false;
 
     try {
@@ -204,8 +209,46 @@ class KokoroService {
     }
   }
 
+  // ── Prefetch slot ─────────────────────────────────────────────────────
+  // One slot, filled by TTSService with the queue head while the current
+  // sentence plays. speak() consumes it only on an exact text+voice match;
+  // anything else is dropped (a stale buffer is worse than a fresh one).
+
+  private prefetchText: string | null = null;
+  private prefetchVoice: string | null = null;
+  private prefetchPromise: Promise<AudioBuffer | null> | null = null;
+
+  /** Start synthesizing `text` in the background for the next play call. */
+  prefetch(text: string, voice: string = this._voice): void {
+    if (!this.isReady || !this.model) return;
+    if (this.prefetchPromise) return; // one slot; already busy
+    this.prefetchText = text;
+    this.prefetchVoice = voice;
+    this.prefetchPromise = this.synthesize(text, voice);
+  }
+
+  private async takePrefetch(text: string, voice: string): Promise<AudioBuffer | null> {
+    const pending = this.prefetchPromise;
+    this.prefetchPromise = null;
+    if (pending && this.prefetchText === text && this.prefetchVoice === voice) {
+      this.prefetchText = null;
+      this.prefetchVoice = null;
+      return await pending;
+    }
+    // Stale or absent prefetch: drop it and synthesize fresh. A dropped
+    // promise's buffer is discarded — never played by mistake.
+    this.prefetchText = null;
+    this.prefetchVoice = null;
+    return await this.synthesize(text, voice);
+  }
+
   /** Stop any in-flight Kokoro playback and drop the active audio context. */
   stop() {
+    // Drop any pending prefetch: a stopped queue must not hand its stale
+    // buffer to the next unrelated sentence.
+    this.prefetchPromise = null;
+    this.prefetchText = null;
+    this.prefetchVoice = null;
     try {
       this.activeSource?.stop();
     } catch {

@@ -132,6 +132,14 @@ class TTSService {
     this.setSpeaking(true);
     const text = this.queue.shift()!;
 
+    // Prefetch: the NEXT sentence synthesizes while THIS one plays, so a
+    // sentence boundary costs zero synthesis dead-air (Kokoro synthesis is
+    // full-utterance; without this the gap is ~1-3 s WASM / ~300-750 ms
+    // WebGPU between every sentence).
+    if (this.queue.length > 0 && this.kokoroEnabled) {
+      kokoroTTS.prefetch(this.queue[0]);
+    }
+
     try {
       if (this.kokoroEnabled && kokoroTTS.isReady) {
         const spoken = await kokoroTTS.speak(text);
