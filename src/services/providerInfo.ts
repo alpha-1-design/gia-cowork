@@ -19,7 +19,7 @@ export interface ProviderInfo {
   /** One line on what it is, for the picker. */
   description: string;
   /** Where to obtain an API key. Empty only for local providers. */
-  docsUrl: string;
+  docsUrl?: string;
 }
 
 export const PROVIDER_INFO: Record<string, ProviderInfo> = {
@@ -34,6 +34,9 @@ export const PROVIDER_INFO: Record<string, ProviderInfo> = {
   // ── Gateways and aggregators ──────────────────────────────────────
   openrouter: { company: 'OpenRouter', description: 'One key for hundreds of models across many vendors.', docsUrl: 'https://openrouter.ai/keys' },
   opencode: { company: 'OpenCode (SST)', description: 'OpenCode Zen — hosted models served by the opencode project.', docsUrl: 'https://opencode.ai/' },
+  // Local-only test relay (tools/gia-bridge) — no external docs exist and
+  // none should be advertised; the description explains where it comes from.
+  relay: { company: 'Local Relay', description: "This machine's OpenCode service through a local bridge. For testing on this box only — not a hosted product." },
   vercel: { company: 'Vercel', description: 'AI Gateway — unified routing across many model providers.', docsUrl: 'https://vercel.com/docs/ai-gateway' },
   requesty: { company: 'Requesty', description: 'OpenAI-compatible router with usage tracking and failover.', docsUrl: 'https://requesty.ai/' },
   kilo: { company: 'Kilo', description: 'Kilo Gateway — a large routed catalog of open and closed models.', docsUrl: 'https://kilo.ai/' },

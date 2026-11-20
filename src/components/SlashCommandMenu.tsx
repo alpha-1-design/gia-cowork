@@ -69,11 +69,19 @@ export function SlashCommandMenu({ entries, open, activeIndex, onHover, onSelect
   // Grouped for rendering, but the keyboard index is CONTINUOUS across
   // groups — arrowing down walks personas into commands into skills without
   // the section headers stealing a stop.
+  // Merge by title, not just adjacent runs: the round-robin command browser
+  // can re-emit a category after another one, and two same-key sections
+  // crashed React reconciliation with duplicate-key warnings.
   const groups: { title: string; items: { entry: UnifiedComposerEntry; index: number }[] }[] = [];
+  const groupIndex = new Map<string, { title: string; items: { entry: UnifiedComposerEntry; index: number }[] }>();
   entries.forEach((entry, index) => {
-    const last = groups[groups.length - 1];
-    if (last && last.title === entry.group) last.items.push({ entry, index });
-    else groups.push({ title: entry.group, items: [{ entry, index }] });
+    let g = groupIndex.get(entry.group);
+    if (!g) {
+      g = { title: entry.group, items: [] };
+      groupIndex.set(entry.group, g);
+      groups.push(g);
+    }
+    g.items.push({ entry, index });
   });
 
   return (

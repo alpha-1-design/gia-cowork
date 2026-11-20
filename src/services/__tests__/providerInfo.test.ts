@@ -33,7 +33,7 @@ describe('provider metadata coverage', () => {
   it('is exactly one entry per provider', () => {
     expect(infoIds.length).toBe(ids.length);
     expect(new Set(infoIds).size).toBe(infoIds.length);
-    expect(infoIds.length).toBe(71);
+    expect(infoIds.length).toBe(72);
   });
 });
 
@@ -73,7 +73,7 @@ describe('provider metadata quality', () => {
   });
 
   it('links to a real https destination for every hosted provider', () => {
-    const local = new Set(['ollama', 'lmstudio', 'local-llm']);
+    const local = new Set(['ollama', 'lmstudio', 'local-llm', 'relay']);
     for (const id of ids) {
       const url = docsUrlFor(id);
       if (local.has(id)) {

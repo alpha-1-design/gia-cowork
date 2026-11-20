@@ -34,6 +34,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ label, desc, icon, enabled, onTog
 export const ReliabilitySection: React.FC = () => {
   const {
     inputGuardrails, setInputGuardrails,
+    clipboardWatch, setClipboardWatch,
     outputValidation, setOutputValidation,
     responseCache, setResponseCache,
     smartFallback, setSmartFallback,
@@ -77,6 +78,12 @@ export const ReliabilitySection: React.FC = () => {
           desc="Block prompt injection and dangerous commands"
           icon={<ShieldCheck size={13} style={{ color: inputGuardrails ? '#34d399' : 'var(--gia-muted)' }} />}
           enabled={inputGuardrails} onToggle={setInputGuardrails}
+        />
+        <ToggleRow
+          label="Clipboard Watcher"
+          desc="Offer to paste interesting text you copy. Off by default — credentials are never shown either way."
+          icon={<Lock size={13} style={{ color: clipboardWatch ? '#34d399' : 'var(--gia-muted)' }} />}
+          enabled={clipboardWatch} onToggle={setClipboardWatch}
         />
         <ToggleRow
           label="Output Validation"

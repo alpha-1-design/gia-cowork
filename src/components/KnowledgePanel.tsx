@@ -30,7 +30,7 @@ const KnowledgeCard: React.FC<{ entry: MemoryEntry; pinned: boolean; onTogglePin
         <div className="flex items-center gap-1.5 mb-0.5">
           <span style={{ color: meta.color }}>{meta.icon}</span>
           <span className="text-[8px] font-semibold uppercase tracking-wider" style={{ color: meta.color }}>{meta.label}</span>
-          <span className="text-[7px]" style={{ color: 'var(--gia-muted-2)' }}>{Math.round(entry.confidence * 100)}%</span>
+          <span className="text-[9px]" style={{ color: 'var(--gia-muted-2)' }}>{Math.round(entry.confidence * 100)}%</span>
         </div>
         <p className="text-[11px] font-medium leading-tight" style={{ color: 'var(--gia-text)' }}>{entry.key}</p>
         <p className="text-[10px] leading-relaxed mt-0.5" style={{ color: 'var(--gia-muted)' }}>{entry.value}</p>

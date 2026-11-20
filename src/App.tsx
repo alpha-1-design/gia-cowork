@@ -280,8 +280,8 @@ const App: React.FC = () => {
   const [updateNotification, setUpdateNotification] = useState<UpdateInfo | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
 
-  // Clipboard monitor — shows toast when interesting content is copied
-  const { copiedText, dismissCopied, pasteCopied } = useClipboardMonitor();
+  // Clipboard monitor — opt-in; secret-looking values are redacted
+  const { copiedText, copiedIsSecret, dismissCopied, pasteCopied } = useClipboardMonitor();
 
   // Automation bridge — connects AutomationEngine custom events to store actions
   useAutomationBridge();
@@ -870,16 +870,20 @@ try { await localLLMService.unloadModel(); } catch { /* noop */ }
               <ClipboardIcon size={16} className="shrink-0" style={{ color: 'var(--gia-muted)' }} />
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-medium" style={{ color: 'var(--gia-muted)' }}>Copied to clipboard</p>
-                <p className="text-xs truncate" style={{ color: 'var(--gia-text)' }}>{copiedText.slice(0, 100)}</p>
+                <p className="text-xs truncate" style={{ color: copiedIsSecret ? 'var(--gia-muted)' : 'var(--gia-text)' }}>
+                  {copiedIsSecret ? '[possible credential hidden]' : copiedText.slice(0, 100)}
+                </p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={pasteCopied}
-                  className="text-[10px] font-semibold px-3 py-1.5 rounded-lg transition-all"
-                  style={{ background: 'var(--gia-accent)', color: 'var(--gia-accent-contrast)' }}
-                >
-                  Ask GIA
-                </button>
+                {!copiedIsSecret && (
+                  <button
+                    onClick={pasteCopied}
+                    className="text-[10px] font-semibold px-3 py-1.5 rounded-lg transition-all"
+                    style={{ background: 'var(--gia-accent)', color: 'var(--gia-accent-contrast)' }}
+                  >
+                    Ask GIA
+                  </button>
+                )}
                 <button
                   onClick={dismissCopied}
                   className="w-6 h-6 rounded-md flex items-center justify-center transition-colors"

@@ -505,7 +505,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
             <ProviderIcon provider={activeProvider} size={18} bare />
             <span className="hidden sm:inline truncate max-w-[70px]">{providerLabel}</span>
             {activeModel && providerConnected && (
-              <span className="text-[7px] opacity-50 truncate max-w-[54px] hidden lg:inline">{activeModel.split('/').pop()}</span>
+              <span className="text-[9px] opacity-50 truncate max-w-[54px] hidden lg:inline">{activeModel.split('/').pop()}</span>
             )}
             <ChevronDown size={11} className="shrink-0 opacity-70" />
           </button>

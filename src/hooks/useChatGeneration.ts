@@ -31,13 +31,7 @@ function applyFollowUpSuggestions(sessionId: string, asstId: string, content: st
   try {
     const suggestions = generateSuggestions(content);
     if (suggestions.length > 0) {
-      useGiaStore.setState({
-        sessions: useGiaStore.getState().sessions.map(s =>
-          s.id === sessionId
-            ? { ...s, messages: s.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, suggestions } } : m) }
-            : s
-        ),
-      });
+      useGiaStore.getState().patchMessageMeta(sessionId, asstId, { suggestions });
     }
   } catch {
     // Suggestions are a nicety — never surface failures.
@@ -543,29 +537,15 @@ onThought: (thought) => {
         state.updateMessageTasks(sessionId, asstId, finalTasks);
       }
       giaCoreServices.onMessage(finalText, asstId, 'assistant');
-      useGiaStore.setState(s => ({
-        sessions: s.sessions.map(sess =>
-          sess.id === sessionId
-            ? { ...sess, messages: sess.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, thinking: false } } : m) }
-            : sess
-        ),
-      }));
+      useGiaStore.getState().patchMessageMeta(sessionId, asstId, { thinking: false });
       if (res.sources?.length) {
-        useGiaStore.setState({
-          sessions: useGiaStore.getState().sessions.map(s =>
-            s.id === sessionId
-              ? { ...s, messages: s.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, sources: res.sources } } : m) }
-              : s
-          ),
-        });
+        useGiaStore.getState().patchMessageMeta(sessionId, asstId, { sources: res.sources });
       }
       if (res.model || res.tokenUsage) {
-        useGiaStore.setState({
-          sessions: useGiaStore.getState().sessions.map(s =>
-            s.id === sessionId
-              ? { ...s, messages: s.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, model: res.model || m.message.model, tokenUsage: res.tokenUsage || m.message.tokenUsage, source: res.provider === 'local-llm' ? 'on-device' : 'cloud' } } : m) }
-              : s
-          ),
+        useGiaStore.getState().patchMessageMeta(sessionId, asstId, {
+          model: res.model,
+          tokenUsage: res.tokenUsage,
+          source: res.provider === 'local-llm' ? 'on-device' : 'cloud',
         });
       }
       if (res.modelSwitched && res.switchReason) {
@@ -577,13 +557,7 @@ onThought: (thought) => {
       }
       if (res.wasTruncated) {
         // Show a "tap to continue" chip instead of a silent cut-off.
-        useGiaStore.setState({
-          sessions: useGiaStore.getState().sessions.map(s =>
-            s.id === sessionId
-              ? { ...s, messages: s.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, wasTruncated: true } } : m) }
-              : s
-          ),
-        });
+        useGiaStore.getState().patchMessageMeta(sessionId, asstId, { wasTruncated: true });
       } else if (finalText.length >= SUGGESTION_MIN_LEN && !finalText.startsWith('🤖 _Taking action..._')) {
         // Non-blocking tappable follow-ups for completed answers.
         applyFollowUpSuggestions(sessionId, asstId, finalText);
@@ -594,13 +568,7 @@ onThought: (thought) => {
       if (!ctrl.signal.aborted) {
         const msg = err instanceof Error ? err.message : 'Something went wrong.';
         state.updateMessage(sessionId, asstId, msg);
-        useGiaStore.setState({
-          sessions: useGiaStore.getState().sessions.map(s =>
-            s.id === sessionId
-              ? { ...s, messages: s.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, error: true } } : m) }
-              : s
-          ),
-        });
+        useGiaStore.getState().patchMessageMeta(sessionId, asstId, { error: true });
       }
     } finally {
       streamCancel(streamKey);
@@ -609,13 +577,7 @@ onThought: (thought) => {
       // Keep liveThoughts visible so the user can review thinking after generation ends.
       // They are only cleared when a NEW generation starts for this message (see top of generate function),
       // or when the session is switched/cleared.
-      useGiaStore.setState(s => ({
-        sessions: s.sessions.map(sess =>
-          sess.id === sessionId
-            ? { ...sess, messages: sess.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, thinking: false } } : m) }
-            : sess
-        ),
-      }));
+      useGiaStore.getState().patchMessageMeta(sessionId, asstId, { thinking: false });
       activeStreamsRef.current.delete(asstId);
       setStreamingMsgIds(prev => { const n = new Set(prev); n.delete(asstId); return n; });
       if (activeStreamsRef.current.size === 0) {
@@ -730,21 +692,13 @@ onThought: (thought) => {
           state.updateMessageArtifacts(state.activeSessionId!, asstId, contParserState.artifacts);
         }
         if (contRes.wasTruncated) {
-          useGiaStore.setState({
-            sessions: useGiaStore.getState().sessions.map(s =>
-              s.id === state.activeSessionId
-                ? { ...s, messages: s.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, wasTruncated: true } } : m) }
-                : s
-            ),
-          });
+          useGiaStore.getState().patchMessageMeta(state.activeSessionId!, asstId, { wasTruncated: true });
         }
         if (contRes.model || contRes.tokenUsage) {
-          useGiaStore.setState({
-            sessions: useGiaStore.getState().sessions.map(s =>
-              s.id === state.activeSessionId
-                ? { ...s, messages: s.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, model: contRes.model || m.message.model, tokenUsage: contRes.tokenUsage || m.message.tokenUsage, source: contRes.provider === 'local-llm' ? 'on-device' : 'cloud' } } : m) }
-                : s
-            ),
+          useGiaStore.getState().patchMessageMeta(state.activeSessionId!, asstId, {
+            model: contRes.model,
+            tokenUsage: contRes.tokenUsage,
+            source: contRes.provider === 'local-llm' ? 'on-device' : 'cloud',
           });
         }
         if (contDisplayAccumulated.trim().length > 1) {
@@ -757,13 +711,7 @@ onThought: (thought) => {
       if (!ctrl.signal.aborted) {
         const msg = err instanceof Error ? err.message : 'Something went wrong.';
         state.updateMessage(state.activeSessionId!, asstId, msg);
-        useGiaStore.setState({
-          sessions: useGiaStore.getState().sessions.map(s =>
-            s.id === state.activeSessionId
-              ? { ...s, messages: s.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, error: true, thinking: false } } : m) }
-              : s
-          ),
-        });
+        useGiaStore.getState().patchMessageMeta(state.activeSessionId!, asstId, { error: true, thinking: false });
       }
       } finally {
       streamCancel(streamKey);
@@ -771,13 +719,7 @@ onThought: (thought) => {
         unregisterGenerationController(generationKeyRef.current);
         generationKeyRef.current = null;
       }
-      useGiaStore.setState(s => ({
-        sessions: s.sessions.map(sess =>
-          sess.id === state.activeSessionId
-            ? { ...sess, messages: sess.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, thinking: false } } : m) }
-            : sess
-        ),
-      }));
+      useGiaStore.getState().patchMessageMeta(state.activeSessionId!, asstId, { thinking: false });
       setLoading(false);
       setStreamingMsgId(null);
       useGiaStore.getState().setGenerationState({ active: false, module: null, sessionId: null, messageId: null });
@@ -883,13 +825,7 @@ onThought: (thought) => {
       if (!ctrl.signal.aborted) {
         const msg = err instanceof Error ? err.message : 'Something went wrong.';
         state.updateMessage(sessionId, asstId, msg);
-        useGiaStore.setState({
-          sessions: useGiaStore.getState().sessions.map(s =>
-            s.id === sessionId
-              ? { ...s, messages: s.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, error: true } } : m) }
-              : s
-          ),
-        });
+        useGiaStore.getState().patchMessageMeta(sessionId, asstId, { error: true });
       }
     } finally {
       streamCancel(streamKey);
@@ -897,13 +833,7 @@ onThought: (thought) => {
         unregisterGenerationController(generationKeyRef.current);
         generationKeyRef.current = null;
       }
-      useGiaStore.setState(s => ({
-        sessions: s.sessions.map(sess =>
-          sess.id === sessionId
-            ? { ...sess, messages: sess.messages.map(m => m.message.id === asstId ? { ...m, message: { ...m.message, thinking: false } } : m) }
-            : sess
-        ),
-      }));
+      useGiaStore.getState().patchMessageMeta(sessionId, asstId, { thinking: false });
       setLoading(false);
       setStreamingMsgId(null);
       useGiaStore.getState().setGenerationState({ active: false, module: null, sessionId: null, messageId: null });
@@ -934,13 +864,7 @@ onThought: (thought) => {
     registerGenerationController(genKey, ctrl);
 
     state.updateMessage(state.activeSessionId, id, '');
-    useGiaStore.setState({
-      sessions: useGiaStore.getState().sessions.map(s =>
-        s.id === state.activeSessionId
-          ? { ...s, messages: s.messages.map(m => m.message.id === id ? { ...m, message: { ...m.message, thinking: true, error: false } } : m) }
-          : s
-      ),
-    });
+    useGiaStore.getState().patchMessageMeta(state.activeSessionId!, id, { thinking: true, error: false });
     setStreamingMsgId(id);
     setLoading(true);
     useGiaStore.getState().setGenerationState({ active: true, module: 'chat', sessionId: state.activeSessionId, messageId: id });
@@ -988,12 +912,10 @@ onThought: (thought) => {
           state.updateMessageArtifacts(state.activeSessionId!, id, retryParserState.artifacts);
         }
         if (genRes.model || genRes.tokenUsage) {
-          useGiaStore.setState({
-            sessions: useGiaStore.getState().sessions.map(s =>
-              s.id === state.activeSessionId
-                ? { ...s, messages: s.messages.map(m => m.message.id === id ? { ...m, message: { ...m.message, model: genRes.model || m.message.model, tokenUsage: genRes.tokenUsage || m.message.tokenUsage, source: genRes.provider === 'local-llm' ? 'on-device' : 'cloud' } } : m) }
-                : s
-            ),
+          useGiaStore.getState().patchMessageMeta(state.activeSessionId!, id, {
+            model: genRes.model,
+            tokenUsage: genRes.tokenUsage,
+            source: genRes.provider === 'local-llm' ? 'on-device' : 'cloud',
           });
         }
         if (genRes.modelSwitched && genRes.switchReason) {
@@ -1005,12 +927,10 @@ onThought: (thought) => {
     } catch (e: unknown) {
       streamCancel(streamKey);
       if (!ctrl.signal.aborted) {
-        useGiaStore.setState({
-          sessions: useGiaStore.getState().sessions.map(s =>
-            s.id === state.activeSessionId
-              ? { ...s, messages: s.messages.map(m => m.message.id === id ? { ...m, message: { ...m.message, content: (e instanceof Error ? e.message : 'Retry failed'), error: true, thinking: false } } : m) }
-              : s
-          ),
+        useGiaStore.getState().patchMessageMeta(state.activeSessionId!, id, {
+          content: (e instanceof Error ? e.message : 'Retry failed'),
+          error: true,
+          thinking: false,
         });
       }
     } finally {
@@ -1019,13 +939,7 @@ onThought: (thought) => {
         unregisterGenerationController(generationKeyRef.current);
         generationKeyRef.current = null;
       }
-      useGiaStore.setState(s => ({
-        sessions: s.sessions.map(sess =>
-          sess.id === state.activeSessionId
-            ? { ...sess, messages: sess.messages.map(m => m.message.id === id ? { ...m, message: { ...m.message, thinking: false } } : m) }
-            : sess
-        ),
-      }));
+      useGiaStore.getState().patchMessageMeta(state.activeSessionId!, id, { thinking: false });
       setLoading(false);
       setStreamingMsgId(null);
       useGiaStore.getState().setGenerationState({ active: false, module: null, sessionId: null, messageId: null });

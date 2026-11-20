@@ -231,6 +231,25 @@ function updateTasksInTree(nodes: MessageNode[], msgId: string, tasks: TaskItem[
   });
 }
 
+/** Generic tree-aware meta patch. Every assistant message lives NESTED in
+ *  the tree (each turn is a child of the previous node), so any write that
+ *  only maps over the top-level `messages` array silently misses it — that
+ *  was the "she answers nothing" bug: full text landed in the store while
+ *  `thinking` stayed true forever and the renderer showed an empty bubble.
+ *  All per-message metadata writes go through this. */
+function patchMessageMetaInTree(nodes: MessageNode[], msgId: string, patch: Partial<Message>): MessageNode[] {
+  if (!Array.isArray(nodes)) return [];
+  return nodes.map(node => {
+    if (node.message.id === msgId) {
+      return { ...node, message: { ...node.message, ...patch } };
+    }
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      return { ...node, children: patchMessageMetaInTree(node.children, msgId, patch) };
+    }
+    return node;
+  });
+}
+
 function findMessageInTree(nodes: MessageNode[], msgId: string): MessageNode | null {
   if (!Array.isArray(nodes)) return null;
   for (const node of nodes) {
@@ -484,6 +503,10 @@ interface GiaState {
   onDeviceMode: boolean;
   responseCache: boolean;
   inputGuardrails: boolean;
+  /** Clipboard watching is OFF by default: silently reading the system
+   *  clipboard surfaced users' credentials as a toast (it echoed a real API
+   *  key). Opt-in only, and secret-looking values are redacted. */
+  clipboardWatch: boolean;
   outputValidation: boolean;
   smartFallback: boolean;
   multiProvider: boolean;
@@ -586,6 +609,7 @@ interface GiaState {
   setOnDeviceMode: (enabled: boolean) => void;
   setResponseCache: (enabled: boolean) => void;
   setInputGuardrails: (enabled: boolean) => void;
+  setClipboardWatch: (enabled: boolean) => void;
   setOutputValidation: (enabled: boolean) => void;
   setSmartFallback: (enabled: boolean) => void;
   setMultiProvider: (enabled: boolean) => void;
@@ -617,6 +641,10 @@ interface GiaState {
   /** Remove a message and its descendants, so no orphaned turns are left behind. */
   deleteMessage: (sessionId: string, msgId: string) => void;
   updateMessage: (sessionId: string, msgId: string, content: string, thoughts?: string) => void;
+  /** Tree-aware metadata patch (thinking flag, error flag, sources, model,
+   *  token usage, suggestions, truncation chip). Prefer this over raw
+   *  setState maps — see patchMessageMetaInTree. */
+  patchMessageMeta: (sessionId: string, msgId: string, patch: Partial<Message>) => void;
   setMessageThinking: (sessionId: string, msgId: string, thinking: boolean) => void;
   updateMessageSegments: (sessionId: string, msgId: string, segments: MessageSegment[]) => void;
   updateMessageArtifacts: (sessionId: string, msgId: string, artifacts: Artifact[]) => void;
@@ -768,6 +796,7 @@ export const useGiaStore = create<GiaState>()(
       onDeviceMode: false,
       responseCache: true,
       inputGuardrails: true,
+      clipboardWatch: false,
       outputValidation: true,
       smartFallback: true,
       multiProvider: false,
@@ -924,6 +953,7 @@ export const useGiaStore = create<GiaState>()(
       setOnDeviceMode: (enabled) => set({ onDeviceMode: enabled }),
       setResponseCache: (enabled) => set({ responseCache: enabled }),
       setInputGuardrails: (enabled) => set({ inputGuardrails: enabled }),
+      setClipboardWatch: (enabled) => set({ clipboardWatch: enabled }),
       setOutputValidation: (enabled) => set({ outputValidation: enabled }),
       setSmartFallback: (enabled) => set({ smartFallback: enabled }),
       setMultiProvider: (enabled) => set({ multiProvider: enabled }),
@@ -1116,6 +1146,15 @@ export const useGiaStore = create<GiaState>()(
           sessions: s.sessions.map((sess) =>
             sess.id === sessionId
               ? { ...sess, messages: updateMessageInTree(sess.messages, msgId, content, thoughts) }
+              : sess
+          ),
+        })),
+
+      patchMessageMeta: (sessionId, msgId, patch) =>
+        set((s) => ({
+          sessions: s.sessions.map((sess) =>
+            sess.id === sessionId
+              ? { ...sess, messages: patchMessageMetaInTree(sess.messages, msgId, patch) }
               : sess
           ),
         })),
@@ -1486,6 +1525,7 @@ export const useGiaStore = create<GiaState>()(
         localSummarize: s.localSummarize,
         responseCache: s.responseCache,
         inputGuardrails: s.inputGuardrails,
+        clipboardWatch: s.clipboardWatch,
         outputValidation: s.outputValidation,
         smartFallback: s.smartFallback,
         multiProvider: s.multiProvider,

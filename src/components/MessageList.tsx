@@ -29,7 +29,7 @@ const AgentBadge: React.FC<{ agentName?: string; agentIcon?: string; agentTask?:
       <OrbAvatar color="var(--gia-text)" size={10} animate={false} glow={false} />
       {agentName || 'Agent'}
       {agentTask && (
-        <span className="ml-0.5 text-[7px] opacity-60 font-normal normal-case max-w-[120px] truncate">{agentTask}</span>
+        <span className="ml-0.5 text-[9px] opacity-60 font-normal normal-case max-w-[120px] truncate">{agentTask}</span>
       )}
     </span>
   );
@@ -110,7 +110,7 @@ const SourcesBlock: React.FC<{ sources: Array<string | { url: string; title?: st
                 <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`} alt="" className="w-3.5 h-3.5 rounded-sm shrink-0" loading="lazy" />
                 <div className="min-w-0 flex-1">
                   <span className="block truncate font-medium" style={{ color: 'var(--gia-text)' }}>{title}</span>
-                  <span className="block text-[7px] truncate" style={{ color: 'var(--gia-muted)' }}>{domain}</span>
+                  <span className="block text-[9px] truncate" style={{ color: 'var(--gia-muted)' }}>{domain}</span>
                 </div>
               </motion.a>
             );

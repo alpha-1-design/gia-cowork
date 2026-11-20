@@ -30,6 +30,9 @@ vi.mock('../../services/ProviderRegistry', () => ({
     getDefaultModel: vi.fn((id: string) => mockProviders[id]?.models[0]?.id || ''),
     getNeedsApiKey: vi.fn((id: string) => mockProviders[id]?.needsApiKey ?? true),
   },
+  // No provider in this suite's mock registry has a retired default, so the
+  // normalization pass in loadProviders is a no-op here.
+  RETIRED_DEFAULT_MODELS: {},
 }));
 
 vi.mock('../../services/CorsProxy', () => ({

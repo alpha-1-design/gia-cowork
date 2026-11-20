@@ -18,13 +18,23 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { WebSocket as WsWebSocket } from 'ws';
 import { spawn, type ChildProcess } from 'node:child_process';
+import net from 'node:net';
 import path from 'node:path';
 
 import { makeEnvelope, type Device, type UnimindMessage } from '../../unimind/types';
 import type ToolRegistrySingleton from '../ToolRegistry';
 import type { UnimindClient, UnimindPeer } from '../unimindClient';
 
-const RELAY_PORT = 8791;
+// Fixed ports turn into flakes the moment anything else listens there (a
+// debug relay, another agent's test) — grab a free one per run instead.
+const RELAY_PORT = await new Promise<number>((resolve) => {
+  const probe = net.createServer();
+  probe.listen(0, '127.0.0.1', () => {
+    const addr = probe.address() as { port: number };
+    const port = addr.port;
+    probe.close(() => resolve(port));
+  });
+});
 const RELAY_URL = `ws://127.0.0.1:${RELAY_PORT}/unimind`;
 const UNIMIND_ID = 'e2e-shared-id';
 const MOBILE_DEVICE_ID = 'mobile-e2e-test';

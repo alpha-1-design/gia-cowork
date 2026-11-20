@@ -135,9 +135,13 @@ class GiaBrain {
 
       const text = res!.text;
       if (req.onThought) {
+        // Feed only the PRE-TOOL prefix as a thought trail. For a plain answer
+        // (no tool call) the same text already streamed via onStream — sending
+        // the whole answer through onThought too created a 'thinking' segment
+        // duplicating the visible reply.
         const toolCallRegex = /(<tool_code>|<tool-code>|<function_call>|<function-call>)/;
         const match = text.match(toolCallRegex);
-        const thought = match ? text.substring(0, match.index).trim() : text.trim();
+        const thought = match ? text.substring(0, match.index).trim() : '';
         if (thought) {
           req.onThought(thought);
         }
