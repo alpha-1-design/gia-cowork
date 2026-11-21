@@ -6,6 +6,7 @@ import ttsService from '../TTSService';
 import GiaBrain from '../GiaBrain';
 import { SentenceChunker } from './SentenceChunker';
 import { VoiceAnnouncer } from './VoiceAnnouncer';
+import { routeUtterance } from './bargeIn';
 import { useGiaStore } from '../../store/useGiaStore';
 
 /**
@@ -62,7 +63,6 @@ export interface VoiceSessionOptions {
 type Listener = (snapshot: VoiceSnapshot) => void;
 
 const MAX_UTTERANCE_SECONDS = 30;
-const STOP_KEYWORDS = new Set(['stop', 'quiet', 'shush', 'silence', 'wait']);
 
 function newId() {
   try { return crypto.randomUUID(); } catch { return `vs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
@@ -80,6 +80,8 @@ class VoiceSessionImpl {
   private captionOff: (() => void) | null = null;
   /** In-flight open() — concurrent calls await it instead of racing. */
   private opening: Promise<void> | null = null;
+  /** Utterances heard while she was talking; delivered when she finishes. */
+  private pending: string[] = [];
   private abort: AbortController | null = null;
   private closed = true;
   private disposed = false;
@@ -225,13 +227,19 @@ class VoiceSessionImpl {
 
   private async onFrame(frame: Float32Array) {
     if (this.closed || !this.vad) return;
+    const phase = this.snapshot.phase;
     const decision = this.vad.feed(frame);
 
-    if (this.snapshot.phase === 'listening' && decision.speechStart) {
+    // She runs the mic ducked while talking through speakers (barge-in
+    // thresholds), open while thinking or waiting.
+    this.vad.setBargeInMode(phase === 'speaking');
+
+    if (!this.buffering && decision.speechStart
+        && (phase === 'listening' || phase === 'thinking' || phase === 'speaking')) {
       this.buffering = true;
       this.buffer = [frame];
       this.bufferSamples = frame.length;
-      this.emit({ phase: 'capturing' });
+      if (phase === 'listening') this.emit({ phase: 'capturing' });
       return;
     }
     if (this.buffering) {
@@ -245,20 +253,11 @@ class VoiceSessionImpl {
       if (decision.speechEnd) await this.endpoint();
       return;
     }
-    // Barge-in while she speaks: VAD runs in barge-in mode (higher onset
-    // threshold) so speaker leakage doesn't fire it. Keyword barge-in is
-    // checked on the next transcribed utterance; the tap button is instant.
-    if (this.snapshot.phase === 'speaking') {
-      this.vad.setBargeInMode(true);
-      if (decision.speechStart) {
-        logger.log('[VoiceSession] barge-in via VAD');
-        this.interrupt();
-      }
-    }
   }
 
   private async endpoint() {
     this.buffering = false;
+    const busyPhase = this.snapshot.phase === 'thinking' || this.snapshot.phase === 'speaking';
     const audio = concatFrames(this.buffer);
     this.buffer = [];
     this.bufferSamples = 0;
@@ -267,7 +266,7 @@ class VoiceSessionImpl {
       this.emit({ phase: 'listening' });
       return;
     }
-    this.emit({ phase: 'transcribing' });
+    if (!busyPhase) this.emit({ phase: 'transcribing' });
     let text = '';
     try {
       text = await whisperService.transcribeFloat32(audio);
@@ -281,19 +280,51 @@ class VoiceSessionImpl {
     }
     text = text.trim();
     if (!text) {
-      this.emit({ phase: 'listening' });
+      // Confirmed-interrupt gate: a burst that transcribes to nothing was
+      // speaker leakage or noise, not the user deciding to talk.
+      this.emit({ phase: busyPhase ? this.snapshot.phase : 'listening' });
       return;
     }
-    if (STOP_KEYWORDS.has(text.toLowerCase())) {
-      // Keyword barge-in: she was speaking; stop her and resume listening.
-      logger.log('[VoiceSession] stop keyword');
-      ttsService.stop();
-      this.abort?.abort();
-      this.abort = null;
-      this.emit({ working: false, activity: null, phase: 'listening' });
-      return;
+
+    // While she is busy, the barge-in gate decides the consequence.
+    if (busyPhase) {
+      const busyRoute = this.snapshot.phase === 'thinking' ? 'thinking' as const : 'speaking' as const;
+      const decision = routeUtterance(text, busyRoute);
+      switch (decision.action) {
+        case 'interrupt':
+          logger.log('[VoiceSession] barge-in keyword:', decision.keyword);
+          this.interrupt();
+          return;
+        case 'steer':
+          logger.log('[VoiceSession] steering:', text);
+          useGiaStore.getState().addSteering(
+            useGiaStore.getState().activeSessionId || '', text);
+          this.speakPiece('Noted — adjusting course.');
+          this.emit({ activity: 'Adjusting course' });
+          return; // she keeps working; the note lands at the next tool group
+        case 'park':
+          logger.log('[VoiceSession] parking utterance until playback ends');
+          this.pending.push(decision.text);
+          return;
+        default:
+          return;
+      }
     }
+
     await this.handleUtterance(text);
+  }
+
+  private speakPiece(text: string) {
+    if (this.disposed || this.options.muted || !text) return;
+    void ttsService.speak(text, true).catch((e: unknown) => logger.warn('[VoiceSession] speak failed:', e));
+  }
+
+  /** Deliver what the user said while she was talking, then idle. */
+  private async deliverPending() {
+    if (this.closed || this.disposed) return;
+    const next = this.pending.shift();
+    if (next === undefined) { this.resumeListening(); return; }
+    await this.handleUtterance(next);
   }
 
   // ── Turn handling ────────────────────────────────────────────────────
@@ -356,14 +387,14 @@ class VoiceSessionImpl {
         onStream: (chunk) => {
           if (controller.signal.aborted) return;
           streamedAny = true;
-          for (const sentence of chunker.feed(chunk)) speakPiece(sentence);
+          for (const sentence of chunker.feed(chunk)) this.speakPiece(sentence);
         },
         onThought: (thought) => {
           if (controller.signal.aborted) return;
           const phrase = announcer.onThought(thought);
           if (phrase) {
             this.emit({ activity: announcer.activity });
-            speakPiece(phrase);
+            this.speakPiece(phrase);
           }
         },
       });
@@ -389,7 +420,7 @@ class VoiceSessionImpl {
           if (streamedAny) {
             // Flush the tail through the SAME queue — speakFinal would stop()
             // the in-flight sentences first and then replay the whole text.
-            for (const sentence of chunker.flush()) speakPiece(sentence);
+            for (const sentence of chunker.flush()) this.speakPiece(sentence);
           } else {
             await ttsService.speakFinal(reply);
           }
@@ -397,7 +428,7 @@ class VoiceSessionImpl {
       }
       if (this.disposed) return;
       if (this.abort) { this.resumeListening(); return; } // interrupted during speech
-      this.resumeListening();
+      await this.deliverPending();
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') { this.resumeListening(); return; }
       if (this.disposed) return;

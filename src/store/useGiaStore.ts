@@ -526,6 +526,14 @@ interface GiaState {
   showThoughts: string[];
   clarification: Clarification | null;
   wakeWord: string;
+  /** Hands-free: "hey gia" opens the voice surface and speaks the query there
+   *  instead of typing it into the composer. */
+  wakeOpensVoice: boolean;
+  setWakeOpensVoice: (v: boolean) => void;
+  /** Pending wake→voice handoff; ChatModule consumes and clears it. */
+  voiceHandoff: { text: string } | null;
+  requestVoiceHandoff: (text: string) => void;
+  clearVoiceHandoff: () => void;
   keepListening: boolean;
   autoStartWakeWord: boolean;
   voiceLanguage: string;
@@ -809,6 +817,8 @@ export const useGiaStore = create<GiaState>()(
       showThoughts: [],
       clarification: null,
       wakeWord: (() => { try { return localStorage.getItem('gia-wake-word') || 'hey gia'; } catch { return 'hey gia'; } })(),
+      wakeOpensVoice: (() => { try { return localStorage.getItem('gia-wake-opens-voice') !== 'false'; } catch { return true; } })(),
+      voiceHandoff: null,
       keepListening: (() => { try { return localStorage.getItem('gia-keep-listening') === 'true'; } catch { return false; } })(),
       autoStartWakeWord: (() => { try { return localStorage.getItem('gia-auto-start-wake-word') === 'true'; } catch { return false; } })(),
       voiceLanguage: (() => { try { return localStorage.getItem('gia-voice-language') || 'en-US'; } catch { return 'en-US'; } })(),
@@ -972,6 +982,9 @@ export const useGiaStore = create<GiaState>()(
         localStorage.setItem('gia-wake-word', word);
         set({ wakeWord: word });
       },
+      setWakeOpensVoice: (v) => { localStorage.setItem('gia-wake-opens-voice', String(v)); set({ wakeOpensVoice: v }); },
+      requestVoiceHandoff: (text) => set({ voiceHandoff: { text } }),
+      clearVoiceHandoff: () => set({ voiceHandoff: null }),
       setKeepListening: (on) => {
         localStorage.setItem('gia-keep-listening', String(on));
         set({ keepListening: on });

@@ -70,13 +70,20 @@ export function useVoiceInput(
     } catch (e) { logger.error('[useVoiceInput] Audio beep failed:', e); }
   }, []);
 
+  // Set when the wake word fires; the NEXT transcript within 8 s is the wake
+  // query. With "wake opens voice" on, that query hands off to the voice
+  // surface instead of the composer.
+  const wakeHandoffAtRef = useRef<number | null>(null);
+
   const handleWakeWord = useCallback((transcript: string) => {
     playBeep();
-    const ww = useGiaStore.getState().wakeWord;
+    const st = useGiaStore.getState();
+    const ww = st.wakeWord;
     if (!ww) return;
     const query = transcript.replace(new RegExp(ww.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '').replace(/\s+/g, ' ').trim();
     if (query) {
-      useGiaStore.getState().addNotification('Wake word detected');
+      st.addNotification('Wake word detected');
+      if (st.wakeOpensVoice) wakeHandoffAtRef.current = Date.now();
       return query;
     }
     return '';
@@ -157,6 +164,16 @@ export function useVoiceInput(
     wakeWord: voiceSettings.wakeWord,
     onWakeWord,
     onTranscript: (transcript: string) => {
+      // Wake query → voice surface handoff (phase 3): she opens VoiceMode
+      // and SPEAKS the answer instead of typing into the composer.
+      const st = useGiaStore.getState();
+      const pending = wakeHandoffAtRef.current;
+      if (pending !== null && Date.now() - pending < 8000 && st.wakeOpensVoice && transcript.trim()) {
+        wakeHandoffAtRef.current = null;
+        voiceRef.current?.stopListening();
+        st.requestVoiceHandoff(transcript.trim());
+        return;
+      }
       if (setInput) handleVoiceTranscript(transcript, setInput, (text) => onAutoSend?.(text));
     },
     onInterim: (text: string) => {

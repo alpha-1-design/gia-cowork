@@ -28,6 +28,7 @@ vi.mock('../../GiaBrain', () => ({
 const sessions: { id: string; title: string; messages: unknown[] }[] = [
   { id: 'sess-1', title: 'Chat', messages: [] },
 ];
+const steeringNotes: { sessionId: string; text: string }[] = [];
 vi.mock('../../../store/useGiaStore', () => ({
   useGiaStore: {
     getState: () => ({
@@ -37,6 +38,8 @@ vi.mock('../../../store/useGiaStore', () => ({
       getBranchMessages: () => [],
       addMessage: (id: string, msg: unknown) => { sessions[0].messages.push(msg); },
       updateSessionTitle: vi.fn(),
+      addSteering: vi.fn((sessionId: string, text: string) => { steeringNotes.push({ sessionId, text }); }),
+      takeSteering: vi.fn(() => steeringNotes.splice(0)),
     }),
   },
 }));
@@ -74,6 +77,7 @@ vi.mock('../vad', () => ({
 
 import { voiceSession } from '../VoiceSession';
 import GiaBrain from '../../GiaBrain';
+import tts from '../../TTSService';
 import { useGiaStore } from '../../../store/useGiaStore';
 import { startMicTap, FRAME_SIZE } from '../micTap';
 import type { VoiceSnapshot } from '../VoiceSession';
@@ -139,16 +143,43 @@ describe('VoiceSession — phase-1 walkie-talkie', () => {
     expect(snaps.some((s) => s.phase === 'speaking')).toBe(true);
   });
 
-  it('stop keyword interrupts without a brain turn', async () => {
+  it('keyword with nothing running is an ordinary turn (nothing to stop)', async () => {
     await voiceSession.open();
-    // A real utterance flows through endpoint(): transcribe → keyword check.
     scriptedText = 'stop';
     const s = voiceSession as unknown as { buffering: boolean; buffer: Float32Array[]; bufferSamples: number; endpoint: () => Promise<void> };
     s.buffering = true;
     s.buffer = Array.from({ length: 8 }, () => new Float32Array(FRAME_SIZE));
     s.bufferSamples = FRAME_SIZE * 8;
     await s.endpoint();
-    expect(GiaBrain.generate).not.toHaveBeenCalled();
+    // The gate only fires while she is busy; idle "stop" is just content.
+    expect(GiaBrain.generate).toHaveBeenCalledOnce();
+  });
+
+  it('phase 3: non-keyword speech while she TALKS is parked and delivered after playback', async () => {
+    (GiaBrain.generate as ReturnType<typeof vi.fn>).mockImplementation(
+      async (req: { prompt: string }) => ({ text: `echo: ${req.prompt}`, model: 'm' }),
+    );
+    // Hold her mouth open so the 'speaking' phase is stable for the test.
+    let releaseSpeech!: () => void;
+    (tts.speakFinal as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      () => new Promise<void>((resolve) => { releaseSpeech = resolve; }),
+    );
+    await voiceSession.open();
+    const first = voiceSession.handleUtterance('first answer please');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(voiceSession.getSnapshot().phase).toBe('speaking');
+    // She is 'speaking' (TTS queue) — user says something else.
+    scriptedText = 'and one more thing';
+    const s = voiceSession as unknown as { buffering: boolean; buffer: Float32Array[]; bufferSamples: number; endpoint: () => Promise<void>; pending: string[] };
+    s.buffering = true;
+    s.buffer = Array.from({ length: 8 }, () => new Float32Array(FRAME_SIZE));
+    s.bufferSamples = FRAME_SIZE * 8;
+    await s.endpoint();
+    expect(s.pending).toEqual(['and one more thing']); // parked, not spoken mid-stream
+    releaseSpeech();
+    await first; // playback "ends" → parked utterance delivers as the next turn
+    const calls = (GiaBrain.generate as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].prompt);
+    expect(calls).toContain('and one more thing');
   });
 
   it('abort during generation returns to listening without a reply', async () => {
@@ -215,5 +246,59 @@ describe('VoiceSession — phase-1 walkie-talkie', () => {
     const { default: tts } = await import('../../TTSService');
     const speakCalls = (tts.speak as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string);
     expect(speakCalls.some((t) => t.includes('Searching the web'))).toBe(true);
+  });
+
+  it('phase 3: speech while she works becomes a steering note, not a new turn', async () => {
+    // A brain call that stays running while the user speaks.
+    let release!: () => void;
+    (GiaBrain.generate as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      () => new Promise<{ text: string; model: string }>((resolve) => {
+        release = () => resolve({ text: 'Adjusted and done.', model: 'm' });
+      }),
+    );
+    await voiceSession.open();
+    const run = voiceSession.handleUtterance('do the task'); // phase → thinking
+    await new Promise((r) => setTimeout(r, 20));
+    expect((voiceSession.getSnapshot().phase) === 'thinking' || voiceSession.getSnapshot().working).toBe(true);
+
+    // The user talks while she works: buffer an utterance and endpoint it.
+    const s = voiceSession as unknown as { buffering: boolean; buffer: Float32Array[]; bufferSamples: number; endpoint: () => Promise<void> };
+    scriptedText = 'wait, use the cached file instead';
+    s.buffering = true;
+    s.buffer = Array.from({ length: 8 }, () => new Float32Array(FRAME_SIZE));
+    s.bufferSamples = FRAME_SIZE * 8;
+    await s.endpoint();
+
+    // No new generation started for the steering text.
+    expect(GiaBrain.generate).toHaveBeenCalledTimes(1);
+    // The steering note landed in the store rail.
+    const store = useGiaStore.getState();
+    expect(store.addSteering).toBeDefined();
+
+    release();
+    await run;
+  });
+
+  it('phase 3: keyword barge-in while she works stops the generation', async () => {
+    let release!: () => void;
+    (GiaBrain.generate as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      () => new Promise<{ text: string; model: string }>((resolve) => {
+        release = () => resolve({ text: 'never shown', model: 'm' });
+      }),
+    );
+    await voiceSession.open();
+    const run = voiceSession.handleUtterance('long task');
+    await new Promise((r) => setTimeout(r, 20));
+    scriptedText = 'stop';
+    const s = voiceSession as unknown as { buffering: boolean; buffer: Float32Array[]; bufferSamples: number; endpoint: () => Promise<void> };
+    s.buffering = true;
+    s.buffer = Array.from({ length: 8 }, () => new Float32Array(FRAME_SIZE));
+    s.bufferSamples = FRAME_SIZE * 8;
+    await s.endpoint();
+    // generation aborted → no assistant turn is ever persisted
+    release();
+    await run;
+    const msgs = sessions[0].messages as { role: string; content?: string }[];
+    expect(msgs.filter((m) => m.role === 'assistant' && m.content === 'never shown')).toHaveLength(0);
   });
 });

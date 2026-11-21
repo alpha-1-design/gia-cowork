@@ -27,6 +27,7 @@ interface ServiceStatus {
 export const VoiceSection: React.FC = () => {
   const [wakeWord, setWakeWord] = useState(() => localStorage.getItem('gia-wake-word') || 'hey gia');
   const [keepListening, setKeepListening] = useState(() => localStorage.getItem('gia-keep-listening') === 'true');
+  const [wakeOpensVoice, setWakeOpensVoice] = useState(() => localStorage.getItem('gia-wake-opens-voice') !== 'false');
   const [autoStart, setAutoStart] = useState(() => localStorage.getItem('gia-auto-start-wake-word') === 'true');
   const [ttsEnabled, setTtsEnabled] = useState(() => TTSService.isEnabled());
   const [modelVoiceEnabled, setModelVoiceEnabled] = useState(() => TTSService.isModelVoiceEnabled());
@@ -134,6 +135,11 @@ export const VoiceSection: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('gia-keep-listening', String(keepListening));
   }, [keepListening]);
+
+  useEffect(() => {
+    localStorage.setItem('gia-wake-opens-voice', String(wakeOpensVoice));
+    useGiaStore.getState().setWakeOpensVoice(wakeOpensVoice);
+  }, [wakeOpensVoice]);
 
   useEffect(() => {
     localStorage.setItem('gia-auto-start-wake-word', String(autoStart));
@@ -274,6 +280,14 @@ export const VoiceSection: React.FC = () => {
         label="Stay Listening"
         description="Keep listening for more wake words after each detection. Off = one-shot."
         accentColor="#ec4899"
+      />
+
+      <Switch
+        checked={wakeOpensVoice}
+        onChange={setWakeOpensVoice}
+        label="Wake Opens Voice"
+        description="\u201cHey gia, \u2026\u201d opens the voice surface and GIA answers out loud, instead of typing into the chat composer."
+        accentColor="#06b6d4"
       />
 
       <Switch

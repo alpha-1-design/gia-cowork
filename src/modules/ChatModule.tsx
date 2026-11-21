@@ -21,6 +21,8 @@ import { useGiaStore } from '../store/useGiaStore';
 import { useProtocolStore } from '../store/useProtocolStore';
 import { useSearchActivity } from '../store/useSearchActivity';
 import { useChatState } from '../hooks/useChatState';
+import { voiceSession } from '../services/voice/VoiceSession';
+import { logger } from '../utils/logger';
 import { useProactiveMessage } from '../hooks/useProactiveMessage';
 // TESTIMONY (W13): the voice and its secret surface. Mounted once per chat
 // mount; the moment may simply never arrive — that silence is the feature.
@@ -194,6 +196,25 @@ const [dockOpen, setDockOpen] = React.useState(false);
   // state whenever the two disagreed (and made the close button toggle it a
   // second time). Opening the overlay is enough.
   const openVoice = React.useCallback(() => { setShowVoiceMode(true); }, []);
+
+  // Wake-word → voice handoff (phase 3): "hey gia, what's on my plate?" opens
+  // the voice surface and GIA speaks the answer there. VoiceSession handles
+  // the turn; the overlay is just the renderer.
+  const voiceHandoff = useGiaStore(s => s.voiceHandoff);
+  React.useEffect(() => {
+    if (!voiceHandoff) return;
+    const text = voiceHandoff.text;
+    useGiaStore.getState().clearVoiceHandoff();
+    setShowVoiceMode(true);
+    void (async () => {
+      try {
+        await voiceSession.open({ auto: true });
+        await voiceSession.handleUtterance(text);
+      } catch (e) {
+        logger.warn('[ChatModule] wake→voice handoff failed:', e);
+      }
+    })();
+  }, [voiceHandoff]);
 
   // Ctrl/Cmd+B — the same shortcut VS Code and most editors use for the side
   // panel, so it lands where the user's hand already is.
@@ -595,7 +616,8 @@ const [dockOpen, setDockOpen] = React.useState(false);
 
       <div ref={scrollRef} onScroll={handleScroll} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop} className="flex-1 overflow-y-auto pt-4 relative z-0" style={{ paddingBottom: `${inputContainerHeight + 120}px` }}>
         {messages.length === 0 && buildMode && (
-          <div className="flex flex-col items-center justify-center h-full gap-5 text-center pt-12 sm:pt-16 pb-24 sm:pb-40 animate-fade-in">
+          <div className="h-full overflow-y-auto overflow-x-hidden animate-fade-in">
+            <div className="min-h-full flex flex-col items-center justify-center gap-5 text-center pt-12 sm:pt-16 pb-24 sm:pb-40">
             <div className="w-16 h-16 rounded-lg flex items-center justify-center" style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border-2)' }}>
               <Hammer size={30} style={{ color: 'var(--gia-text)' }} />
             </div>
@@ -618,10 +640,12 @@ const [dockOpen, setDockOpen] = React.useState(false);
                 </button>
               ))}
             </div>
+            </div>
           </div>
         )}
         {messages.length === 0 && !buildMode && (
-          <div className="relative flex flex-col items-center justify-center h-full gap-5 text-center px-6 pt-10 sm:pt-14 pb-24 sm:pb-40 animate-fade-in overflow-hidden gia-workspace-grid">
+          <div className="relative h-full overflow-y-auto overflow-x-hidden gia-workspace-grid animate-fade-in">
+            <div className="min-h-full flex flex-col items-center justify-center gap-5 text-center px-6 pt-10 sm:pt-14 pb-24 sm:pb-40">
             <div className="relative">
               <div className="w-16 h-16 rounded-lg flex items-center justify-center"
                 style={{ background: 'var(--gia-surface-2)', border: '1px solid var(--gia-border-2)' }}>
@@ -684,6 +708,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
               </>
             )}
             <GiaBotRoster />
+            </div>
           </div>
         )}
 
