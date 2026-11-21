@@ -28,6 +28,11 @@ const FILES = [
   'hey_jarvis_v0.1.onnx',
 ];
 
+/** ORT runtime wasm — staged so the voice VAD (and wake word) never hit the
+ *  jsDelivr CDN at runtime; the custom protocol can't set wasmPaths defaults. */
+const ORT_DIR = join(root, 'node_modules', 'openwakeword-wasm-browser', 'node_modules', 'onnxruntime-web', 'dist');
+const ORT_FILES = ['ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm'];
+
 function main() {
   if (!existsSync(srcDir)) {
     console.warn('[wakeword] openwakeword-wasm-browser is not installed; skipping asset staging.');
@@ -57,6 +62,20 @@ function main() {
   }
 
   console.log(`[wakeword] staged openWakeWord assets -> public/openwakeword/models (${copied} copied, ${skipped} up to date)`);
+
+  // ORT runtime → public/openwakeword/ort/ (voice vad sets wasmPaths here).
+  const ortOut = join(root, 'public', 'openwakeword', 'ort');
+  if (existsSync(ORT_DIR)) {
+    mkdirSync(ortOut, { recursive: true });
+    for (const name of ORT_FILES) {
+      const src = join(ORT_DIR, name);
+      if (existsSync(src)) copyFileSync(src, join(ortOut, name));
+      else console.warn(`[wakeword] missing ORT file: ${name}`);
+    }
+    console.log('[wakeword] staged onnxruntime-web wasm -> public/openwakeword/ort');
+  } else {
+    console.warn('[wakeword] onnxruntime-web dist not found; voice VAD will fall back to CDN.');
+  }
 }
 
 main();

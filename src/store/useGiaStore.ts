@@ -102,6 +102,8 @@ export interface Message {
   agentIcon?: string;
   tasks?: TaskItem[];
   source?: 'on-device' | 'cloud';
+  /** Present when the turn was spoken in voice mode; absent = typed. */
+  origin?: 'voice';
   /** True when the provider hit max_tokens — UI shows a "tap to continue" chip. */
   wasTruncated?: boolean;
   /** Tappable follow-up prompts suggested after this message completes. */

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronRight, Undo2, FileText, RotateCcw, Trash2, ShieldCheck, Plus } from 'lucide-react';
 import { fileSnapshots, type FileSnapshot } from '../../services/FileSnapshots';
 import { isTauri } from '../../platform';
+import Commit, { type CommitFile } from '../ui/commit';
 
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
@@ -9,6 +10,35 @@ function relativeTime(ts: number): string {
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
   return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+/**
+ * Summary line-diff between a snapshot's previous and new content — a
+ * multiset difference of lines, which is accurate enough for the summary
+ * card (real hunks belong in a full diff view).
+ */
+function diffCounts(previousContent: string | null, newContent: string): { additions: number; deletions: number } {
+  if (previousContent === null) {
+    return { additions: newContent ? newContent.split('\n').length : 0, deletions: 0 };
+  }
+  const count = (lines: string[]) => {
+    const m = new Map<string, number>();
+    for (const l of lines) m.set(l, (m.get(l) ?? 0) + 1);
+    return m;
+  };
+  const prev = count(previousContent.split('\n'));
+  const next = count(newContent.split('\n'));
+  let additions = 0;
+  let deletions = 0;
+  for (const [line, n] of next) {
+    const p = prev.get(line) ?? 0;
+    if (n > p) additions += n - p;
+  }
+  for (const [line, p] of prev) {
+    const n = next.get(line) ?? 0;
+    if (p > n) deletions += p - n;
+  }
+  return { additions, deletions };
 }
 
 const UndoPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -47,6 +77,23 @@ const UndoPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const pending = snapshots.filter(s => !s.reverted);
   const desktop = isTauri();
 
+  // The Commit card shows one row per pending FILE (latest write wins, since
+  // reverting the latest snapshot of a file restores its pre-GIA state).
+  const pendingByPath = useMemo(() => {
+    const byPath = new Map<string, FileSnapshot>();
+    for (const s of pending) {
+      const existing = byPath.get(s.path);
+      if (!existing || s.seq > existing.seq) byPath.set(s.path, s);
+    }
+    return byPath;
+  }, [pending]);
+  const pendingFiles: CommitFile[] = useMemo(() => {
+    return [...pendingByPath.values()].map((s) => ({
+      path: s.path,
+      ...diffCounts(s.previousContent, s.newContent),
+    }));
+  }, [pendingByPath]);
+
   return (
     <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--gia-bg)', padding: '20px 16px', gap: '16px' }}>
       <div className="flex items-center gap-2">
@@ -78,6 +125,16 @@ const UndoPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         <div className="gia-card p-3" style={{ borderColor: 'rgba(52,211,153,0.3)' }}>
           <p className="text-[11px]" style={{ color: '#34d399' }}>{message}</p>
         </div>
+      )}
+
+      {pendingFiles.length > 0 && desktop && (
+        <Commit
+          files={pendingFiles}
+          fileAction={{ label: 'Revert', onSelect: (f) => {
+            const snap = pendingByPath.get(f.path);
+            if (snap) void handleRevert(snap.id);
+          } }}
+        />
       )}
 
       {pending.length > 0 && desktop && (

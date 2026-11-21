@@ -45,6 +45,15 @@ class WhisperService {
     }
   }
 
+  /** 16 kHz mono PCM straight from the mic tap — skips WAV encode/decode. */
+  async transcribeFloat32(audio: Float32Array): Promise<string> {
+    if (!this.isReady || !this.transcriber) {
+      throw new Error('Whisper model not loaded');
+    }
+    const result = await this.transcriber(audio as never);
+    return result.text.trim();
+  }
+
   async transcribe(audioBlob: Blob): Promise<string> {
     if (!this.isReady || !this.transcriber) {
       throw new Error('Whisper model not loaded');

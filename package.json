@@ -43,6 +43,7 @@
     "lucide-react": "^0.471.0",
     "mermaid": "^11.15.0",
     "motion": "^12.40.0",
+    "onnxruntime-web": "1.30.0",
     "openwakeword-wasm-browser": "^0.1.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.7.284",
@@ -53,6 +54,7 @@
     "react-is": "^19.2.6",
     "recharts": "^3.8.1",
     "tailwind-merge": "^2.6.0",
+    "thinking-orbs": "^0.3.2",
     "three": "^0.185.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.3"
