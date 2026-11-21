@@ -1,4 +1,5 @@
 import { useGiaStore } from '../store/useGiaStore';
+import { TOOL_LABELS } from '../utils/toolLabels';
 
 export type ThinkingPhase =
   | 'gathering'
@@ -31,60 +32,7 @@ const BUILD_PHASE_MAP: Partial<Record<ThinkingPhase, string>> = {
   reasoning: 'Fixing what failed',
 };
 
-const TOOL_LABELS: Record<string, string> = {
-  web_search: 'Searching the web',
-  read_url: 'Reading the page',
-  browser_navigate: 'Opening the page',
-  check_website: 'Checking a site',
-  page_info: 'Reading page details',
-  web_scrape: 'Extracting the page',
-  terminal_run: 'Running a command',
-  terminal_status: 'Checking the command',
-  terminal_kill: 'Stopping the command',
-  filesystem_read: 'Reading a file',
-  filesystem_write: 'Writing a file',
-  list_files: 'Listing files',
-  file_search: 'Searching files',
-  file_get: 'Opening a file',
-  file_list: 'Listing files',
-  image_generation: 'Generating an image',
-  zip_project: 'Packing the project',
-  http_request: 'Calling an API',
-  emoji_search: 'Finding an emoji',
-  brain_boost: 'Pulling extra context',
-  delegate_task: 'Handing off to an agent',
-  request_clarification: 'Waiting on your answer',
-  code_execute: 'Running code',
-  python_execute: 'Running Python',
-  build_project: 'Building the project',
-  neura_query: 'Searching memory',
-  neura_related: 'Following a connection',
-  neura_stats: 'Checking memory health',
-  save_memory: 'Saving a memory',
-  forget_memory: 'Removing a memory',
-  note_create: 'Writing a note',
-  note_read: 'Reading a note',
-  note_update: 'Updating a note',
-  note_delete: 'Deleting a note',
-  task_create: 'Adding a task',
-  task_read: 'Reading tasks',
-  task_update: 'Updating a task',
-  task_delete: 'Removing a task',
-  generate_file: 'Creating a file',
-  edit_document: 'Editing a document',
-  download_url: 'Downloading',
-  download_file: 'Downloading',
-  browse_web: 'Browsing',
-  read_document: 'Reading a document',
-  data_analysis: 'Analyzing data',
-  local_search: 'Searching this machine',
-  screenshot: 'Capturing the screen',
-  share_content: 'Preparing a share',
-  create_pdf: 'Making a PDF',
-  sandbox_exec: 'Running in the sandbox',
-  sandbox_install: 'Installing packages',
-  sandbox_clone: 'Cloning a repo',
-};
+
 
 /** Shared with the streaming cursor. Not a component. */
 export function statusLabel(phase?: ThinkingPhase, toolName?: string | null): string {

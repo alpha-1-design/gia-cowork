@@ -37,8 +37,23 @@ class TTSService {
    * still showing "idle" while she was plainly mid-sentence.
    */
   private speakingListeners = new Set<(speaking: boolean) => void>();
+  /** Subscribers told which sentence is being spoken right now — the voice
+   *  caption surface brightens the live line and dims the previous one. */
+  private sentenceListeners = new Set<(sentence: string) => void>();
   private streamBuffer = '';
   private streamTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Subscribe to per-sentence speech events. Returns an unsubscribe fn. */
+  onSentence(listener: (sentence: string) => void): () => void {
+    this.sentenceListeners.add(listener);
+    return () => { this.sentenceListeners.delete(listener); };
+  }
+
+  private emitSentence(sentence: string) {
+    for (const l of Array.from(this.sentenceListeners)) {
+      try { l(sentence); } catch { /* listener errors never break speech */ }
+    }
+  }
 
   setEnabled(v: boolean) {
     this.enabled = v;
@@ -131,6 +146,7 @@ class TTSService {
 
     this.setSpeaking(true);
     const text = this.queue.shift()!;
+    this.emitSentence(text);
 
     // Prefetch: the NEXT sentence synthesizes while THIS one plays, so a
     // sentence boundary costs zero synthesis dead-air (Kokoro synthesis is
@@ -205,6 +221,7 @@ class TTSService {
     // the speaking flag — so the orb stayed "idle" for the whole answer while
     // GIA was audibly talking.
     this.setSpeaking(true);
+    this.emitSentence(cleanText);
     let handedOffToQueue = false;
     try {
       if (this.modelVoiceEnabled && await speakWithModelVoice(cleanText)) return;

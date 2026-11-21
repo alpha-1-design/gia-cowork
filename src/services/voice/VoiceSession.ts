@@ -4,6 +4,8 @@ import { createVAD, concatFrames, type VAD } from './vad';
 import whisperService from '../WhisperService';
 import ttsService from '../TTSService';
 import GiaBrain from '../GiaBrain';
+import { SentenceChunker } from './SentenceChunker';
+import { VoiceAnnouncer } from './VoiceAnnouncer';
 import { useGiaStore } from '../../store/useGiaStore';
 
 /**
@@ -42,6 +44,8 @@ export interface VoiceSnapshot {
   activity: string | null;
   /** True while a generation is running (mouth may also be speaking). */
   working: boolean;
+  /** The sentence she is saying right now — the live caption. */
+  caption: string | null;
   stt: typeof whisperService.status;
   vad: 'silero' | 'energy' | null;
 }
@@ -73,6 +77,9 @@ class VoiceSessionImpl {
   private buffer: Float32Array[] = [];
   private bufferSamples = 0;
   private options: VoiceSessionOptions = {};
+  private captionOff: (() => void) | null = null;
+  /** In-flight open() — concurrent calls await it instead of racing. */
+  private opening: Promise<void> | null = null;
   private abort: AbortController | null = null;
   private closed = true;
   private disposed = false;
@@ -84,6 +91,7 @@ class VoiceSessionImpl {
     error: null,
     activity: null,
     working: false,
+    caption: null,
     stt: 'unloaded',
     vad: null,
   };
@@ -125,37 +133,56 @@ class VoiceSessionImpl {
    */
   async open(options: VoiceSessionOptions = {}): Promise<void> {
     if (!this.closed) { this.options = { ...this.options, ...options }; return; }
+    if (this.opening) return this.opening; // StrictMode double-mount calls open() twice
     const token = VoiceSessionImpl.claim();
     if (!token) throw new Error('Another microphone user is active. Turn off "listen" first.');
     this.disposed = false;
     this.options = options;
     this.emit({ error: null, phase: 'listening', activity: null, working: false });
 
+    this.opening = (async () => {
+      try {
+        this.tap = await startMicTap();
+      } catch (err) {
+        VoiceSessionImpl.release(token);
+        const message = (err as Error)?.name === 'NotAllowedError'
+          ? 'Microphone permission was denied. Allow the mic in your system settings, then try again.'
+          : 'No microphone is available. Type below instead.';
+        this.emit({ phase: 'idle', error: message });
+        throw new Error(message);
+      }
+
+      this.vad = await createVAD();
+      this.emit({ vad: this.vad.kind });
+
+      // Local whisper only speaks English in phase 1 (tiny.en). Non-en
+      // languages fall back to the browser recognizer in VoiceMode.
+      this.offFrame = this.tap.onFrame((frame) => void this.onFrame(frame));
+      this.closed = false;
+      // Unmounted while opening (StrictMode): release everything instead of
+      // leaving an open session with no UI subscribed to it.
+      if (this.disposed) {
+        VoiceSessionImpl.release(token);
+        await this.tap.stop();
+        this.tap = null;
+        this.closed = true;
+        throw new Error('Voice session closed while opening');
+      }
+      logger.log('[VoiceSession] open, vad =', this.vad.kind);
+    })();
+
     try {
-      this.tap = await startMicTap();
-    } catch (err) {
-      VoiceSessionImpl.release(token);
-      const message = (err as Error)?.name === 'NotAllowedError'
-        ? 'Microphone permission was denied. Allow the mic in your system settings, then try again.'
-        : 'No microphone is available. Type below instead.';
-      this.emit({ phase: 'idle', error: message });
-      throw new Error(message);
+      await this.opening;
+    } finally {
+      this.opening = null;
     }
-
-    this.vad = await createVAD();
-    this.emit({ vad: this.vad.kind });
-
-    // Local whisper only speaks English in phase 1 (tiny.en). Non-en
-    // languages fall back to the browser recognizer in VoiceMode.
-    this.offFrame = this.tap.onFrame((frame) => void this.onFrame(frame));
-    this.closed = false;
-    logger.log('[VoiceSession] open, vad =', this.vad.kind);
   }
 
   close() {
     if (this.closed) return;
     this.closed = true;
     this.disposed = true;
+    this.clearCaption();
     this.abort?.abort();
     this.abort = null;
     this.buffering = false;
@@ -176,6 +203,7 @@ class VoiceSessionImpl {
     this.abort?.abort();
     this.abort = null;
     this.emit({ working: false, activity: null });
+    this.clearCaption();
     this.resumeListening();
   }
 
@@ -301,14 +329,43 @@ class VoiceSessionImpl {
     const controller = new AbortController();
     this.abort = controller;
 
+    // Phase 2: she speaks WHILE she thinks. Stream chunks go through the
+    // sentence chunker into the already sentence-buffering TTS queue; tool
+    // announcements flow through the whitelisted announcer. The finished
+    // answer is only spoken via speakFinal when NOTHING was streamed
+    // (providers without onStream), so she never says it twice.
+    const chunker = new SentenceChunker();
+    const announcer = new VoiceAnnouncer();
+    let streamedAny = false;
+    // Live caption: the sentence she is saying right now (TTS emission events).
+    this.captionOff?.();
+    this.captionOff = ttsService.onSentence((sentence: string) => {
+      if (!this.disposed) this.emit({ caption: sentence });
+    });
+    const speakPiece = (text: string) => {
+      if (this.disposed || this.options.muted || !text) return;
+      void ttsService.speak(text, true).catch((e: unknown) => logger.warn('[VoiceSession] speak failed:', e));
+    };
+
     try {
       const res = await GiaBrain.generate({
         prompt: clean,
         history,
         systemPrompt: `You are GIA, speaking in voice mode. The user is talking to you directly. Be conversational, concise, and natural — like a knowledgeable friend. Keep responses under 3 sentences unless the user asked for detail. No markdown, no bullet points, no headers — just natural spoken language. ${this.options.systemPromptTail ?? ''}`,
         signal: controller.signal,
-        // Phase 2 will speak mid-stream via a chunker; phase 1 speaks the
-        // finished answer sentence-chunked through the streaming path.
+        onStream: (chunk) => {
+          if (controller.signal.aborted) return;
+          streamedAny = true;
+          for (const sentence of chunker.feed(chunk)) speakPiece(sentence);
+        },
+        onThought: (thought) => {
+          if (controller.signal.aborted) return;
+          const phrase = announcer.onThought(thought);
+          if (phrase) {
+            this.emit({ activity: announcer.activity });
+            speakPiece(phrase);
+          }
+        },
       });
 
       if (controller.signal.aborted) { this.resumeListening(); return; }
@@ -328,7 +385,15 @@ class VoiceSessionImpl {
       // turn from the store.
       this.onAssistantReply?.(reply, sessionId);
       if (!this.options.muted) {
-        try { await ttsService.speakFinal(reply); } catch (e) { logger.warn('[VoiceSession] speech failed:', e); }
+        try {
+          if (streamedAny) {
+            // Flush the tail through the SAME queue — speakFinal would stop()
+            // the in-flight sentences first and then replay the whole text.
+            for (const sentence of chunker.flush()) speakPiece(sentence);
+          } else {
+            await ttsService.speakFinal(reply);
+          }
+        } catch (e) { logger.warn('[VoiceSession] speech failed:', e); }
       }
       if (this.disposed) return;
       if (this.abort) { this.resumeListening(); return; } // interrupted during speech
@@ -353,8 +418,15 @@ class VoiceSessionImpl {
     this.options = { ...this.options, [key]: value };
   }
 
+  private clearCaption() {
+    this.captionOff?.();
+    this.captionOff = null;
+    if (this.snapshot.caption) this.emit({ caption: null });
+  }
+
   private resumeListening() {
     if (this.closed || this.disposed) return;
+    this.clearCaption();
     if (this.options.auto === false) {
       this.emit({ phase: 'idle', activity: null, working: false });
       return;

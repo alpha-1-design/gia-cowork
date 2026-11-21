@@ -13,6 +13,7 @@ vi.mock('../../TTSService', () => ({
     speakFinal: vi.fn(async () => undefined),
     stop: vi.fn(),
     speak: vi.fn(async () => undefined),
+    onSentence: vi.fn(() => () => undefined),
   },
 }));
 vi.mock('../../GiaBrain', () => ({
@@ -181,5 +182,38 @@ describe('VoiceSession — phase-1 walkie-talkie', () => {
     const { snaps } = collect();
     await voiceSession.handleUtterance('hello gia');
     expect(snaps[snaps.length - 1].phase).toBe('idle');
+  });
+
+  it('phase 2: streamed answers speak sentence-by-sentence and never replay via speakFinal', async () => {
+    (GiaBrain.generate as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async (req: { onStream?: (c: string) => void }) => {
+        req.onStream?.('First full sentence here. ');
+        req.onStream?.('Second full sentence ');
+        req.onStream?.('finishes now. ');
+        return { text: 'First full sentence here. Second full sentence finishes now.', model: 'test-model' };
+      },
+    );
+    await voiceSession.open();
+    await voiceSession.handleUtterance('talk to me');
+    const { default: tts } = await import('../../TTSService');
+    const speakCalls = (tts.speak as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string);
+    expect(speakCalls).toContain('First full sentence here.');
+    expect(speakCalls.join(' ')).toContain('Second full sentence finishes now.');
+    // The whole answer must NOT be replayed at the end.
+    expect(tts.speakFinal).not.toHaveBeenCalled();
+  });
+
+  it('phase 2: tool announcements are spoken through the whitelist', async () => {
+    (GiaBrain.generate as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async (req: { onThought?: (t: string) => void }) => {
+        req.onThought?.('⚙️ Executing web_search...');
+        return { text: 'All done with the check.', model: 'test-model' };
+      },
+    );
+    await voiceSession.open();
+    await voiceSession.handleUtterance('check the web');
+    const { default: tts } = await import('../../TTSService');
+    const speakCalls = (tts.speak as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string);
+    expect(speakCalls.some((t) => t.includes('Searching the web'))).toBe(true);
   });
 });

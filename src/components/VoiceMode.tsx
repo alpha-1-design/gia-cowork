@@ -507,6 +507,7 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
   }, [engine]);
 
   const capturing = engine === 'local' && snapshot?.phase === 'capturing';
+  const caption = snapshot?.caption ?? null;
   const transcribing = engine === 'local' && snapshot?.phase === 'transcribing';
   const activity = snapshot?.activity;
 
@@ -659,28 +660,17 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
         </div>
       </div>
 
-      <footer className="shrink-0 px-4 pb-5 pt-3" style={{ borderTop: '1px solid var(--gia-border)' }}>
+      <footer className="shrink-0 px-4 pb-4 pt-3" style={{ borderTop: '1px solid var(--gia-border)' }}>
         <div className="max-w-2xl mx-auto">
-          <div className="flex flex-col items-center gap-2 mb-4">
-            {/* The orb IS the state machine — what she is doing, one way. */}
-            <div className="flex items-center justify-center h-16">
-              <AiOrb
-                state={engine === 'local' ? orbStateOf(snapshot) : 'idle'}
-                decorative
-                size="lg"
-                label={undefined}
-              />
-            </div>
+          {/* One control, one caption, one hint. The orb IS the button:
+              tap it to speak / send / interrupt. No duplicate controls. */}
+          <div className="flex flex-col items-center gap-1.5 mb-3">
             <motion.button
               type="button"
               onClick={primary}
-              className="w-12 h-12 rounded-lg flex items-center justify-center transition-colors"
-              whileTap={{ scale: 0.96 }}
-              style={{
-                background: phase === 'listening' || phase === 'speaking' ? 'var(--gia-accent)' : 'var(--gia-surface-2)',
-                color: phase === 'listening' || phase === 'speaking' ? 'var(--gia-accent-contrast)' : 'var(--gia-text)',
-                border: '1px solid var(--gia-border-2)',
-              }}
+              className="relative flex items-center justify-center w-20 h-16 rounded-xl transition-colors"
+              whileTap={{ scale: 0.94 }}
+              style={{ background: 'transparent' }}
               aria-label={
                 phase === 'listening' ? (capturing ? 'Send what you said' : 'Stop listening')
                   : phase === 'thinking' ? 'Interrupt'
@@ -689,16 +679,20 @@ export default function VoiceMode({ onClose }: VoiceModeProps) {
               }
               title={phase === 'listening' ? (capturing ? 'Send (Space)' : 'Stop (Space)') : phase === 'thinking' ? 'Interrupt (Space)' : phase === 'speaking' ? 'Interrupt (Space)' : 'Speak (Space)'}
             >
-              {capturing ? (
-                <Square size={14} />
-              ) : phase === 'thinking' || phase === 'speaking' ? (
-                <Square size={15} />
-              ) : (
-                <Mic size={18} />
-              )}
+              <AiOrb
+                state={engine === 'local' ? orbStateOf(snapshot) : 'idle'}
+                decorative
+                size="lg"
+              />
             </motion.button>
-            <div className="text-center">
-              <p className="text-[10px] font-medium" style={{ color: 'var(--gia-text)' }}>{phaseLabel}</p>
+            {/* Live caption: the sentence she is saying right now, at full
+                brightness. Completed sentences fold into the transcript. */}
+            <div className="text-center min-h-[28px] flex flex-col justify-center">
+              {caption && (phase === 'speaking' || phase === 'thinking') ? (
+                <p className="text-[13px] leading-snug px-4" style={{ color: 'var(--gia-text)' }}>{caption}</p>
+              ) : (
+                <p className="text-[11px] font-medium" style={{ color: 'var(--gia-text)' }}>{phaseLabel}</p>
+              )}
               <p className="text-[9px] mt-0.5" style={{ color: 'var(--gia-muted-2)' }}>
                 {capturing ? 'Tap to send · pauses send automatically'
                   : phase === 'thinking' ? 'Tap to interrupt'
