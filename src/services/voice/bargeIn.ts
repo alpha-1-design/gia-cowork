@@ -20,10 +20,14 @@
 
 export const BARGE_IN_KEYWORDS = ['stop', 'quiet', 'shush', 'silence', 'wait', 'hold on', 'never mind'] as const;
 
+/** Spoken undo — routes to FileSnapshots.revert, not to the model. */
+export const REVERT_KEYWORDS = ['undo that', 'undo', 'revert that', 'take it back', 'take that back', 'put it back', 'put that back', 'rollback'] as const;
+
 export type GatedAction =
   | { action: 'interrupt'; keyword: string }
   | { action: 'steer'; text: string }
   | { action: 'park'; text: string }
+  | { action: 'revert' }
   | { action: 'ignore'; reason: string };
 
 /** Normalize a transcript for keyword matching (words only, lowercase). */
@@ -42,6 +46,13 @@ export function isStopKeyword(text: string): string | null {
   return null;
 }
 
+/** A spoken undo — the whole utterance must be the phrase, not contain it. */
+export function isRevertPhrase(text: string): boolean {
+  const norm = normalizeUtterance(text);
+  if (!norm) return false;
+  return REVERT_KEYWORDS.some((kw) => norm === kw || norm === `${kw} gia` || norm === `gia ${kw}`);
+}
+
 /** Which action does an endpointed utterance take in the given phase? */
 export function routeUtterance(
   text: string,
@@ -49,6 +60,10 @@ export function routeUtterance(
 ): GatedAction {
   const clean = text.trim();
   if (!clean) return { action: 'ignore', reason: 'empty' };
+
+  // Spoken undo works in every phase — it acts on the last completed write,
+  // never on work in flight, so there is nothing to race.
+  if (isRevertPhrase(clean)) return { action: 'revert' };
 
   const keyword = isStopKeyword(clean);
   if (keyword) {

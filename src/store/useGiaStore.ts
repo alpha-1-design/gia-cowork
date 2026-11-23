@@ -31,6 +31,10 @@ export interface QueuedMessage {
   text: string;
   attachments: { name: string; type: string; content: string; preview?: string }[];
   queuedAt: number;
+  /** Voice-parked: heard while GIA was talking through speakers; the drain
+   *  skips it until VoiceSession releases it at playback end (echo guard). */
+  holdForVoice?: boolean;
+  origin?: 'voice';
 }
 
 /**
@@ -581,6 +585,8 @@ interface GiaState {
   enqueueMessage: (m: QueuedMessage) => void;
   dequeueMessage: (id: string) => QueuedMessage | null;
   clearQueue: (sessionId?: string) => void;
+  /** Un-hold voice-parked items for a session (playback ended). */
+  releaseHeldQueues: (sessionId?: string) => void;
   /** Notes waiting to be handed to the running turn. */
   steeringNotes: SteeringNote[];
   /** Push a correction into the turn that is currently running. */
@@ -1035,6 +1041,13 @@ export const useGiaStore = create<GiaState>()(
         queuedMessages: sessionId
           ? s.queuedMessages.filter(m => m.sessionId !== sessionId)
           : [],
+      })),
+      releaseHeldQueues: (sessionId) => set((s) => ({
+        queuedMessages: s.queuedMessages.map(m =>
+          (!sessionId || !m.sessionId || m.sessionId === sessionId) && m.holdForVoice
+            ? { ...m, holdForVoice: false }
+            : m,
+        ),
       })),
       addSteering: (sessionId, text) => set((s) => ({
         steeringNotes: [...s.steeringNotes, {

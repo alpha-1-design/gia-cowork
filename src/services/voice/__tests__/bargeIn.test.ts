@@ -51,3 +51,22 @@ describe('routeUtterance — the escalation ladder', () => {
     expect(routeUtterance('   ', 'thinking')).toEqual({ action: 'ignore', reason: 'empty' });
   });
 });
+
+describe('spoken undo (Speak-the-Revert)', () => {
+  it('matches the undo phrases exactly, in any phase', () => {
+    for (const phase of ['listening', 'thinking', 'speaking'] as const) {
+      expect(routeUtterance('undo that', phase)).toEqual({ action: 'revert' });
+      expect(routeUtterance('take it back', phase)).toEqual({ action: 'revert' });
+      expect(routeUtterance('put that back, please', phase).action).not.toBe('revert'); // suffix = content
+    }
+  });
+
+  it('undo-like sentences about content are NOT reverts', () => {
+    expect(routeUtterance('undo the last commit with git', 'thinking').action).toBe('steer');
+    expect(routeUtterance('can you put that back in the folder', 'thinking').action).toBe('steer');
+  });
+
+  it('keyword-vs-revert precedence: "stop" stays an interrupt', () => {
+    expect(routeUtterance('stop', 'speaking')).toEqual({ action: 'interrupt', keyword: 'stop' });
+  });
+});

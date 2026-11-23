@@ -540,6 +540,13 @@ export function useChatState() {
     // Only drain the chat this hook is driving — a queued message for another
     // session must survive you switching away and coming back.
     if (!next || (activeSessionId && next.sessionId && next.sessionId !== activeSessionId)) return;
+    // Voice-parked items stay held until GIA finishes talking (released by
+    // VoiceSession) — or until they go stale, so a wedged session can never
+    // trap a user's words forever.
+    if (next.holdForVoice) {
+      if (Date.now() - next.queuedAt > 5 * 60_000) state.releaseHeldQueues(next.sessionId || undefined);
+      return;
+    }
     state.dequeueMessage(next.id);
     setTimeout(() => {
       genRef.current.handleSend(

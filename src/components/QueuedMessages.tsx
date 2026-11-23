@@ -50,18 +50,21 @@ export function QueuedMessages() {
       {mine.map(m => (
         <div key={m.id} className="flex items-start gap-2 group">
           <span className="text-[11px] flex-1 truncate" style={{ color: 'var(--gia-text)' }}>
+            {m.holdForVoice && <span style={{ color: 'var(--gia-muted-2)' }}>🎙 heard while she was talking — </span>}
             {m.text}
           </span>
-          <button
-            onClick={() => steer(m.id, m.text)}
-            aria-label={`Steer the running turn now: ${m.text.slice(0, 40)}`}
-            title="Apply to the turn that is running now, instead of waiting"
-            data-testid={`queued-steer-${m.id}`}
-            className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ color: '#14b8a6' }}
-          >
-            <CornerDownLeft size={10} />
-          </button>
+          {!m.holdForVoice && (
+            <button
+              onClick={() => steer(m.id, m.text)}
+              aria-label={`Steer the running turn now: ${m.text.slice(0, 40)}`}
+              title="Apply to the turn that is running now, instead of waiting"
+              data-testid={`queued-steer-${m.id}`}
+              className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ color: '#14b8a6' }}
+            >
+              <CornerDownLeft size={10} />
+            </button>
+          )}
           <button
             onClick={() => dequeueMessage(m.id)}
             aria-label={`Cancel queued message: ${m.text.slice(0, 40)}`}

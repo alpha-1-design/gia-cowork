@@ -5,7 +5,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { useGiaStore } from '../store/useGiaStore';
 import GiaBrain from '../services/GiaBrain';
 import { genId } from '../utils/id';
-import { ThinkingStatus } from './ThinkingStatus';
+import { ThinkingStatus, statusLabel } from './ThinkingStatus';
+import { useOrbLiveState } from '../hooks/useOrbLiveState';
+import OrbAvatar from './OrbAvatar';
 
 /**
  * Floating chat HUD.
@@ -29,6 +31,8 @@ const FloatingHud: React.FC = () => {
     updateMessage,
     setMessageThinking,
     getBranchMessages,
+    currentTool,
+    thinkingPhase,
   } = useGiaStore(useShallow(s => ({
     enabled: s.showHud,
     setShowHud: s.setShowHud,
@@ -41,6 +45,8 @@ const FloatingHud: React.FC = () => {
     updateMessage: s.updateMessage,
     setMessageThinking: s.setMessageThinking,
     getBranchMessages: s.getBranchMessages,
+    currentTool: s.currentTool,
+    thinkingPhase: s.thinkingPhase,
   })));
 
   const [open, setOpen] = useState(true);
@@ -130,6 +136,8 @@ const FloatingHud: React.FC = () => {
     }
   }, [input, sending, generationActive, activeSessionId, createSession, addMessage, updateMessage, setMessageThinking, getBranchMessages]);
 
+  const liveState = useOrbLiveState();
+
   if (!enabled) return null;
 
   const busy = sending || generationActive;
@@ -157,9 +165,11 @@ const FloatingHud: React.FC = () => {
           }}
         >
           <header className="flex items-center gap-2 px-3 py-2 shrink-0" style={{ borderBottom: '1px solid var(--gia-border)' }}>
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: busy ? 'var(--gia-text)' : 'var(--gia-muted-2)' }} />
+            <OrbAvatar size={12} liveState={liveState} />
             <span className="text-[11px] font-semibold tracking-wide" style={{ color: 'var(--gia-text)' }}>GIA</span>
-            <span className="text-[10px]" style={{ color: 'var(--gia-muted)' }}>{busy ? 'working' : 'here'}</span>
+            <span className="text-[10px] truncate max-w-[170px]" style={{ color: 'var(--gia-muted)' }}>
+              {busy ? statusLabel(thinkingPhase, currentTool) : 'here'}
+            </span>
             <div className="ml-auto flex items-center gap-1">
               <button
                 onClick={() => { setModule('chat'); setOpen(false); }}

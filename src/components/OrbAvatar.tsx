@@ -1,5 +1,6 @@
 import React from 'react';
 import { resolveAgentColor } from '../utils/agentIcons';
+import { ORB_TEMPO, type OrbLiveState } from '../hooks/useOrbLiveState';
 
 interface OrbAvatarProps {
   color?: string;
@@ -8,6 +9,9 @@ interface OrbAvatarProps {
   glow?: boolean;
   icon?: React.ReactNode;
   className?: string;
+  /** Status-light mode: breath tempo keyed to a real condition (thinking /
+   *  speaking), never a mood. Absent = the app's default slow breath. */
+  liveState?: OrbLiveState;
 }
 
 const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -19,6 +23,7 @@ const OrbAvatar: React.FC<OrbAvatarProps> = ({
   glow = true,
   icon,
   className = '',
+  liveState,
 }) => {
   const reactId = React.useId().replace(/[^a-zA-Z0-9]/g, '');
   const id = `orb-${reactId}`;
@@ -47,7 +52,7 @@ const OrbAvatar: React.FC<OrbAvatarProps> = ({
             inset: -size * 0.22,
             background: `radial-gradient(circle, ${resolved}40 0%, transparent 70%)`,
             filter: 'blur(5px)',
-            animation: animate ? 'orb-pulse 2.8s ease-in-out infinite' : undefined,
+            animation: animate ? `orb-pulse ${liveState ? ORB_TEMPO[liveState] : 2.8}s ease-in-out infinite` : undefined,
           }}
         />
       )}

@@ -7,6 +7,7 @@ import GiaBrain from '../GiaBrain';
 import { SentenceChunker } from './SentenceChunker';
 import { VoiceAnnouncer } from './VoiceAnnouncer';
 import { routeUtterance } from './bargeIn';
+import { fileSnapshots } from '../FileSnapshots';
 import { useGiaStore } from '../../store/useGiaStore';
 
 /**
@@ -80,8 +81,6 @@ class VoiceSessionImpl {
   private captionOff: (() => void) | null = null;
   /** In-flight open() — concurrent calls await it instead of racing. */
   private opening: Promise<void> | null = null;
-  /** Utterances heard while she was talking; delivered when she finishes. */
-  private pending: string[] = [];
   private abort: AbortController | null = null;
   private closed = true;
   private disposed = false;
@@ -196,6 +195,11 @@ class VoiceSessionImpl {
     this.tap = null;
     VoiceSessionImpl.release(VoiceSessionImpl.ownerToken);
     VoiceSessionImpl.ownerToken = null;
+    // A closing session must never keep held utterances trapped — the drain's
+    // 5-minute staleness guard is the backstop; this is the normal path.
+    if (useGiaStore.getState().queuedMessages.some(m => m.holdForVoice)) {
+      useGiaStore.getState().releaseHeldQueues();
+    }
     this.emit({ phase: 'idle', activity: null, working: false, vad: null });
   }
 
@@ -299,19 +303,76 @@ class VoiceSessionImpl {
           logger.log('[VoiceSession] steering:', text);
           useGiaStore.getState().addSteering(
             useGiaStore.getState().activeSessionId || '', text);
+          useGiaStore.getState().addNotification('🎙 Heard — correction lands at the next tool boundary');
           this.speakPiece('Noted — adjusting course.');
           this.emit({ activity: 'Adjusting course' });
           return; // she keeps working; the note lands at the next tool group
         case 'park':
-          logger.log('[VoiceSession] parking utterance until playback ends');
-          this.pending.push(decision.text);
+          // Handshake: the parked utterance becomes a VISIBLE, cancellable
+          // card in the chat queue, held until playback ends.
+          this.parkUtterance(decision.text);
+          return;
+        case 'revert':
+          await this.performRevert();
           return;
         default:
           return;
       }
     }
 
+    // Spoken undo works while idle too — it acts on the last COMPLETED write,
+    // never on anything in flight, so there is nothing to race.
+    if (routeUtterance(text, 'listening').action === 'revert') {
+      await this.performRevert();
+      return;
+    }
+
     await this.handleUtterance(text);
+  }
+
+  /**
+   * Park an utterance heard while she was talking. It goes through the store
+   * queue (visible, cancellable in QueuedMessages) held until playback ends,
+   * then the normal drain delivers it as an ordinary turn.
+   */
+  private parkUtterance(text: string) {
+    const store = useGiaStore.getState();
+    const sessionId = store.activeSessionId;
+    if (!sessionId) return;
+    logger.log('[VoiceSession] parking utterance until playback ends');
+    store.enqueueMessage({
+      id: newId(),
+      sessionId,
+      text,
+      attachments: [],
+      queuedAt: Date.now(),
+      holdForVoice: true,
+      origin: 'voice',
+    });
+  }
+
+  /**
+   * Spoken undo: revert GIA's most recent surviving write. User-initiated
+   * (like the Undo page) — it acts on completed writes only, so it never
+   * races work in flight, and it never needs the agent permission gate.
+   */
+  private async performRevert() {
+    const snaps = fileSnapshots.listPending();
+    if (snaps.length === 0) {
+      this.speakPiece('Nothing to undo.');
+      return;
+    }
+    const latest = snaps[0]; // newest first
+    const res = await fileSnapshots.revert(latest.id);
+    const name = latest.path.split('/').pop() || latest.path;
+    if (res.success) {
+      logger.log('[VoiceSession] spoken revert:', latest.path);
+      this.speakPiece(`Reverted ${name}.`);
+      useGiaStore.getState().addNotification(`🎙 Reverted ${latest.path} (spoken undo)`);
+    } else {
+      logger.warn('[VoiceSession] spoken revert failed:', res.error);
+      this.speakPiece(`Could not revert ${name}.`);
+    }
   }
 
   private speakPiece(text: string) {
@@ -319,12 +380,14 @@ class VoiceSessionImpl {
     void ttsService.speak(text, true).catch((e: unknown) => logger.warn('[VoiceSession] speak failed:', e));
   }
 
-  /** Deliver what the user said while she was talking, then idle. */
-  private async deliverPending() {
+  /** Playback ended: release voice-parked queue items so the normal drain
+   *  delivers them as ordinary turns. */
+  private releasePending() {
     if (this.closed || this.disposed) return;
-    const next = this.pending.shift();
-    if (next === undefined) { this.resumeListening(); return; }
-    await this.handleUtterance(next);
+    const store = useGiaStore.getState();
+    if (store.queuedMessages.some(m => m.holdForVoice)) {
+      store.releaseHeldQueues(store.activeSessionId || undefined);
+    }
   }
 
   // ── Turn handling ────────────────────────────────────────────────────
@@ -428,7 +491,8 @@ class VoiceSessionImpl {
       }
       if (this.disposed) return;
       if (this.abort) { this.resumeListening(); return; } // interrupted during speech
-      await this.deliverPending();
+      this.releasePending();
+      this.resumeListening();
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') { this.resumeListening(); return; }
       if (this.disposed) return;
