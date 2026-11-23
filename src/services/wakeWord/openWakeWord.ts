@@ -160,6 +160,15 @@ export async function createOpenWakeWordSession(
     onDetect: () => {},
     onError: () => {},
   },
+  /**
+   * One-mic mode: feed the engine from the SHARED mic tap instead of letting
+   * it open its own getUserMedia stream. The engine's own start() opens a
+   * second capture — two permission prompts, two mic indicators, two clocks.
+   * A shared 80ms/16kHz frame is exactly what its worklet would deliver, so
+   * the scoring path is identical; the fallback (no frameSource) keeps the
+   * engine's own capture for callers that have no tap.
+   */
+  frameSource?: { onFrame(handler: (frame: Float32Array) => void): () => void } | null,
 ): Promise<OpenWakeWordSession> {
   const unavailable = wakeWordUnavailableReason();
   if (unavailable) throw new Error(`wake-word-unavailable:${unavailable}`);
@@ -195,10 +204,25 @@ export async function createOpenWakeWordSession(
   });
 
   let started = false;
+  /** Unsubscribes the shared-tap feed, when one-mic mode is active. */
+  let offFrame: (() => void) | null = null;
   return {
     async start() {
       await engine.load();
       if (started) return;
+      const scorer = engine as unknown as { _processChunk?: (chunk: Float32Array) => Promise<void> };
+      if (frameSource && typeof scorer._processChunk === 'function') {
+        // One-mic mode: score frames from the shared tap; never open a second
+        // capture. The private scorer is the exact function the engine's own
+        // worklet callback drives — same input shape (1280 samples @ 16 kHz).
+        offFrame = frameSource.onFrame((frame) => {
+          void scorer._processChunk!(frame).catch((err) => {
+            handlers.onError(err instanceof Error ? err.message : String(err));
+          });
+        });
+        started = true;
+        return;
+      }
       await engine.start();
       started = true;
     },
@@ -210,6 +234,7 @@ export async function createOpenWakeWordSession(
     async dispose() {
       offDetect();
       offError();
+      if (offFrame) { offFrame(); offFrame = null; }
       if (started) {
         started = false;
         await engine.stop().catch(() => {});

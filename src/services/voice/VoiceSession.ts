@@ -607,6 +607,16 @@ class VoiceSessionImpl {
             if (firstSpokenAt === null) firstSpokenAt = Date.now();
             await ttsService.speakFinal(reply);
           }
+          // Non-streamed turns start speaking only NOW, after the phase
+          // transition — emit the completed ledger so the UI never shows a
+          // "first word" wait of null for a turn that was actually spoken.
+          this.emit({
+            latency: {
+              transcribeMs: transcribeDoneAt - turnStartedAt,
+              respondMs: Date.now() - transcribeDoneAt,
+              firstSpokenMs: firstSpokenAt === null ? null : firstSpokenAt - transcribeDoneAt,
+            },
+          });
         } catch (e) { logger.warn('[VoiceSession] speech failed:', e); }
       }
       if (this.disposed) return;

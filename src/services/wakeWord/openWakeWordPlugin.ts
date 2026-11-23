@@ -8,6 +8,7 @@
  * offline with no key configured.
  */
 import type { PluginListenerHandle } from '@capacitor/core';
+import { startMicTap, stopMicTap } from '../voice/micTap';
 import {
   createOpenWakeWordSession,
   resolveWakeWordPlan,
@@ -49,6 +50,8 @@ export function createOpenWakeWordPlugin(
   let error: string | null = null;
   let score = 0;
   let starting: Promise<void> | null = null;
+  /** Our reference to the shared mic tap, when one-mic mode is active. */
+  let sharedTap: Awaited<ReturnType<typeof startMicTap>> | null = null;
 
   async function disposeSession() {
     const current = session;
@@ -79,16 +82,32 @@ export function createOpenWakeWordPlugin(
 
       starting = (async () => {
         try {
-          const created = await createOpenWakeWordSession(plan, {
-            onDetect: (d: WakeWordDetection) => {
-              score = d.score;
-              pending = { detected: true, keyword: d.keyword };
-              handlers.forEach((h) => h({ keyword: d.keyword }));
+          // One mic for the whole machine: the wake word feeds from the SHARED
+          // mic tap (refcounted), so when the voice session is open the two
+          // consumers share one capture instead of fighting for the device.
+          // If the tap cannot start here, fall back to the engine's own
+          // capture — the wake word is optional, never fatal.
+          let frameSource: Awaited<ReturnType<typeof startMicTap>> | null = null;
+          try {
+            frameSource = await startMicTap();
+          } catch (err) {
+            log(`[GIAWakeWord] shared mic tap unavailable (${(err as Error).message}); using own capture`);
+          }
+          const created = await createOpenWakeWordSession(
+            plan,
+            {
+              onDetect: (d: WakeWordDetection) => {
+                score = d.score;
+                pending = { detected: true, keyword: d.keyword };
+                handlers.forEach((h) => h({ keyword: d.keyword }));
+              },
+              onError: (m: string) => {
+                error = m;
+              },
             },
-            onError: (m: string) => {
-              error = m;
-            },
-          });
+            frameSource,
+          );
+          sharedTap = frameSource;
           await created.start();
           session = created;
           listening = true;
@@ -108,6 +127,12 @@ export function createOpenWakeWordPlugin(
 
     async stopListening() {
       await disposeSession();
+      // Release OUR reference to the shared tap; it lives if someone else
+      // (e.g. an open voice session) still holds one.
+      if (sharedTap) {
+        sharedTap = null;
+        await stopMicTap().catch(() => {});
+      }
     },
 
     async isListening() {

@@ -50,6 +50,22 @@ export interface MicTap {
 
 let active: MicTap | null = null;
 let starting: Promise<MicTap> | null = null;
+/**
+ * Test seam: happy-dom locks `AudioContext` as a non-configurable global, so
+ * tests inject fakes here instead of stubbing the environment. Production
+ * code path is unchanged — the browser globals are used whenever unset.
+ */
+export const __micTapTestHooks: {
+  AudioContext?: typeof AudioContext;
+  AudioWorkletNode?: typeof AudioWorkletNode;
+} = {};
+/**
+ * Refcount over the ONE capture. VoiceSession and the wake-word listener
+ * both hold a reference: either can start the tap, and the stream lives
+ * until the LAST consumer stops. This is what makes the one-mic design
+ * real — a voice session closing no longer kills the wake word's ears.
+ */
+let refs = 0;
 
 /**
  * Start (or return the already-running) shared mic tap.
@@ -58,8 +74,12 @@ let starting: Promise<MicTap> | null = null;
  * capture must do its best to keep her own voice out of the utterance buffer.
  */
 export async function startMicTap(): Promise<MicTap> {
-  if (active?.isRunning) return active;
-  if (starting) return starting;
+  if (active?.isRunning) { refs++; return active; }
+  if (starting) {
+    refs++;
+    return starting;
+  }
+  refs++;
 
   starting = (async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -70,13 +90,15 @@ export async function startMicTap(): Promise<MicTap> {
       },
     });
 
-    const ctx = new AudioContext({ sampleRate: 16000 });
+    const Ctx = __micTapTestHooks.AudioContext ?? AudioContext;
+    const ctx = new Ctx({ sampleRate: 16000 });
     const source = ctx.createMediaStreamSource(stream);
     const blobUrl = URL.createObjectURL(new Blob([WORKLET_SRC], { type: 'application/javascript' }));
     await ctx.audioWorklet.addModule(blobUrl);
     URL.revokeObjectURL(blobUrl);
 
-    const worklet = new AudioWorkletNode(ctx, 'audio-processor');
+    const WorkletCtor = __micTapTestHooks.AudioWorkletNode ?? AudioWorkletNode;
+    const worklet = new WorkletCtor(ctx, 'audio-processor');
     source.connect(worklet);
     // Do NOT connect the worklet to ctx.destination — this is a sink-less tap.
     // (Chromium still drives the worklet as long as the context is running.)
@@ -99,6 +121,7 @@ export async function startMicTap(): Promise<MicTap> {
         handlers.clear();
         active = null;
         starting = null;
+        refs = 0;
         try { worklet.port.onmessage = null; worklet.disconnect(); } catch { /* ignore */ }
         try { source.disconnect(); } catch { /* ignore */ }
         for (const track of stream.getTracks()) track.stop();
@@ -114,15 +137,31 @@ export async function startMicTap(): Promise<MicTap> {
   try {
     return await starting;
   } catch (err) {
+    // The failed start never produced a usable reference — release it so a
+    // later attempt starts from a clean count.
+    refs = Math.max(0, refs - 1);
     starting = null;
     throw err;
   }
 }
 
-/** Stop the shared tap if it is running. Safe to call twice. */
+/**
+ * Release one reference to the shared tap. The stream tears down only when
+ * the LAST consumer stops — the one-mic contract.
+ */
 export async function stopMicTap(): Promise<void> {
-  const tap = active;
+  refs = Math.max(0, refs - 1);
+  if (refs === 0) {
+    const tap = active;
+    active = null;
+    starting = null;
+    if (tap) await tap.stop();
+  }
+}
+
+/** Test hook: reset the module's refcount/caching state between tests. */
+export function __micTapReset(): void {
+  refs = 0;
   active = null;
   starting = null;
-  if (tap) await tap.stop();
 }
