@@ -23,6 +23,14 @@ export const BARGE_IN_KEYWORDS = ['stop', 'quiet', 'shush', 'silence', 'wait', '
 /** Spoken undo — routes to FileSnapshots.revert, not to the model. */
 export const REVERT_KEYWORDS = ['undo that', 'undo', 'revert that', 'take it back', 'take that back', 'put it back', 'put that back', 'rollback'] as const;
 
+/**
+ * Spoken answers to a permission prompt. Exact whole-utterance matches only:
+ * her own spoken prompt contains these words ("say do it, or say no"), and
+ * only a whole-utterance rule keeps her echo from answering herself.
+ */
+export const APPROVAL_PHRASES = ['do it', 'yes', 'yes please', 'go ahead', 'approve', 'approve it', 'allow it', 'allow', 'do it gia', 'yes gia', 'sounds good', 'ok do it'] as const;
+export const DENY_PHRASES = ['no', 'deny', 'deny it', "don't", 'do not', 'no gia', "don't do it", 'no thanks', 'nope', 'block it'] as const;
+
 export type GatedAction =
   | { action: 'interrupt'; keyword: string }
   | { action: 'steer'; text: string }
@@ -51,6 +59,23 @@ export function isRevertPhrase(text: string): boolean {
   const norm = normalizeUtterance(text);
   if (!norm) return false;
   return REVERT_KEYWORDS.some((kw) => norm === kw || norm === `${kw} gia` || norm === `gia ${kw}`);
+}
+
+/** 'approve' | 'deny' | null — whole-utterance match against the whitelists. */
+export function gateAnswer(text: string): 'approve' | 'deny' | null {
+  const norm = normalizeUtterance(text);
+  if (!norm) return null;
+  if (APPROVAL_PHRASES.some((p) => norm === p)) return 'approve';
+  if (DENY_PHRASES.some((p) => norm === p)) return 'deny';
+  return null;
+}
+
+/** The spoken ask: headline + the answer vocabulary, kept short. */
+export function spokenGatePrompt(toolName: string, headline: string, risk: string): string {
+  const voiceAsk = risk === 'high' || risk === 'critical' || risk === 'moderate'
+    ? 'This one needs the card on screen — I cannot take a spoken yes for it.'
+    : 'Say do it, or say no.';
+  return `Permission: ${toolName}. ${headline} ${voiceAsk}`;
 }
 
 /** Which action does an endpointed utterance take in the given phase? */

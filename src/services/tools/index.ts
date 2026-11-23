@@ -21,6 +21,8 @@ import { clipboardTools } from './clipboard';
 import { connectorTools } from './connectors';
 // OAuth connector rail (Composio): discovery + execution for 1,500+ apps.
 import { composioTools } from './composio';
+// Task receipts (#14): verifiable proof pages.
+import { receiptTools } from './receipts';
 import { controlTools } from './controls';
 import { codeTools } from './code';
 import { coreTools } from './core';
@@ -157,6 +159,7 @@ export function registerAllTools(): void {
     unimindTools,
     deferredTools,
     composioTools,
+    receiptTools,
   ];
 
   for (const item of allToolsLists) {

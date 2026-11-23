@@ -24,6 +24,16 @@ vi.mock('../../GiaBrain', () => ({
     }),
   },
 }));
+// Trust store (permission gate): the spoken-permission bridge.
+let gateListener: ((s: { pending: { request: { id: string; toolName: string; headline: string; risk: string } } | null }) => void) | null = null;
+const gateResolve = vi.fn();
+vi.mock('../../../store/useTrustStore', () => ({
+  useTrustStore: {
+    subscribe: vi.fn((cb: never) => { gateListener = cb; return () => { gateListener = null; }; }),
+    getState: () => ({ pending: null, resolve: gateResolve }),
+  },
+}));
+
 // FileSnapshots: spoken-undo rail.
 const snapshots: { id: string; path: string; reverted?: boolean }[] = [];
 vi.mock('../../FileSnapshots', () => ({
@@ -120,6 +130,7 @@ describe('VoiceSession — phase-1 walkie-talkie', () => {
     scriptedText = 'hello gia';
     sessions[0].messages = [];
     sessions[0].title = 'Chat';
+    gateResolve.mockClear();
     vi.clearAllMocks();
   });
 
@@ -221,6 +232,71 @@ describe('VoiceSession — phase-1 walkie-talkie', () => {
     expect(GiaBrain.generate).not.toHaveBeenCalled();
     expect(snapshots[0].reverted).toBe(true);
     expect(useGiaStore.getState().addNotification).toHaveBeenCalledWith(expect.stringContaining('Reverted src/app.tsx'));
+  });
+
+  it('phase 4: a low-risk gate ask is spoken and answerable by voice', async () => {
+    await voiceSession.open();
+    expect(gateListener).toBeTruthy();
+    gateListener!({ pending: { request: { id: 'perm-1', toolName: 'filesystem_write', headline: 'Overwrites notes.txt.', risk: 'low' } } });
+    await new Promise((r) => setTimeout(r, 30));
+    const speaks = (tts.speak as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+    expect(speaks.some((m) => m.includes('filesystem_write') && m.includes('Say do it, or say no'))).toBe(true);
+
+    // The answer: 'do it' resolves once — it never becomes a chat turn.
+    scriptedText = 'do it';
+    const sv = voiceSession as unknown as { buffering: boolean; buffer: Float32Array[]; bufferSamples: number; endpoint: () => Promise<void> };
+    sv.buffering = true;
+    sv.buffer = Array.from({ length: 8 }, () => new Float32Array(FRAME_SIZE));
+    sv.bufferSamples = FRAME_SIZE * 8;
+    await sv.endpoint();
+    expect(gateResolve).toHaveBeenCalledWith('once');
+    expect(GiaBrain.generate).not.toHaveBeenCalled();
+  });
+
+  it('phase 4: a spoken yes never unlocks a high-risk ask', async () => {
+    await voiceSession.open();
+    gateListener!({ pending: { request: { id: 'perm-2', toolName: 'terminal_run', headline: 'Runs rm -rf outside the project.', risk: 'critical' } } });
+    await new Promise((r) => setTimeout(r, 30));
+    const speaks = (tts.speak as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+    expect(speaks.some((m) => m.includes('needs the card'))).toBe(true);
+
+    scriptedText = 'do it';
+    const sv = voiceSession as unknown as { buffering: boolean; buffer: Float32Array[]; bufferSamples: number; endpoint: () => Promise<void> };
+    sv.buffering = true;
+    sv.buffer = Array.from({ length: 8 }, () => new Float32Array(FRAME_SIZE));
+    sv.bufferSamples = FRAME_SIZE * 8;
+    await sv.endpoint();
+    expect(gateResolve).not.toHaveBeenCalled();
+    const speaks2 = (tts.speak as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+    expect(speaks2.some((m) => m.includes('Use the card on screen'))).toBe(true);
+  });
+
+  it('phase 4: a spoken no denies, and nonsense stands down to the card', async () => {
+    await voiceSession.open();
+    gateListener!({ pending: { request: { id: 'perm-3', toolName: 'filesystem_write', headline: 'Overwrites notes.txt.', risk: 'low' } } });
+    await new Promise((r) => setTimeout(r, 30));
+    scriptedText = 'no';
+    let sv = voiceSession as unknown as { buffering: boolean; buffer: Float32Array[]; bufferSamples: number; endpoint: () => Promise<void> };
+    sv.buffering = true;
+    sv.buffer = Array.from({ length: 8 }, () => new Float32Array(FRAME_SIZE));
+    sv.bufferSamples = FRAME_SIZE * 8;
+    await sv.endpoint();
+    expect(gateResolve).toHaveBeenCalledWith('deny');
+
+    // A second ask met with nonsense twice stands down to the card.
+    gateListener!({ pending: { request: { id: 'perm-4', toolName: 'filesystem_write', headline: 'Overwrites notes.txt.', risk: 'low' } } });
+    await new Promise((r) => setTimeout(r, 30));
+    for (const phrase of ['what about lunch', 'and another thing']) {
+      scriptedText = phrase;
+      sv = voiceSession as unknown as { buffering: boolean; buffer: Float32Array[]; bufferSamples: number; endpoint: () => Promise<void> };
+      sv.buffering = true;
+      sv.buffer = Array.from({ length: 8 }, () => new Float32Array(FRAME_SIZE));
+      sv.bufferSamples = FRAME_SIZE * 8;
+      await sv.endpoint();
+    }
+    const speaks = (tts.speak as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+    expect(speaks.some((m) => m.includes('leave it on the card'))).toBe(true);
+    expect(gateResolve).not.toHaveBeenCalledWith('once');
   });
 
   it('phase 3: spoken undo with nothing to undo stays polite and inert', async () => {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Bot, Plus, History, Trash2, Clock,
+  Bot, Plus, History, Trash2, Clock, ScrollText,
   Paperclip, X, Download, Globe, Image as ImageIcon, Camera, Terminal,
   Brain, ChevronDown, Sparkles, Code2,
   BookOpen, Zap, Undo2, Search, Headphones, GitBranch,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import WorkspaceDock from '../components/WorkspaceDock';
 import TimeTravelPanel from '../components/timetravel/TimeTravelPanel';
+import { generateReceipt } from '../services/receipts';
 import BuildStudio from '../components/BuildStudio';
 import { MODES, getModePromptName, MODE_EDGE_GLOW } from '../services/system/modePrompts';
 import SessionSwitcher from '../components/SessionSwitcher';
@@ -183,6 +184,29 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
   const [showVoiceMode, setShowVoiceMode] = React.useState(false);
   const [showModeMenu, setShowModeMenu] = React.useState(false);
   const [showTimeTravel, setShowTimeTravel] = React.useState(false);
+
+  /** Task receipt (#14): verifiable proof page for the active session. */
+  const generateReceiptAction = React.useCallback(async () => {
+    const st = useGiaStore.getState();
+    const sid = st.activeSessionId;
+    const session = st.sessions.find(x => x.id === sid);
+    if (!session) { st.addNotification?.('Nothing to receipt yet — no active conversation.'); return; }
+    const { path, html } = await generateReceipt({ id: session.id, title: session.title, messages: session.messages });
+    if (path) {
+      st.addNotification?.(`📋 Task receipt written to ${path} — open it in any browser to verify (offline).`);
+    } else {
+      try {
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `receipt-${session.id.slice(0, 12)}.html`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        st.addNotification?.('📋 Task receipt generated — download started. Open it anywhere: the record verifies itself, offline.');
+      } catch {
+        st.addNotification?.('Could not produce the task receipt.');
+      }
+    }
+  }, []);
   const [runElapsed, setRunElapsed] = React.useState(0);
   // Terminal + files docked beside the chat (desktop workflow).
   // Persisted, not local state. The panel is a workspace preference — losing it
@@ -556,6 +580,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
                     { icon: <Upload size={13} />, label: 'Files', onClick: () => { setShowFileManager(true); setShowMoreMenu(false); } },
                     { icon: <Brain size={13} />, label: 'Knowledge', onClick: () => { setShowKnowledge(true); setShowMoreMenu(false); } },
                     { icon: <Clock size={13} />, label: 'Time travel', onClick: () => { setShowTimeTravel(true); setShowMoreMenu(false); } },
+                    { icon: <ScrollText size={13} />, label: 'Task receipt', onClick: () => { void generateReceiptAction(); setShowMoreMenu(false); } },
                     { icon: <Download size={13} />, label: 'Export chat', onClick: () => { exportChat(); setShowMoreMenu(false); } },
                     { icon: <Eye size={13} />, label: 'Toggle thoughts', onClick: () => { setShowThoughts(v => v.size > 0 ? new Set() : new Set(['all'])); setShowMoreMenu(false); } },
                     { icon: <History size={13} />, label: 'Chat history', onClick: () => { setShowHistory(true); setShowMoreMenu(false); } },

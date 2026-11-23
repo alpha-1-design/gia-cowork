@@ -6,7 +6,9 @@ import ttsService from '../TTSService';
 import GiaBrain from '../GiaBrain';
 import { SentenceChunker } from './SentenceChunker';
 import { VoiceAnnouncer } from './VoiceAnnouncer';
-import { routeUtterance } from './bargeIn';
+import { routeUtterance, gateAnswer, spokenGatePrompt } from './bargeIn';
+import { useTrustStore } from '../../store/useTrustStore';
+import type { PermissionRequest } from '../permissions';
 import { fileSnapshots } from '../FileSnapshots';
 import { useGiaStore } from '../../store/useGiaStore';
 
@@ -84,6 +86,14 @@ class VoiceSessionImpl {
   private abort: AbortController | null = null;
   private closed = true;
   private disposed = false;
+  /**
+   * Spoken permission prompts: when the gate asks while the user is at the
+   * mic, the ask is spoken and the answer can be spoken back — but ONLY for
+   * low-risk asks, and only whole-utterance whitelisted phrases. Higher
+   * risks are spoken as "needs the card" and must be answered on screen.
+   */
+  private gateUnsub: (() => void) | null = null;
+  private spokenGate: { id: string; request: PermissionRequest; repeats: number } | null = null;
   /** One capture owner at a time; claimed on open, released on close. */
   private static ownerToken: symbol | null = null;
 
@@ -160,6 +170,8 @@ class VoiceSessionImpl {
       // languages fall back to the browser recognizer in VoiceMode.
       this.offFrame = this.tap.onFrame((frame) => void this.onFrame(frame));
       this.closed = false;
+      // Spoken permission prompts: watch the gate while the session is open.
+      this.attachGateWatch();
       // Unmounted while opening (StrictMode): release everything instead of
       // leaving an open session with no UI subscribed to it.
       if (this.disposed) {
@@ -190,6 +202,8 @@ class VoiceSessionImpl {
     this.buffer = [];
     this.bufferSamples = 0;
     if (this.offFrame) { this.offFrame(); this.offFrame = null; }
+    if (this.gateUnsub) { this.gateUnsub(); this.gateUnsub = null; }
+    this.spokenGate = null;
     this.vad = null;
     void stopMicTap();
     this.tap = null;
@@ -290,6 +304,15 @@ class VoiceSessionImpl {
       return;
     }
 
+    // Spoken permission answer takes precedence: while a gate ask is
+    // outstanding, the next utterance is an ANSWER, not a task. Then go
+    // straight back to listening — an answered gate must never strand the
+    // session in 'transcribing'.
+    if (await this.handleSpokenGateAnswer(text)) {
+      if (!busyPhase) this.resumeListening();
+      return;
+    }
+
     // While she is busy, the barge-in gate decides the consequence.
     if (busyPhase) {
       const busyRoute = this.snapshot.phase === 'thinking' ? 'thinking' as const : 'speaking' as const;
@@ -328,6 +351,77 @@ class VoiceSessionImpl {
     }
 
     await this.handleUtterance(text);
+  }
+
+  /**
+   * Watch the permission gate while voice is open. When a prompt reaches the
+   * head of the queue and the user is present at the mic, the ask is spoken.
+   * Low-risk asks can be answered by voice; anything higher is directed to
+   * the card — a spoken "yes" must never unlock a dangerous action the user
+   * has not SEEN.
+   */
+  private attachGateWatch() {
+    if (this.gateUnsub) return;
+    let lastPendingId: string | null = null;
+    this.gateUnsub = useTrustStore.subscribe((s) => {
+      if (this.closed || this.disposed) return;
+      const head = s.pending;
+      if (!head) {
+        // Answered on the card, timed out, or revoked — either way the
+        // spoken question is void now.
+        this.spokenGate = null;
+        lastPendingId = null;
+        return;
+      }
+      const id = head.request.id;
+      if (id === lastPendingId && this.spokenGate?.id === id) return;
+      lastPendingId = id;
+      // Only speak when the user is present at the mic — not while she is
+      // mid-turn, where the ask would collide with her speech.
+      const phase = this.snapshot.phase;
+      if (phase !== 'listening' && phase !== 'capturing') return;
+      this.spokenGate = { id, request: head.request, repeats: 0 };
+      const risk = head.request.risk;
+      const sayThis = spokenGatePrompt(head.request.toolName, head.request.headline, risk);
+      const voiceAnswerable = risk === 'none' || risk === 'low';
+      this.emit({ activity: voiceAnswerable ? 'Asking permission — say do it, or no' : 'Asking permission — needs the card' });
+      this.speakPiece(sayThis);
+    });
+  }
+
+  /** Answer a spoken permission prompt, or re-ask once, or stand down. */
+  private async handleSpokenGateAnswer(text: string): Promise<boolean> {
+    const gate = this.spokenGate;
+    if (!gate) return false;
+    const answer = gateAnswer(text);
+    if (!answer) {
+      // Not an answer — re-ask once, then leave the card to do its job.
+      gate.repeats++;
+      if (gate.repeats > 1) {
+        this.spokenGate = null;
+        this.speakPiece('I will leave it on the card.');
+        return true;
+      }
+      const risk = gate.request.risk;
+      this.speakPiece(spokenGatePrompt(gate.request.toolName, gate.request.headline, risk));
+      return true;
+    }
+    const voiceAnswerable = gate.request.risk === 'none' || gate.request.risk === 'low';
+    if (answer === 'deny') {
+      this.spokenGate = null;
+      useTrustStore.getState().resolve('deny');
+      this.speakPiece('Denied.');
+      return true;
+    }
+    if (!voiceAnswerable) {
+      // A spoken yes must never unlock a moderate+ action unseen.
+      this.speakPiece('Use the card on screen for this one.');
+      return true;
+    }
+    this.spokenGate = null;
+    useTrustStore.getState().resolve('once');
+    this.speakPiece('Doing it.');
+    return true;
   }
 
   /**
