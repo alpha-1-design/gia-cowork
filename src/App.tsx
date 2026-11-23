@@ -216,6 +216,16 @@ const App: React.FC = () => {
       .catch(e => logger.warn('[App] Peer agent detection failed:', e));
   }, []);
 
+  // Voice phase 4 — warm the local TTS engine in the background so her first
+  // spoken sentence never pays the model download. Only runs when the user
+  // actually has TTS + Kokoro turned on; failure is a log line, never a boot
+  // problem.
+  useEffect(() => {
+    void import('./services/KokoroService')
+      .then((m) => m.warmKokoro())
+      .catch(e => logger.warn('[App] TTS warm-up failed:', e));
+  }, []);
+
   // Project isolation — keep the registry in step with the open project.
   //
   // Without this the registry was never written and the active project was

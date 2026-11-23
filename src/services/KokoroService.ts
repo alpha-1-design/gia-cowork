@@ -269,4 +269,25 @@ class KokoroService {
   }
 }
 
+/**
+ * Phase-4 warm-up: load the model in the background BEFORE her first
+ * utterance, so the first spoken sentence never pays the model download
+ * (q8 Kokoro is tens of MB — a multi-second dead-air on a cold engine).
+ * Only warms when the user actually has TTS + Kokoro turned on; the model
+ * singleton no-ops when already ready or loading; failure is a log line.
+ */
+export async function warmKokoro(
+  /** Injectable for tests; defaults to the app singleton. */
+  service: { isReady: boolean; loadModel(): Promise<void> } = KokoroService.getInstance(),
+): Promise<void> {
+  if (localStorage.getItem('gia-tts-enabled') !== 'true') return;
+  if (localStorage.getItem('gia-kokoro-enabled') !== 'true') return;
+  if (service.isReady) return;
+  try {
+    await service.loadModel();
+  } catch (err) {
+    logger.warn('[Kokoro] warm-up failed:', err);
+  }
+}
+
 export default KokoroService.getInstance();
