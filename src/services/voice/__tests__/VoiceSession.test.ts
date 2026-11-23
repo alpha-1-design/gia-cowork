@@ -432,3 +432,22 @@ describe('VoiceSession — phase-1 walkie-talkie', () => {
     expect(msgs.filter((m) => m.role === 'assistant' && m.content === 'never shown')).toHaveLength(0);
   });
 });
+
+describe('phase 4 latency ledger', () => {
+  it('records where the wait went on the last turn', async () => {
+    await voiceSession.open();
+    scriptedText = 'how long did that take';
+    const sv = voiceSession as unknown as { buffering: boolean; buffer: Float32Array[]; bufferSamples: number; endpoint: () => Promise<void> };
+    sv.buffering = true;
+    sv.buffer = Array.from({ length: 8 }, () => new Float32Array(FRAME_SIZE));
+    sv.bufferSamples = FRAME_SIZE * 8;
+    await sv.endpoint();
+    const lat = voiceSession.getSnapshot().latency;
+    expect(lat).toBeTruthy();
+    expect(typeof lat!.transcribeMs).toBe('number');
+    expect(lat!.transcribeMs).toBeGreaterThanOrEqual(0);
+    expect(lat!.respondMs).toBeGreaterThanOrEqual(0);
+    // speakFinal was awaited → first sentence already audible.
+    expect(lat!.firstSpokenMs).not.toBeNull();
+  });
+});

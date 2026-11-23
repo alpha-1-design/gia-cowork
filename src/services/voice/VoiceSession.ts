@@ -52,6 +52,18 @@ export interface VoiceSnapshot {
   caption: string | null;
   stt: typeof whisperService.status;
   vad: 'silero' | 'energy' | null;
+  /** Phase-4 latency ledger for the LAST completed turn (ms, real clock).
+   *  Honest diagnostics, not a score: where the wait went. */
+  latency?: VoiceLatency | null;
+}
+
+export interface VoiceLatency {
+  /** Silence→endpoint decision to finished transcription. */
+  transcribeMs: number;
+  /** Transcription done → reply complete (model + tools). */
+  respondMs: number;
+  /** Transcription done → first audible sentence. */
+  firstSpokenMs: number | null;
 }
 
 export interface VoiceSessionOptions {
@@ -285,6 +297,7 @@ class VoiceSessionImpl {
       return;
     }
     if (!busyPhase) this.emit({ phase: 'transcribing' });
+    const turnStart = Date.now();
     let text = '';
     try {
       text = await whisperService.transcribeFloat32(audio);
@@ -350,7 +363,7 @@ class VoiceSessionImpl {
       return;
     }
 
-    await this.handleUtterance(text);
+    await this.handleUtterance(text, turnStart);
   }
 
   /**
@@ -487,7 +500,7 @@ class VoiceSessionImpl {
   // ── Turn handling ────────────────────────────────────────────────────
 
   /** Commit a real utterance into the session and run the brain. */
-  async handleUtterance(text: string) {
+  async handleUtterance(text: string, turnStartedAt = Date.now()) {
     const clean = text.trim();
     if (!clean) { this.resumeListening(); return; }
 
@@ -517,6 +530,10 @@ class VoiceSessionImpl {
     const controller = new AbortController();
     this.abort = controller;
 
+    // Phase-4 latency ledger: where the wait actually goes.
+    const transcribeDoneAt = Date.now();
+    let firstSpokenAt: number | null = null;
+
     // Phase 2: she speaks WHILE she thinks. Stream chunks go through the
     // sentence chunker into the already sentence-buffering TTS queue; tool
     // announcements flow through the whitelisted announcer. The finished
@@ -532,6 +549,7 @@ class VoiceSessionImpl {
     });
     const speakPiece = (text: string) => {
       if (this.disposed || this.options.muted || !text) return;
+      if (firstSpokenAt === null) firstSpokenAt = Date.now();
       void ttsService.speak(text, true).catch((e: unknown) => logger.warn('[VoiceSession] speak failed:', e));
     };
 
@@ -568,7 +586,14 @@ class VoiceSessionImpl {
       });
 
       this.abort = null;
-      this.emit({ phase: 'speaking', working: false, activity: null });
+      this.emit({
+        phase: 'speaking', working: false, activity: null,
+        latency: {
+          transcribeMs: transcribeDoneAt - turnStartedAt,
+          respondMs: Date.now() - transcribeDoneAt,
+          firstSpokenMs: firstSpokenAt === null ? null : firstSpokenAt - transcribeDoneAt,
+        },
+      });
       // Announce completion to the transcript layer; VoiceMode appends the
       // turn from the store.
       this.onAssistantReply?.(reply, sessionId);
@@ -579,6 +604,7 @@ class VoiceSessionImpl {
             // the in-flight sentences first and then replay the whole text.
             for (const sentence of chunker.flush()) this.speakPiece(sentence);
           } else {
+            if (firstSpokenAt === null) firstSpokenAt = Date.now();
             await ttsService.speakFinal(reply);
           }
         } catch (e) { logger.warn('[VoiceSession] speech failed:', e); }
