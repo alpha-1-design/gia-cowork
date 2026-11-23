@@ -686,6 +686,9 @@ export function toolToImpact(id: string): ProtocolImpact {
     'setup_morning_briefing', 'set_reminder', 'play_music'];
   const destructiveTools = ['forget_memory'];
   const networkTools = ['web_search', 'read_url', 'terminal_run', 'image_generation', 'search_places', 'show_map', 'get_directions',
+    // OAuth connector rail (Composio): search is a read; execute stays in the
+    // default 'execution' bucket so acting on external apps prompts the user.
+    'composio_search',
     'browser_navigate', 'browser_open', 'browser_click', 'browser_type', 'browser_scroll'];
   const locationTools = ['get_user_location', 'search_places', 'show_map', 'get_directions'];
   if (destructiveTools.includes(id)) return 'destructive';

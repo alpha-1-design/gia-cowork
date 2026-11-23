@@ -2,6 +2,7 @@ import React from 'react';
 import { PlugZap, Share2 } from 'lucide-react';
 import { SubPageHeader } from './SubPageHeader';
 import { ConnectorsSection } from './ConnectorsSection';
+import ComposioSection from './ComposioSection';
 import { SocialSection } from './SocialSection';
 import { GatewaySection } from './GatewaySection';
 import { BrowserSection } from './BrowserSection';
@@ -31,6 +32,8 @@ export const ConnectionsPage: React.FC<{ onBack: () => void }> = ({ onBack }) =>
       <PlugZap size={14} style={{ color: '#f59e0b' }} />
       <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--gia-muted)' }}>Integrations</span>
     </div>
+    {/* OAuth apps first: it is the biggest catalog and needs no per-service keys. */}
+    <ComposioSection />
     <ConnectorsSection />
     <SocialSection />
     <WhatsAppBridgeSection />

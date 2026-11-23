@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Bot, Plus, History, Trash2,
+  Bot, Plus, History, Trash2, Clock,
   Paperclip, X, Download, Globe, Image as ImageIcon, Camera, Terminal,
   Brain, ChevronDown, Sparkles, Code2,
   BookOpen, Zap, Undo2, Search, Headphones, GitBranch,
@@ -10,6 +10,7 @@ import {
   PlugZap, Plug, KeyRound, MessagesSquare, PanelRight, Files as FilesIcon, MoreHorizontal, PenLine,
 } from 'lucide-react';
 import WorkspaceDock from '../components/WorkspaceDock';
+import TimeTravelPanel from '../components/timetravel/TimeTravelPanel';
 import BuildStudio from '../components/BuildStudio';
 import { MODES, getModePromptName, MODE_EDGE_GLOW } from '../services/system/modePrompts';
 import SessionSwitcher from '../components/SessionSwitcher';
@@ -181,6 +182,7 @@ const ChatModule: React.FC<ChatModuleProps> = ({ build: forceBuild }) => {
   const currentModeName = ((useGiaStore(s => s.sharedData) as { currentMode?: string } | undefined)?.currentMode) ?? 'code';
   const [showVoiceMode, setShowVoiceMode] = React.useState(false);
   const [showModeMenu, setShowModeMenu] = React.useState(false);
+  const [showTimeTravel, setShowTimeTravel] = React.useState(false);
   const [runElapsed, setRunElapsed] = React.useState(0);
   // Terminal + files docked beside the chat (desktop workflow).
   // Persisted, not local state. The panel is a workspace preference — losing it
@@ -553,6 +555,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
                     { icon: <PanelRight size={13} />, label: 'Workspace panel', onClick: () => { setDockOpen(o => !o); setSidePanelOpen(!sidePanelOpen); setShowMoreMenu(false); } },
                     { icon: <Upload size={13} />, label: 'Files', onClick: () => { setShowFileManager(true); setShowMoreMenu(false); } },
                     { icon: <Brain size={13} />, label: 'Knowledge', onClick: () => { setShowKnowledge(true); setShowMoreMenu(false); } },
+                    { icon: <Clock size={13} />, label: 'Time travel', onClick: () => { setShowTimeTravel(true); setShowMoreMenu(false); } },
                     { icon: <Download size={13} />, label: 'Export chat', onClick: () => { exportChat(); setShowMoreMenu(false); } },
                     { icon: <Eye size={13} />, label: 'Toggle thoughts', onClick: () => { setShowThoughts(v => v.size > 0 ? new Set() : new Set(['all'])); setShowMoreMenu(false); } },
                     { icon: <History size={13} />, label: 'Chat history', onClick: () => { setShowHistory(true); setShowMoreMenu(false); } },
@@ -981,6 +984,7 @@ const [dockOpen, setDockOpen] = React.useState(false);
         )}
       </AnimatePresence>
       {showKnowledge && <KnowledgePanel onClose={() => setShowKnowledge(false)} />}
+      {showTimeTravel && <TimeTravelPanel onClose={() => setShowTimeTravel(false)} />}
       {showFileManager && <FileManager onClose={() => setShowFileManager(false)} />}
       {showBranchView && activeSession && (
         <BranchView

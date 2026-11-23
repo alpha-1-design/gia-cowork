@@ -19,6 +19,8 @@ import { cameraTools } from './camera';
 import { capabilityTools } from './capabilities';
 import { clipboardTools } from './clipboard';
 import { connectorTools } from './connectors';
+// OAuth connector rail (Composio): discovery + execution for 1,500+ apps.
+import { composioTools } from './composio';
 import { controlTools } from './controls';
 import { codeTools } from './code';
 import { coreTools } from './core';
@@ -154,6 +156,7 @@ export function registerAllTools(): void {
     systemControlTools,
     unimindTools,
     deferredTools,
+    composioTools,
   ];
 
   for (const item of allToolsLists) {
