@@ -33,6 +33,7 @@ export const PROVIDER_INFO: Record<string, ProviderInfo> = {
 
   // ── Gateways and aggregators ──────────────────────────────────────
   openrouter: { company: 'OpenRouter', description: 'One key for hundreds of models across many vendors.', docsUrl: 'https://openrouter.ai/keys' },
+  pollinations: { company: 'Pollinations', description: 'Free, keyless community models — no account needed at the anonymous tier.', docsUrl: 'https://auth.pollinations.ai' },
   opencode: { company: 'OpenCode (SST)', description: 'OpenCode Zen — hosted models served by the opencode project.', docsUrl: 'https://opencode.ai/' },
   // Local-only test relay (tools/gia-bridge) — no external docs exist and
   // none should be advertised; the description explains where it comes from.

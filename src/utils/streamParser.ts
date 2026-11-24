@@ -613,3 +613,42 @@ export function appendResponseText(state: StreamParserState, text: string): void
     state.segments.push({ id: nextSegmentId(), type: 'text', content: text, startedAt: Date.now() });
   }
 }
+
+/**
+ * Convert gpt-oss "harmony" native tool-call syntax into the app's standard
+ * ```tool blocks.
+ *
+ * OpenAI-compatible providers backed by gpt-oss (Pollinations today) do not
+ * always translate the model's internal channels into `tool_calls` deltas —
+ * when no `tools` schema was sent, the raw channel text LEAKS into `content`:
+ *
+ *   <|start|>assistant<|channel|>commentary to=tool id=filesystem_write>{"args":{"path":"hello.txt"}}<|call|>
+ *
+ * Left alone that renders as visible garbage and the tool never runs. This
+ * normalizer rewrites every leaked call (streamed or whole) into the same
+ * ```tool block the runner already executes. id= may be absent.
+ */
+export function normalizeHarmonyToolCalls(text: string): string {
+  if (!text || !text.includes('<|channel|>')) return text;
+  return text.replace(
+    /<\|start\|>assistant<\|channel\|>commentary\s+to=tools?[\s\S]*?<\|call\|>/g,
+    (m: string) => {
+      const idMatch = m.match(/id=([\w.-]+)/);
+      const id = idMatch?.[1];
+      // args = the JSON object between the channel header and <|call|>
+      const braceStart = m.indexOf('{');
+      const braceEnd = m.lastIndexOf('}');
+      let args: unknown = {};
+      if (braceStart >= 0 && braceEnd > braceStart) {
+        try { args = JSON.parse(m.slice(braceStart, braceEnd + 1)); } catch { args = { _raw: m.slice(braceStart, braceEnd + 1) }; }
+      }
+      // Some models wrap as {"args": {...}}; others put the args object itself.
+      const inner = (args && typeof args === 'object' && !Array.isArray(args) && Object.keys(args as object).length === 1 && 'args' in (args as object))
+        ? (args as { args: unknown }).args
+        : args;
+      return '```tool\n' + JSON.stringify({ id: id ?? 'tool', args: inner }) + '\n```';
+    },
+  )
+  // Also strip any residual harmony channel markers so they never render.
+  .replace(/<\|(?:start|end|channel|message)\|>/g, '');
+}

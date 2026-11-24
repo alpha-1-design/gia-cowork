@@ -50,6 +50,25 @@ export default defineConfig({
         rewrite: (p) => p.replace(/^\/gemini-proxy/, ''),
         secure: true,
       },
+      // Pollinations (free, keyless): their Turnstile gate 403s any request
+      // that carries an http(s) Origin header — which every browser fetch
+      // does, so the web dev build can never call them directly. The desktop
+      // app (tauri:// origin) passes, and server-side requests (no Origin)
+      // pass. So in the dev server we proxy through and STRIP origin/referer:
+      // the request leaves this machine with no browser identity and pollinations
+      // treats it like any server-side caller.
+      '/pollinations-proxy': {
+        target: 'https://text.pollinations.ai',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/pollinations-proxy/, ''),
+        secure: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('origin');
+            proxyReq.removeHeader('referer');
+          });
+        },
+      },
     },
     watch: {
       // Don't reload the frontend when Rust files change under src-tauri.

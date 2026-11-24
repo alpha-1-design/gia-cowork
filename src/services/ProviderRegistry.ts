@@ -35,6 +35,14 @@ export const FALLBACK_PROVIDERS: ProviderDef[] = [
   // product provider — localhost only, and only meaningful on this box.
   { id: 'relay',        label: 'Local Relay',   baseUrl: 'http://127.0.0.1:8791/v1',                   defaultModel: 'opencode-relay',            needsApiKey: true,  listingType: 'openai',     aliases: [] },
   { id: 'openrouter',   label: 'OpenRouter',    baseUrl: 'https://openrouter.ai/api/v1',               defaultModel: 'google/gemma-3-27b-it:free', needsApiKey: true, listingType: 'openai', aliases: ['or'] },
+  // Free, keyless community endpoint. OpenAI-compatible chat completions at
+  // /openai/chat/completions (and the same body at /openai), CORS-open, no
+  // account needed at the anonymous tier — rate-limited but real. Verified
+  // live: /models returns `{name, tools, vision, tier}` entries (NOT OpenAI
+  // `{id}` shape) and streaming speaks standard SSE. The model-list parser
+  // handles the name-shaped catalog; the static list below seeds the
+  // anonymous-tier head.
+  { id: 'pollinations', label: 'Pollinations (Free)', baseUrl: 'https://text.pollinations.ai/openai', defaultModel: 'openai-fast', needsApiKey: false, listingType: 'openai', aliases: ['polli', 'free'] },
   { id: 'groq',         label: 'Groq',          baseUrl: 'https://api.groq.com/openai/v1',            defaultModel: 'llama3-70b-8192',  needsApiKey: true,  listingType: 'openai',     aliases: [] },
   { id: 'deepseek',     label: 'DeepSeek',      baseUrl: 'https://api.deepseek.com/v1',                defaultModel: 'deepseek-chat',    needsApiKey: true,  listingType: 'openai',     aliases: ['ds'] },
   { id: 'cerebras',     label: 'Cerebras',      baseUrl: 'https://api.cerebras.ai/v1',                defaultModel: 'llama3.1-8b',      needsApiKey: true,  listingType: 'openai',     aliases: [] },
@@ -141,6 +149,12 @@ const FALLBACK_MODELS: Record<string, StaticModelOption[]> = {
   opencode: [
     { id: 'deepseek-v4-flash-free',    label: 'DeepSeek V4 Flash',   free: true,  context: '64k',  tools: true, vision: true  },
     { id: 'gpt-4o-mini',               label: 'GPT-4o Mini',         free: false, context: '128k', tools: true, vision: true  },
+  ],
+  pollinations: [
+    // The anonymous tier's live head, verified 2026-11-24. The live /models
+    // list overrides this when reachable; other pollinations heads are
+    // tier-gated and appear only when the person connects a token.
+    { id: 'openai-fast', label: 'GPT-OSS 20B (fast)', free: true, context: '16k', tools: true, vision: false },
   ],
   relay: [
     { id: 'opencode-relay', label: 'OpenCode Relay', free: true, context: '128k', tools: false, vision: false },

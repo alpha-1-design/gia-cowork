@@ -16,6 +16,7 @@ const mockProviders: Record<string, { id: string; name: string; needsApiKey: boo
   openai: { id: 'openai', name: 'OpenAI', needsApiKey: true, baseUrl: 'https://api.openai.com/v1', models: [{ id: 'gpt-4o', label: 'GPT-4o', free: false }, { id: 'gpt-4o-mini', label: 'GPT-4o Mini', free: false }] },
   anthropic: { id: 'anthropic', name: 'Anthropic', needsApiKey: true, baseUrl: 'https://api.anthropic.com/v1', models: [{ id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', free: false }] },
   'local-llm': { id: 'local-llm', name: 'Local LLM', needsApiKey: false, baseUrl: 'http://localhost:1234/v1', models: [{ id: 'local-model', label: 'Local Model', free: true }] },
+  pollinations: { id: 'pollinations', name: 'Pollinations (Free)', needsApiKey: false, baseUrl: 'https://text.pollinations.ai/openai', models: [{ id: 'openai-fast', label: 'GPT-OSS 20B (fast)', free: true }] },
 };
 
 vi.mock('../../services/ProviderRegistry', () => ({
@@ -63,7 +64,7 @@ describe('useProviderStore', () => {
       await useProviderStore.getState().loadProviders();
       const state = useProviderStore.getState();
       expect(state.initialised).toBe(true);
-      expect(Object.keys(state.providers)).toEqual(['openai', 'anthropic', 'local-llm']);
+      expect(Object.keys(state.providers)).toEqual(['openai', 'anthropic', 'local-llm', 'pollinations']);
       expect(state.providers.openai).toBeDefined();
       expect(state.providers.openai.apiKey).toBe('');
       expect(state.providers.openai.model).toBe('gpt-4o');
@@ -233,6 +234,27 @@ describe('useProviderStore', () => {
       const models = await useProviderStore.getState().fetchModels('openai');
       expect(models.some(m => m.id === 'gpt-4o')).toBe(true);
       expect(useProviderStore.getState().modelListStatus?.openai).toBe('catalog');
+    });
+
+    it('pollinations: parses the name-shaped bare-array catalog and marks anonymous tier free', async () => {
+      // Pollinations /models is NOT OpenAI-shaped: a bare array of
+      // {name, tools, vision, tier} entries. The parser must accept it.
+      corsProxyFetch.mockResolvedValue(new Response(JSON.stringify([
+        { name: 'openai-fast', description: 'GPT-OSS 20B Reasoning LLM (OVH)', tools: true, vision: false, input_modalities: ['text'], output_modalities: ['text'], tier: 'anonymous' },
+        { name: 'openai-large', tools: true, vision: true, tier: 'seed' },
+      ]), { status: 200 }));
+      const models = await useProviderStore.getState().fetchModels('pollinations');
+      expect(models.map(m => m.id)).toContain('openai-fast');
+      expect(models.map(m => m.id)).toContain('openai-large'); // id came from `name`
+      expect(models.find(m => m.id === 'openai-fast')?.free).toBe(true); // anonymous tier
+      expect(useProviderStore.getState().modelListStatus?.pollinations).toBe('live');
+    });
+
+    it('pollinations: falls back to the seeded catalog when the live list is unreachable', async () => {
+      corsProxyFetch.mockRejectedValue(new Error('offline'));
+      const models = await useProviderStore.getState().fetchModels('pollinations');
+      expect(models.some(m => m.id === 'openai-fast')).toBe(true);
+      expect(useProviderStore.getState().modelListStatus?.pollinations).toBe('catalog');
     });
 
     it('falls back to catalog when fetch throws network error', async () => {

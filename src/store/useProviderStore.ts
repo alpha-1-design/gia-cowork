@@ -5,6 +5,7 @@ import { idbStorage } from './idb-storage';
 import { providerRegistry, RETIRED_DEFAULT_MODELS } from '../services/ProviderRegistry';
 import { corsProxy } from '../services/CorsProxy';
 import CredentialVault from '../services/CredentialVault';
+import { isTauri } from '../platform';
 
 export type ProviderType = string;
 
@@ -320,7 +321,13 @@ export const useProviderStore = create<GiaProviderState>()(
           if (def.headers) Object.assign(headers, def.headers);
 
           const fetchFn = isLocal ? fetch : (url: string, init?: RequestInit) => corsProxy.fetch(url, init);
-          const res = await fetchFn(`${baseUrl}/models`, {
+          // Pollinations: browser GETs with an http(s) Origin are Turnstile-
+          // challenged; route the dev build through the origin-stripping proxy
+          // so the LIVE catalog loads there too. Desktop passes as-is.
+          const listingBase = p === 'pollinations' && !isTauri() && import.meta.env.DEV
+            ? '/pollinations-proxy'
+            : baseUrl;
+          const res = await fetchFn(`${listingBase}/models`, {
             headers,
             signal: AbortSignal.timeout(8000),
           });
@@ -328,27 +335,37 @@ export const useProviderStore = create<GiaProviderState>()(
           const json: {
             data?: { id: string; name?: string; pricing?: { prompt?: string } | string; context_length?: number }[];
             models?: { id: string; name?: string; pricing?: { prompt?: string } | string; context_length?: number }[];
-          } = await res.json();
-          const apiData = json.data ?? json.models ?? [];
+          } | { id?: string; name?: string; tools?: boolean; vision?: boolean; tier?: string }[] = await res.json();
+          // Pollinations returns a bare ARRAY of `{name, tools, vision, tier}`
+          // entries rather than an OpenAI `{data: [{id}]}` envelope — accept
+          // both shapes and let `name` stand in for a missing `id`.
+          const raw = Array.isArray(json) ? json : (json.data ?? json.models ?? []);
+          const apiData = raw as { id?: string; name?: string; pricing?: { prompt?: string } | string; context_length?: number; tier?: string }[];
 
           const fallbackModels = providerRegistry.getModels(p);
           const formatted: ModelOption[] = apiData
-            .filter((m) => m.id)
+            .filter((m) => m.id || m.name)
             .map((m) => {
-              const staticDef = fallbackModels.find(sm => sm.id === m.id);
+              const modelId = m.id || m.name!;
+              const staticDef = fallbackModels.find(sm => sm.id === modelId);
               let isFree = staticDef?.free ?? false;
               const price = (m as { pricing?: { prompt?: string } | string }).pricing;
               if (price) {
                 const promptPrice = parseFloat(typeof price === 'string' ? price : (price.prompt || '0'));
                 isFree = !isNaN(promptPrice) && promptPrice === 0;
               }
+              // Pollinations marks its keyless tier explicitly — that tier is
+              // free by definition, no pricing field to infer from.
+              if ((m as { tier?: string }).tier === 'anonymous') isFree = true;
               return {
-                id: m.id,
-                label: m.name || m.id,
+                id: modelId,
+                label: m.name || modelId,
                 free: isFree,
                 context: m.context_length ? `${Math.round(m.context_length / 1000)}k` : '?',
                 tools: staticDef?.tools,
-                vision: staticDef?.vision || /vision|pixtral|llava|vl/i.test(m.id),
+                // Pollinations advertises `vision` directly; other OpenAI-
+                // shaped catalogs get the name-heuristic as before.
+                vision: staticDef?.vision || (m as { vision?: boolean }).vision === true || /vision|pixtral|llava|vl/i.test(modelId),
               };
             });
 

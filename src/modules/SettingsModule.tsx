@@ -87,6 +87,8 @@ const SettingsModule: React.FC = () => {
   // Only surface the Undo card when GIA has actually changed something —
   // a permanently visible "0 changes" row is just noise.
   const [undoableCount, setUndoableCount] = useState(0);
+  // Capability matrix is reference material — keep it collapsed until asked for.
+  const [capsOpen, setCapsOpen] = useState(false);
   useEffect(() => {
     setUndoableCount(fileSnapshots.listPending().length);
   }, [settingsPage]);
@@ -398,13 +400,29 @@ const SettingsModule: React.FC = () => {
         </button>
       )}
 
-      {/* Provider Capability Matrix */}
+      {/* Provider Capability Matrix — collapsible: 70+ provider rows are
+          reference material, not something the person should scroll past
+          every time they open settings. Collapsed by default; expanded it
+          keeps everything it had. */}
       <div className="gia-card p-4">
-        <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--gia-text)' }}>
-          <Zap size={14} className="inline mr-2" style={{ color: '#f59e0b' }} />
-          Provider Capabilities
-        </h3>
-        <div className="overflow-x-auto">
+        <button
+          onClick={() => setCapsOpen(v => !v)}
+          className="w-full flex items-center justify-between text-left"
+          style={{ cursor: 'pointer' }}
+          aria-expanded={capsOpen}
+        >
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--gia-text)' }}>
+            <Zap size={14} className="inline mr-2" style={{ color: '#f59e0b' }} />
+            Provider Capabilities
+            <span className="text-[10px] ml-2 font-normal" style={{ color: 'var(--gia-muted)' }}>
+              {providerRegistry.getAllIds().length} providers
+            </span>
+          </h3>
+          <ChevronRight size={14} style={{ color: 'var(--gia-muted)', transform: capsOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+        </button>
+        {capsOpen && (
+        <>
+        <div className="overflow-x-auto mt-3">
           <table className="w-full text-xs">
             <thead>
               <tr>
@@ -459,6 +477,8 @@ const SettingsModule: React.FC = () => {
         <p className="text-[10px] mt-2" style={{ color: 'var(--gia-muted)' }}>
           Based on provider type and selected model. Open the model switcher in Chat to connect a provider or change model.
         </p>
+        </>
+        )}
       </div>
 
       {/* Theme */}

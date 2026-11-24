@@ -33,7 +33,7 @@ describe('provider metadata coverage', () => {
   it('is exactly one entry per provider', () => {
     expect(infoIds.length).toBe(ids.length);
     expect(new Set(infoIds).size).toBe(infoIds.length);
-    expect(infoIds.length).toBe(72);
+    expect(infoIds.length).toBe(73);
   });
 });
 

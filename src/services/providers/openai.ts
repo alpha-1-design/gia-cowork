@@ -3,13 +3,27 @@ import { useProviderStore } from '../../store/useProviderStore';
 import { providerRegistry } from '../ProviderRegistry';
 import { useGiaStore } from '../../store/useGiaStore';
 import { corsProxy } from '../CorsProxy';
+import { isTauri } from '../../platform';
+import { normalizeHarmonyToolCalls } from '../../utils/streamParser';
 import type { BrainRequest, BrainResponse, BrainContext } from './types';
+
+/**
+ * Pollinations' Turnstile gate 403s any request carrying an http(s) Origin —
+ * which every browser fetch has. Desktop (tauri://) passes as-is; the web dev
+ * server proxies with Origin stripped (see vite.config.ts `/pollinations-proxy`).
+ */
+function resolvePollinationsBase(fallback: string): string {
+  if (!isTauri() && import.meta.env.DEV) return '/pollinations-proxy/openai';
+  return fallback;
+}
 
 export async function callOpenAICompat(req: BrainRequest, ctx: BrainContext): Promise<BrainResponse> {
   const { activeProvider, providers } = useProviderStore.getState();
   const config = providers[activeProvider];
   const effectiveModel = req.modelOverride || config.model;
-  const baseUrl = providerRegistry.getBaseUrl(activeProvider);
+  const baseUrl = activeProvider === 'pollinations'
+    ? resolvePollinationsBase(providerRegistry.getBaseUrl(activeProvider))
+    : providerRegistry.getBaseUrl(activeProvider);
   const label = providerRegistry.getLabel(activeProvider);
   if (!baseUrl) throw new Error(`Unknown provider: ${activeProvider}`);
   const messages = [
@@ -26,7 +40,14 @@ export async function callOpenAICompat(req: BrainRequest, ctx: BrainContext): Pr
   if (req.forceJson) {
     body.response_format = { type: 'json_object' };
   }
-  if (useGiaStore.getState().handsOff && !req._skipNativeSchemas && !req.forceJson) {
+  // gpt-oss-backed endpoints (Pollinations) speak the "harmony" protocol: if
+  // no `tools` schema is sent, the model leaks raw <|channel|>commentary
+  // tool-call syntax into plain text. Always hand these models the native
+  // schema so their tool calls arrive as proper tool_calls deltas (translated
+  // server-side); the normalizer below is the backstop when they leak anyway.
+  // In hands-off mode native tools are the designed path; normal mode still
+  // gets them so harmony models can act — execution is gated either way.
+  if (!req._skipNativeSchemas && !req.forceJson && (useGiaStore.getState().handsOff || activeProvider === 'pollinations')) {
     body.tools = ctx.buildOpenAITools();
   }
   if (req.useExtendedThinking) {
@@ -37,10 +58,11 @@ export async function callOpenAICompat(req: BrainRequest, ctx: BrainContext): Pr
       body.temperature = undefined;
     }
   }
-  const headers: Record<string, string> = {
-    'Authorization': `Bearer ${config.apiKey}`,
-    'Content-Type': 'application/json',
-  };
+  // Keyless providers (pollinations, local servers) must NOT send an empty
+  // Bearer header — some free endpoints reject `Authorization: Bearer ` with
+  // an empty token where omitting the header entirely is anonymous access.
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`;
   if (activeProvider === 'openrouter') {
     headers['HTTP-Referer'] = 'https://gia.app';
     headers['X-Title'] = 'GIA';
@@ -183,9 +205,13 @@ export async function callOpenAICompat(req: BrainRequest, ctx: BrainContext): Pr
         if (!fullText.trim() && !req.signal?.aborted) {
           reject(new Error(`⚠️ ${label} returned empty response. The model may be overloaded. Try again or switch providers.`));
         } else {
+          // gpt-oss-backed providers can leak native harmony tool-call syntax
+          // into content when no `tools` schema was sent — normalize it into
+          // runnable ```tool blocks before it reaches the renderer.
+          const normalized = normalizeHarmonyToolCalls(fullText);
           const wasTruncated = finishReason === 'length';
           const tokenUsage = streamTokenUsage ? { input: streamTokenUsage.prompt_tokens || 0, output: streamTokenUsage.completion_tokens || 0, total: streamTokenUsage.total_tokens || 0 } : undefined;
-          resolve({ text: fullText, provider: activeProvider, model: effectiveModel, finishReason, wasTruncated, tokenUsage });
+          resolve({ text: normalized, provider: activeProvider, model: effectiveModel, finishReason, wasTruncated, tokenUsage });
         }
       };
 
@@ -294,6 +320,8 @@ export async function callOpenAICompat(req: BrainRequest, ctx: BrainContext): Pr
     }
   }
   if (!content?.trim()) throw new Error(ctx.friendlyError(label, `${label} returned empty response`));
+  // Harmony leak backstop for the non-streaming path too.
+  content = normalizeHarmonyToolCalls(content);
   const finishReason = choice?.finish_reason || 'stop';
   const wasTruncated = finishReason === 'length';
   return { text: content, provider: activeProvider, model: effectiveModel, finishReason, wasTruncated, tokenUsage };

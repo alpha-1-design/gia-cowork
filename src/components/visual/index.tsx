@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { parseVisualBlock } from './parseVisualBlock';
 import { VisualLoading } from './common';
 import VisualErrorBoundary from './VisualErrorBoundary';
@@ -134,10 +134,28 @@ const RenderVisualByType: React.FC<VisualRendererProps> = ({ code, incomplete })
   }
 };
 
-const VisualRenderer: React.FC<VisualRendererProps> = ({ code, incomplete }) => (
-  <VisualErrorBoundary>
-    <RenderVisualByType code={code} incomplete={incomplete} />
-  </VisualErrorBoundary>
-);
+const VisualRenderer: React.FC<VisualRendererProps> = ({ code, incomplete }) => {
+  // A stream that DIED with the visual fence still open (model cut off, gate
+  // denial aborting the turn, provider outage) would otherwise sit on the
+  // "Rendering visualization…" placeholder forever: nothing ever re-renders
+  // with more code, but nothing marks the block complete either. So the
+  // renderer itself watches: if `incomplete` is true and the code has not
+  // changed for 8 seconds — no streaming chunk arrived — treat the block as
+  // finalised and degrade to the artifact card. During live streaming chunks
+  // keep arriving well inside that window and reset the timer, so real
+  // streams are never affected.
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    if (!incomplete) { setStalled(false); return; }
+    setStalled(false);
+    const t = setTimeout(() => setStalled(true), 8000);
+    return () => clearTimeout(t);
+  }, [code, incomplete]);
+  return (
+    <VisualErrorBoundary>
+      <RenderVisualByType code={code} incomplete={incomplete && !stalled} />
+    </VisualErrorBoundary>
+  );
+};
 
 export default React.memo(VisualRenderer);
