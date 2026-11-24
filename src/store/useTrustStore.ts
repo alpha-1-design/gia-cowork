@@ -115,6 +115,8 @@ interface TrustStore {
 
   grant: (request: PermissionRequest, choice: PermissionChoice) => void;
   revoke: (scope: string) => void;
+  /** S3-18: session-scope-only revoke (never touches standing grants). */
+  revokeSession: (scope: string) => void;
   revokeAll: () => void;
   setArmed: (armed: boolean) => void;
   toggleArmed: () => boolean;
@@ -254,6 +256,12 @@ export const useTrustStore = create<TrustStore>()(
 
       revoke: (scope) => set((s) => ({
         grants: s.grants.filter(g => g.scope !== scope),
+        sessionGrants: s.sessionGrants.filter(g => g.scope !== scope),
+      })),
+
+      /** S3-18: retire a SESSION grant only — a swarm's auto-read profile
+       *  must never strip the user's own standing grant for the same scope. */
+      revokeSession: (scope) => set((s) => ({
         sessionGrants: s.sessionGrants.filter(g => g.scope !== scope),
       })),
 

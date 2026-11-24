@@ -380,6 +380,11 @@ export class SwarmCoordinator {
   private localPaused = false;
   /** S3-13: count of active 'full'-profile runs composes overlapping runs. */
   private fullProfileRuns = 0;
+  /** S3-18: active 'auto-read' runs — the session grants they minted are
+   *  revoked when the LAST one finishes, so 'for this swarm' means exactly
+   *  that. The user's own standing grants are untouched (revokeSession
+   *  only clears session-scoped entries). */
+  private autoReadRuns = 0;
   private fullProfilePrev: boolean | null = null;
   /** User's fullAutonomy intent if they flipped it while a 'full' run was
    *  active — the swarm must never clobber it on finish (was S3-13b). */
@@ -495,7 +500,8 @@ export class SwarmCoordinator {
       useProtocolStore.getState().setFullAutonomy(true);
       this.log('tool', `Swarm ${runId}: FULL ACCESS profile — every tool call runs without prompts. The kill switch still stops everything.`);
     } else if (plan.profile === 'auto-read') {
-      this.grantReadProfiles(runId);
+      if (this.autoReadRuns === 0) this.grantReadProfiles(runId);
+      this.autoReadRuns++;
     }
 
     this.ensureKillSwitchWatch();
@@ -514,7 +520,20 @@ export class SwarmCoordinator {
       const request: PermissionRequest = classifyToolRequest(toolId, toolId, {});
       trust.grant(request, 'session');
     }
-    this.log('tool', `Swarm ${runId}: AUTO-READ profile — session grants pre-granted for ${READ_ONLY_TOOL_IDS.length} read-risk tools (expire with the app).`);
+    this.log('tool', `Swarm ${runId}: AUTO-READ profile — session grants pre-granted for ${READ_ONLY_TOOL_IDS.length} read-risk tools; they are revoked when the last auto-read run finishes (S3-18: 'for this swarm' means exactly that).`);
+  }
+
+  /** S3-18: retire the auto-read session grants once no auto-read run lives. */
+  private maybeRevokeReadProfiles() {
+    this.autoReadRuns--;
+    if (this.autoReadRuns > 0) return;
+    this.autoReadRuns = 0;
+    const trust = useTrustStore.getState();
+    const revoke = trust.revokeSession ?? trust.revoke;
+    for (const toolId of READ_ONLY_TOOL_IDS) {
+      revoke(`tool:${toolId}`);
+    }
+    this.log('tool', "AUTO-READ profile retired — this swarm's read grants were session-scoped and are gone.");
   }
 
   // ── The lane scheduler ───────────────────────────────────────────────────
@@ -839,6 +858,9 @@ export class SwarmCoordinator {
           this.fullProfileUserTouched ?? this.fullProfilePrev ?? false,
         );
       }
+    } else if (run.plan.profile === 'auto-read') {
+      // S3-18: retire the session grants at the LAST auto-read run's finish.
+      this.maybeRevokeReadProfiles();
     }
     if (run.stripLine && useGiaStore.getState().currentTool === run.stripLine) {
       useGiaStore.getState().setCurrentTool(null);

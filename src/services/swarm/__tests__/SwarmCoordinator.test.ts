@@ -74,7 +74,11 @@ vi.mock('../../../store/useTrustStore', () => ({
     getState: () => ({
       armed: trustState.armed,
       grant: (request: { scope: string }, choice: string) => {
-        sessionGrants.push({ scope: request.scope, choice });
+        if (choice === 'session') sessionGrants.push({ scope: request.scope, choice });
+      },
+      revokeSession: (scope: string) => {
+        const i = sessionGrants.findIndex(g => g.scope === scope);
+        if (i >= 0) sessionGrants.splice(i, 1);
       },
     }),
     subscribe: (l: (s: typeof trustState) => void) => {
@@ -229,6 +233,20 @@ beforeEach(() => {
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────
+
+describe('SwarmCoordinator — auto-read grants retire with the run (S3-18)', () => {
+  it('session grants minted by an auto-read run are revoked when it finishes', async () => {
+    const { executor, calls } = makeExecutor();
+    const coordinator = new SwarmCoordinator({ executor });
+
+    coordinator.startSwarm({ tasks: [{ prompt: 'a' }], concurrency: 1, profile: 'auto-read' });
+    expect(sessionGrants.length).toBeGreaterThan(20);
+
+    calls[0].deferred.resolve({ text: 'done' });
+    await flush();
+    expect(sessionGrants.length).toBe(0); // retired with the run
+  });
+});
 
 describe('SwarmCoordinator — lane scheduler', () => {
   it('runs at most `concurrency` tasks at once and pulls the next queued task FIFO when a lane frees', async () => {
