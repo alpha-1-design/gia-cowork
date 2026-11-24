@@ -1,6 +1,8 @@
 import { useGiaStore } from '../../store/useGiaStore';
 import { useNexusStore } from '../../store/useNexusStore';
-import { swarmCoordinator, type SwarmEvent } from '../swarm/SwarmCoordinator';
+import { swarmCoordinator, type SwarmEvent, type SwarmRunSummary } from '../swarm/SwarmCoordinator';
+import { onSwarmRunEnd, runRuleSuffix, buildRunDistillerLines } from '../selfbuild/myelinEngine';
+import { logger } from '../../utils/logger';
 
 export interface SubAgentIdentity {
   id: string;
@@ -162,10 +164,13 @@ export class SubAgentManager {
     // cancels and persisted records. The identity/nexus reporting below keeps
     // this class's UI contract intact; only the execution engine changed.
     const godSuffix = this.isGodMode ? '\n\nYou are operating in GOD MODE. Go deeper than usual. Challenge every assumption. Leave no stone unturned.' : '';
+    // MURMURATION: rules measured from the LAST finished run ride every lane
+    // prompt. They auto-expire when this run's summary lands (onSwarmRunEnd).
+    const myelinSuffix = runRuleSuffix();
     const plan = {
       tasks: identities.map((identity, i) => ({
         id: identity.id,
-        prompt: `${tasks.length > 1 ? (tasks[i % tasks.length]?.prompt || tasks[0]?.prompt || '') : (tasks[0]?.prompt || '')}${godSuffix}`,
+        prompt: `${tasks.length > 1 ? (tasks[i % tasks.length]?.prompt || tasks[0]?.prompt || '') : (tasks[0]?.prompt || '')}${godSuffix}${myelinSuffix}`,
         persona: identity.name,
         providerId: tasks[i % tasks.length]?.provider || tasks[0]?.provider,
       })),
@@ -194,6 +199,12 @@ export class SubAgentManager {
       offEvent();
       signal?.removeEventListener('abort', onAbort);
     });
+
+    // MURMURATION — the run lane. The finished run is one observed sample:
+    // distill it into run-scoped lane rules (auto-expiring at the next run).
+    // The coordinator's task records become rollout-shaped entries for the
+    // shared distiller — no new collection, no lane prompt-reading.
+    void runMurmurationRunEnd(summary);
 
     // Fold the coordinator's settled records back into this class's progress
     // view so synthesize()/markFinished() keep their contracts unchanged.
@@ -264,5 +275,19 @@ export class SubAgentManager {
     summary += `\n\nWeigh the evidence and produce a final answer that synthesizes the best insights.`;
 
     return summary;
+  }
+}
+
+/**
+ * Run end → MURMURATION: translate the coordinator's settled records into
+ * rollout-shaped distiller lines (tool_call/tool_output) and hand them to the
+ * shared amendment engine. Best-effort — never affects the run's own results.
+ */
+async function runMurmurationRunEnd(summary: SwarmRunSummary): Promise<void> {
+  try {
+    const lines = buildRunDistillerLines(summary);
+    await onSwarmRunEnd(lines);
+  } catch (e) {
+    logger.warn('[murmuration] run end failed silently:', e);
   }
 }

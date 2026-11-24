@@ -458,7 +458,10 @@ export interface ClarificationField {
 
 export interface Clarification {
   question: string;
-  options: string[];
+  /** Real answer choices the model chose to offer. ABSENT for open
+   * questions — the user answers free-text. Never a fabricated Yes/No
+   * default; binary options are the model's explicit decision. */
+  options?: string[];
   sessionId: string;
   assistantMsgId: string;
   /**

@@ -12,6 +12,7 @@ import { useMemoryStore } from '../store/useMemoryStore';
 import { useTaskStore } from '../store/useTaskStore';
 import { useGiaIdentity } from '../store/useGiaIdentity';
 import { skillAuthor } from './SkillAuthor';
+import { renderEvolutionReport } from './selfbuild/myelinEngine';
 import { resolveSkillIcon } from '../utils/skillIcons';
 import { costTracker, formatCost } from './CostTracker';
 import { togglePresenterMode, presenterSupported, isPresenting } from './PresenterMode';
@@ -1370,6 +1371,15 @@ const REGISTRY: CommandSpec[] = [
           top.length ? `\n**Top models**\n${top.join('\n')}` : '',
         ].filter(Boolean).join('\n'),
       };
+    },
+  },
+  {
+    name: 'evolution',
+    aliases: ['myelin', 'changelog'],
+    category: 'System',
+    description: "Changelog of Myself — what GIA has learned about how she works",
+    run: () => {
+      return { handled: true, message: renderEvolutionReport() };
     },
   },
   {

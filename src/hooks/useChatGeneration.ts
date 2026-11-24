@@ -18,6 +18,10 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { giaCoreServices } from '../services/GIACoreServices';
 import HapticService from '../services/HapticService';
 import type { Message } from '../store/useGiaStore';
+import { onSessionEnd, SELF_QUESTION_RE, renderEvolutionReport } from '../services/selfbuild/myelinEngine';
+import { useTrustStore } from '../store/useTrustStore';
+import { logger } from '../utils/logger';
+import { rolloutSerialize, rolloutParseWithLines, type RolloutEntry } from '../services/brain/rollout';
 import { isNativePlatform } from '../utils/helpers';
 
 const BACKGROUND_NOTIF_ID = 42;
@@ -35,6 +39,32 @@ function applyFollowUpSuggestions(sessionId: string, asstId: string, content: st
     }
   } catch {
     // Suggestions are a nicety — never surface failures.
+  }
+}
+
+/**
+ * MYELIN session end: serialize the session through the pure rollout
+ * format (the same record TESTIMONY writes to disk) and hand the entries to
+ * the amendment engine. Gate denials come from the trust audit for this
+ * session window. Best-effort: an engine failure never touches the turn.
+ */
+async function runMyelinSessionEnd(sessionId: string): Promise<void> {
+  try {
+    const session = useGiaStore.getState().sessions.find((s) => s.id === sessionId);
+    if (!session) return;
+    const text = rolloutSerialize(session);
+    const parsed = rolloutParseWithLines(text);
+    const entries = parsed.entries as RolloutEntry[];
+    const cutoff = Date.now() - 30 * 60_000;
+    const denials: Record<string, number> = {};
+    for (const a of useTrustStore.getState().audit) {
+      if (a.choice === 'deny' && a.at >= cutoff) {
+        denials[a.toolName] = (denials[a.toolName] ?? 0) + 1;
+      }
+    }
+    await onSessionEnd(entries, denials);
+  } catch (e) {
+    logger.warn('[myelin] session end failed silently:', e);
   }
 }
 
@@ -202,6 +232,18 @@ export function useChatGeneration() {
     if (!text && sentAttachments.length === 0) return;
 
     const state = useGiaStore.getState();
+
+    // MYELIN easter egg: the self-knowledge question is answered locally from
+    // the amendment journal — the truth is already on this machine, no model
+    // call needed. The phrase never reaches the provider.
+    if (SELF_QUESTION_RE.test(text) && text.length < 120) {
+      const report = renderEvolutionReport();
+      const sessionId = state.activeSessionId || state.createSession();
+      state.addMessage(sessionId, { id: genId(), role: 'user', content: text, timestamp: Date.now() });
+      state.addMessage(sessionId, { id: genId(), role: 'assistant', content: report, timestamp: Date.now() });
+      setInput('');
+      return;
+    }
 
     // ── InputGuardrails: check prompt safety ────────────────
     if (state.inputGuardrails) {
@@ -563,6 +605,11 @@ onThought: (thought) => {
         applyFollowUpSuggestions(sessionId, asstId, finalText);
       }
       notifyIfBackground('chat', sessionId, asstId);
+      // MYELIN — the constitution lane's evidence hook. The finished turn is
+      // one observed session: distill it through the amendment engine. This
+      // is fire-and-forget: the engine journals its own decisions and can
+      // never break the turn that fed it.
+      void runMyelinSessionEnd(sessionId);
     } catch (err: unknown) {
       streamCancel(streamKey);
       if (!ctrl.signal.aborted) {

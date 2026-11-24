@@ -54,7 +54,7 @@ export const controlTools: Tool[] = [
   },
   {
     id: 'request_clarification', name: 'request_clarification',
-    description: 'Ask the user for information before continuing. For a single quick question, pass `question` and optionally `options` (rendered as tappable buttons, plus a free-text fallback). When you need several pieces of information, ask ALL of them at once by passing `fields` — 2 to 6 fields: an array of { id, label, type, options?, placeholder? } where type is "radio", "select", or "text". They render together with one "Send answers" button, so the user answers everything in one go. Ask everything you genuinely need (up to 5-6 questions) in one call instead of drip-feeding one question per turn. If you still need more information after the user answers, you may ask again.',
+    description: 'Ask the user for information before continuing. Pass `question` always. Then choose the answer shape deliberately: (a) TRULY binary questions only — pass `options: ["Yes", "No"]` yourself; (b) questions with a small known set of likely answers — pass `options` with those real answers (e.g. ["Web app", "Mobile app", "Not sure"]); (c) open questions — pass NO options at all and the user gets a free-text field, never fake yes/no buttons; (d) 2-6 pieces of information at once — pass `fields` as an array of { id, label, type, options?, placeholder? } where type is "radio", "select", or "text". Do NOT default to Yes/No for open questions — that wastes a turn and annoys the user. Ask everything you genuinely need in one call instead of drip-feeding one question per turn. If you still need more information after the user answers, you may ask again.',
     schema: {
       type: 'object',
       properties: {
@@ -92,7 +92,10 @@ export const controlTools: Tool[] = [
 
       useGiaStore.getState().setClarification({
         question: (question as string) || 'Could you clarify?',
-        options: Array.isArray(options) && options.length >= 2 ? options : ['Yes', 'No'],
+        // No fabricated defaults: if the model did not pass options this is an
+        // OPEN question and the user gets a free-text field, not forced
+        // Yes/No buttons. Binary options are the model's explicit choice.
+        options: Array.isArray(options) && options.length >= 2 ? (options as string[]) : undefined,
         sessionId: useGiaStore.getState().activeSessionId || '',
         assistantMsgId: '',
         fields: parsedFields.length > 0 ? parsedFields : undefined,
