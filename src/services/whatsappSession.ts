@@ -58,6 +58,11 @@ export class WhatsAppSession {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   /** jids currently being answered (guards re-entry per chat). */
   private answering = new Set<string>();
+  /** Recently-seen message ids (S4-27 dedup: push + catch-up window can
+   *  double-deliver the same message; the duplicate must not re-notify or
+   *  join the burst twice). Bounded to keep memory flat. */
+  private seenIds = new Set<string>();
+  private seenOrder: string[] = [];
 
   private autoRespond: boolean;
   private cursor: number;
@@ -112,6 +117,16 @@ export class WhatsAppSession {
    * Notifies immediately, then arms the burst timer for this chat.
    */
   enqueue(m: WhatsAppIncomingMessage): void {
+    // S4-27: dedup on message id — a push plus a catch-up fetch can deliver
+    // the same message twice; the second copy would double-notify and get a
+    // defanged nested envelope in the transcript.
+    if (this.seenIds.has(m.id)) return;
+    this.seenIds.add(m.id);
+    this.seenOrder.push(m.id);
+    if (this.seenOrder.length > 500) {
+      for (const stale of this.seenOrder.splice(0, 100)) this.seenIds.delete(stale);
+    }
+
     this.setCursor(m.ts);
     if (m.fromName) this.names.set(m.from, m.fromName);
 

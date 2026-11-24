@@ -469,16 +469,31 @@ Rules: you can call multiple independent tools in a single message by putting ea
     + authoredSkillsBlock.length + skillHighlightsBlock.length
     + userContext.length + projectCtx.length + worktreeCtx.length
     + myelinBlock.length;
+  // REVIEW-2 S3-15: the estimate above previously omitted the connected
+  // services block, the model-capability + on-device/fleet/policy sections
+  // and the long guidance tail — together 10–20 KB on real builds, enough
+  // to keep the hand table on a small-window model whose real prompt was
+  // already over budget. Account for them honestly: the block contents are
+  // measured where they are cheap to compute; the guidance tail stays a
+  // calibrated constant.
+  const omittedEstimate =
+    CapabilityService.getContext()?.length
+    + crossDeviceMesh.getFleetContext()?.length
+    + CapabilityPolicyService.getContext()?.length
+    + (connectedSocials.length + connectedConnectors.length > 0 ? 400 : 0)
+    + (activeModelCaps ? describeCapabilities(activeModelCaps).length + 60 : 0)
+    + 8_000; // guidance tail + misc template interpolations (calibrated)
   const budgetChars = activeModelCaps?.contextWindow
     ? Math.floor(activeModelCaps.contextWindow * PROMPT_BUDGET_SHARE) * CHARS_PER_TOKEN
     : Number.POSITIVE_INFINITY;
   const trimmedSections: string[] = [];
-  const handToolTableFits = estimatedChars + handToolTableRows.length <= budgetChars;
+  const governedEstimate = estimatedChars + omittedEstimate;
+  const handToolTableFits = governedEstimate + handToolTableRows.length <= budgetChars;
   if (!handToolTableFits) {
     trimmedSections.push('the hand-written tool table — the deferred compact index below still lists every tool; reach anything outside the core set with tool_search');
   }
   const toolExamplesFit =
-    estimatedChars + (handToolTableFits ? handToolTableRows.length : 0) + toolExamplesBlock.length
+    governedEstimate + (handToolTableFits ? handToolTableRows.length : 0) + toolExamplesBlock.length
     <= budgetChars;
   if (!toolExamplesFit) {
     trimmedSections.push('the tool-calling examples — the ```tool format is taught above and the examples only re-taught it');

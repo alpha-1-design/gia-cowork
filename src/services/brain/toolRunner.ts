@@ -565,6 +565,10 @@ export async function executeToolBlocks(
           return { didExecute: true };
         }
       } catch (e: unknown) {
+        // S4-29: an abort (user Stop) arriving at the pre-dispatch check must
+        // stay an abort — labeling it malformed_json would push a fake
+        // "ERROR parsing tool call" and lie to both the model and the UI.
+        if (e instanceof Error && e.name === 'AbortError') throw e;
         state.history.push({ role: 'assistant', content: text });
         state.history.push({ role: 'user', content: `ERROR parsing tool call: ${e instanceof Error ? e.message : 'Unknown error'}` });
         state.currentPrompt = `Tool call was malformed. Please fix JSON and try again.`;
@@ -594,6 +598,8 @@ export async function executeToolBlocks(
         }
         onThought?.(`✅ ${group.length} parallel tools completed`);
       } catch (e: unknown) {
+        // S4-29 (parallel twin): aborts are aborts, not execution errors.
+        if (e instanceof Error && e.name === 'AbortError') throw e;
         state.history.push({ role: 'assistant', content: text });
         state.history.push({ role: 'user', content: `ERROR in parallel execution: ${e instanceof Error ? e.message : 'Unknown error'}` });
         state.currentPrompt = `Tool execution error. Please try a different approach.`;

@@ -50,6 +50,8 @@ export function isProtectedPath(raw: string): boolean {
   // Backslashes to slashes, drive letters and leading './'/ '/' stripped —
   // so `./src-tauri/x`, `C:\...\src-tauri\x` and `src-tauri/x` all match.
   const norm = raw
+    .replace(/["']/g, '') // REVIEW-2 S3-12: `rm "src-tauri/src/gate.rs"` must match —
+                          // a leading quote would defeat the (^|/) anchor
     .replace(/\\/g, '/')
     .replace(/^\./, '')
     .replace(/^\//, '')

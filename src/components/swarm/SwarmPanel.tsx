@@ -173,8 +173,6 @@ const SwarmPanel: React.FC<{ coordinator?: SwarmCoordinator }> = ({ coordinator 
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [synthesisCopied, setSynthesisCopied] = React.useState(false);
 
-  const armed = useTrustStore(s => s.armed);
-  const setArmed = useTrustStore(s => s.setArmed);
 
   const runIdRef = React.useRef<string | null>(null);
   const logTailRef = React.useRef<Map<string, string[]>>(new Map());
@@ -288,21 +286,21 @@ const SwarmPanel: React.FC<{ coordinator?: SwarmCoordinator }> = ({ coordinator 
   }, [parsedPlan, concurrency, profile, coordinator]);
 
   const handlePauseResume = React.useCallback(() => {
-    // The coordinator's pause governor is the trust kill switch (W6 design:
-    // disarm = pause the queue, the plan survives; re-arm = resume).
-    if (armed) {
-      setArmed(false);
-    } else {
-      setArmed(true);
+    // S3-13: Pause is now swarm-LOCAL — coordinator.pause() holds the queue
+    // without touching the owner's global kill switch (which stops every
+    // agent surface app-wide and stays the owner's tool).
+    if (coordinator.isPaused()) {
       coordinator.resume();
+    } else {
+      coordinator.pause();
     }
-  }, [armed, setArmed, coordinator]);
+  }, [coordinator]);
 
   const handleCancelAll = React.useCallback(() => {
     coordinator.cancelAll(runIdRef.current ?? undefined);
   }, [coordinator]);
 
-  const paused = runActive && (!armed || pausedReason !== null);
+  const paused = runActive && (coordinator.isPaused() || pausedReason !== null);
 
   const selected = tasks.find(t => t.id === selectedId) ?? null;
   const runningCount = tasks.filter(t => t.status === 'running').length;
@@ -419,8 +417,8 @@ const SwarmPanel: React.FC<{ coordinator?: SwarmCoordinator }> = ({ coordinator 
                 color: paused ? '#f59e0b' : 'var(--gia-text)',
               }}
               title={paused
-                ? 'Resume — re-arms the kill switch and releases the queue'
-                : 'Pause — uses the app kill switch: GIA pauses everywhere, not just this swarm. The plan survives.'}
+                ? "Resume — releases this swarm's queue. The app-wide kill switch is untouched."
+                : "Pause — pauses THIS swarm's queue. The plan survives; other agents keep running."}
             >
               {paused ? <Play size={11} /> : <Pause size={11} />} {paused ? 'Resume' : 'Pause'}
             </button>

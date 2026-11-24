@@ -62,6 +62,9 @@ export interface CompactionOptions {
   threshold?: number;
   /** The most recent N messages kept verbatim. */
   recentMessages?: number;
+  /** S3-16: a single tail message above this share of the context window
+   *  (default 0.25) is evictable even though it sits in the recent tail. */
+  tailMessageShareCap?: number;
   /**
    * Caller-supplied summarizer for the evicted middle. It receives the
    * evicted slice ALREADY SANITIZED (untrusted payloads elided — see the
@@ -128,13 +131,17 @@ const FALLBACK_CONTEXT_WINDOW = 16_000;
  * length governor in buildGiaSystem resolves it (provider's declared model
  * metadata → resolveCapabilities inference → fallback). Read fresh on every
  * call — the person can switch models mid-session.
+ * REVIEW-2 S3-20: GiaBrain's selectBestModel may pick a DIFFERENT model than
+ * the store's (modelOverride / auto-switch without persist); compaction must
+ * measure the model that will actually be called, or it truncates against
+ * the wrong window. Pass the final model when known.
  */
-export function resolveActiveContextWindow(providerId?: string): number {
+export function resolveActiveContextWindow(providerId?: string, modelOverride?: string): number {
   const { providers, activeProvider, availableModels } = useProviderStore.getState();
   const provider = providerId || activeProvider;
   const config = providers[provider];
   if (!config) return FALLBACK_CONTEXT_WINDOW;
-  const model = config.model;
+  const model = modelOverride && modelOverride.trim() ? modelOverride : config.model;
   if (!model) return FALLBACK_CONTEXT_WINDOW;
   const declared = availableModels[provider]?.find((m) => m.id === model)?.context;
   const caps = resolveCapabilities(model, { context: declared });
@@ -190,7 +197,26 @@ export function sanitizeEvictedForSummary(
   const sources = new Set<string>();
   let flagged = false;
   const sanitized = evicted.map((m) => {
-    if (typeof m.content !== 'string') return m; // parts preserved verbatim
+    // S3-11: part-array messages were passed through verbatim, so untrusted
+    // `text` inside a parts array reached the summarizer unelided and a
+    // base64 image blob could dump wholesale into the prompt. Replace any
+    // non-string content with a bounded text stub carrying only the shape.
+    if (typeof m.content !== 'string') {
+      const parts = Array.isArray(m.content) ? m.content : [];
+      const typeCount = new Map<string, number>();
+      let approxChars = 0;
+      for (const p of parts) {
+        if (p && typeof p === 'object') {
+          const t = String((p as { type?: unknown }).type ?? 'part');
+          typeCount.set(t, (typeCount.get(t) ?? 0) + 1);
+          const pt = (p as { text?: unknown }).text;
+          if (typeof pt === 'string') approxChars += pt.length;
+        }
+      }
+      const breakdown = [...typeCount.entries()].map(([t, n]) => `${n}×${t}`).join(', ') || 'empty';
+      flagged = true;
+      return { role: m.role, content: `[parts elided — ${parts.length} parts (${breakdown}), ~${approxChars} chars. Untrusted part text is not passed to the summarizer.]` };
+    }
     let body = m.content;
     const { text, elidedBytes } = elideUntrustedPayloads(body);
     body = text;
@@ -265,8 +291,41 @@ export async function compactIfNeeded(
     const m = history[i];
     if (m && !isMarkerMessage(m)) evicted.push(m);
   }
+
+  // S3-16: the recent tail is kept verbatim, so ONE huge tool output among
+  // the last N messages could hold usage over threshold with an empty
+  // evictable middle → noop → the provider call died anyway. Widen eviction
+  // into the tail (oldest tail messages first). The newest message is never
+  // evicted.
+  let tailEvicted = 0;
+  const keptTailEstimate = () => estimateHistoryTokens(history.slice(evictableEnd + tailEvicted));
+  const perMessageCap = contextWindow * (opts.tailMessageShareCap ?? 0.25);
+  if (evicted.length === 0 && evictableEnd === evictableStart) {
+    // recentMessages swallowed the whole history — the tail IS the history.
+    // Evict oldest tail messages until the remainder fits its threshold.
+    for (let i = evictableStart; i < history.length - 1; i++) {
+      const m = history[i];
+      if (!m || isMarkerMessage(m)) continue;
+      evicted.push(m);
+      tailEvicted++;
+      if (keptTailEstimate() <= contextWindow * threshold) break;
+    }
+  } else if (evicted.length > 0 && keptTailEstimate() > contextWindow * threshold) {
+    // Middle evicted but the tail ITSELF is over threshold: pull out single
+    // tail messages above their per-message share of the window.
+    for (let i = evictableEnd; i < history.length - 1; i++) {
+      const m = history[i];
+      if (!m || isMarkerMessage(m)) continue;
+      if (keptTailEstimate() <= contextWindow * threshold) break;
+      if (estimateHistoryTokens([m]) > perMessageCap) {
+        evicted.push(m);
+        tailEvicted++;
+      }
+    }
+  }
   if (evicted.length === 0) return noop;
 
+  const evictEnd = evictableEnd + tailEvicted;
   const tokensEvicted = estimateHistoryTokens(evicted);
 
   // Sanitize FIRST — the summarizer must never see raw untrusted payloads.
@@ -315,9 +374,9 @@ export async function compactIfNeeded(
 
   const compacted: CompactionMessage[] = [
     ...history.slice(0, evictableStart),
-    ...history.slice(evictableStart, evictableEnd).filter(isMarkerMessage),
+    ...history.slice(evictableStart, evictEnd).filter(isMarkerMessage),
     summaryMessage,
-    ...history.slice(evictableEnd),
+    ...history.slice(evictEnd),
   ];
 
   opts.onNotice?.(compactionNotice(evicted.length, tokensEvicted));

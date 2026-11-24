@@ -84,6 +84,8 @@ vi.mock('../../../store/useTrustStore', () => ({
   },
 }));
 
+const autonomyListeners = new Set<(s: { fullAutonomy: boolean }) => void>();
+
 vi.mock('../../../store/useProtocolStore', () => ({
   useProtocolStore: {
     getState: () => ({
@@ -91,8 +93,13 @@ vi.mock('../../../store/useProtocolStore', () => ({
       setFullAutonomy: (enabled: boolean) => {
         storeCalls.push(`setFullAutonomy:${enabled}`);
         protocolState.fullAutonomy = enabled;
+        for (const l of Array.from(autonomyListeners)) l({ fullAutonomy: enabled });
       },
     }),
+    subscribe: (l: (s: { fullAutonomy: boolean }) => void) => {
+      autonomyListeners.add(l);
+      return () => { autonomyListeners.delete(l); };
+    },
   },
 }));
 
@@ -216,6 +223,7 @@ beforeEach(() => {
   worktreeRemoved.length = 0;
   worktreeMode = 'ok';
   protocolState.fullAutonomy = false;
+  autonomyListeners.clear();
   trustState.armed = true;
   trustListeners.clear();
 });
@@ -467,6 +475,45 @@ describe('SwarmCoordinator — worktree per code-task', () => {
     await flush();
     expect(record.status).toBe('failed');
     expect(worktreeRemoved).toHaveLength(0); // kept for inspection
+  });
+});
+
+describe('SwarmCoordinator — autonomy restore respects user intent (S3-13)', () => {
+  it('a user flipping fullAutonomy mid-run is NOT clobbered when the run finishes', async () => {
+    const { executor, calls } = makeExecutor();
+    const coordinator = new SwarmCoordinator({ executor });
+
+    const { runId } = coordinator.startSwarm({ tasks: [{ prompt: 'a' }], concurrency: 1, profile: 'full' });
+    expect(protocolState.fullAutonomy).toBe(true);
+
+    // The user turns it OFF themselves mid-run.
+    protocolState.fullAutonomy = false;
+    for (const l of Array.from(autonomyListeners)) l({ fullAutonomy: false });
+
+    calls[0].deferred.resolve({ text: 'done' });
+    await flush();
+    expect(coordinator.getRun(runId)!.done).toBe(1);
+    // The user's OFF wins — the swarm must not switch it back on.
+    expect(protocolState.fullAutonomy).toBe(false);
+  });
+
+  it('overlapping full-profile runs compose: autonomy stays on until the LAST run finishes', async () => {
+    const { executor, calls } = makeExecutor();
+    const coordinator = new SwarmCoordinator({ executor });
+
+    const r1 = coordinator.startSwarm({ tasks: [{ prompt: 'a' }], concurrency: 1, profile: 'full' });
+    const r2 = coordinator.startSwarm({ tasks: [{ prompt: 'b' }], concurrency: 1, profile: 'full' });
+    expect(protocolState.fullAutonomy).toBe(true);
+
+    calls[0].deferred.resolve({ text: 'done' });
+    await flush();
+    expect(protocolState.fullAutonomy).toBe(true); // run 2 still active
+    expect(protocolState.fullAutonomy).toBe(true);
+
+    calls[1].deferred.resolve({ text: 'done' });
+    await flush();
+    expect(protocolState.fullAutonomy).toBe(false); // restored only at the last finish
+    void r1; void r2;
   });
 });
 

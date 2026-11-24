@@ -5,6 +5,7 @@ import { crawlerService } from '../crawler/CrawlerService';
 import { useSearchStore } from '../../store/useSearchStore';
 import { useGiaStore } from '../../store/useGiaStore';
 import { useKnowledgeGraphStore } from '../../store/useKnowledgeGraphStore';
+import { labelObservation } from '../untrusted';
 
 function getSearchDescription(): string {
   const store = useSearchStore.getState();

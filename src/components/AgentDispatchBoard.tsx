@@ -349,6 +349,11 @@ export default function AgentDispatchBoard() {
         persona: `${agentDef.name} — ${agentDef.role}`,
         systemPrompt,
         providerId: providerId || undefined,
+        // REVIEW-2 S3-21: hand the coordinator the agent record itself, so
+        // identity resolves from the record (icon/color/name in the UI) and
+        // a custom agent's tool allow-list is enforced instead of dropped.
+        agentId: agentDef.type === 'custom' ? agentDef.id : undefined,
+        tools: custom?.tools,
       }],
       concurrency: 1,
       profile: 'ask',

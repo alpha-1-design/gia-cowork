@@ -242,6 +242,27 @@ describe('compactIfNeeded — no double-compaction', () => {
   });
 });
 
+describe('S3-16 — a huge tail message no longer defeats compaction', () => {
+  it('evicts the oldest tail messages when recentMessages swallows the whole history', async () => {
+    // Every message is inside the recent tail (recentMessages = 10) and the
+    // window is tiny: pre-fix this was a guaranteed noop, so the provider
+    // call overflowed and died anyway.
+    const history: CompactionMessage[] = [
+      { role: 'system', content: 'SYSTEM PROMPT' },
+      { role: 'user', content: 'u1' },
+      { role: 'assistant', content: 'a1' },
+      { role: 'user', content: 'u2 with some length to it so it counts tokens' },
+      { role: 'assistant', content: 'a2 also carrying a bit of text for the estimator' },
+    ];
+    const res = await compactIfNeeded(history, 30, { summarize: fakeSummarize, recentMessages: 10 });
+    expect(res.compacted).toBe(true);
+    // The newest message is never evicted; the rest went into the summary.
+    expect(res.history.at(-1)!.content).toContain('a2');
+    expect(res.evictedCount).toBeGreaterThan(0);
+    expect(res.history.some(m => typeof m.content === 'string' && m.content.startsWith(COMPACTION_MARKER))).toBe(true);
+  });
+});
+
 describe('user-facing surface', () => {
   it('emits a 📐 compaction notice through onNotice exactly once per compaction', async () => {
     const onNotice = vi.fn();

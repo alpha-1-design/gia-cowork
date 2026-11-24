@@ -52,6 +52,8 @@ const h = vi.hoisted(() => {
     cancel: vi.fn(),
     cancelAll: vi.fn(),
     resume: vi.fn(),
+    pause: vi.fn(),
+    isPaused: vi.fn(() => false),
     getTasks: vi.fn(() => records),
     getRun: vi.fn(),
     runCost: vi.fn(() => 0),
@@ -276,20 +278,26 @@ describe('SwarmPanel — cancellation', () => {
 
 // ── Pause ──────────────────────────────────────────────────────────────────
 
-describe('SwarmPanel — pause (the kill-switch governor)', () => {
-  it('Pause disarms the trust store, shows the paused banner, Resume re-arms + resumes', async () => {
+describe('SwarmPanel — pause (swarm-local governor, S3-13)', () => {
+  it('Pause calls coordinator.pause (NOT the global kill switch), shows the paused banner, Resume calls resume', async () => {
     wireStart(2);
     render(<SwarmPanel />);
     fireEvent.change(screen.getByPlaceholderText(/One prompt per line/), { target: { value: 'a\nb' } });
     fireEvent.click(screen.getByRole('button', { name: /Start/ }));
     fireEvent.click(await screen.findByRole('button', { name: /Pause/ }));
 
-    expect(useTrustStore.getState().armed).toBe(false);
+    // The kill switch is NOT touched — pause is swarm-local now (S3-13).
+    const armedBefore = useTrustStore.getState().armed;
+    expect(h.fns.pause).toHaveBeenCalled();
+
+    // The paused banner comes from the coordinator's queue-paused event.
+    h.emit({ type: 'queue-paused', runId: 'run-1', reason: 'swarm paused' });
     expect(await screen.findByText(/Queue paused/)).toBeTruthy();
 
+    h.fns.isPaused.mockReturnValueOnce(true);
     fireEvent.click(screen.getByRole('button', { name: /Resume/ }));
-    expect(useTrustStore.getState().armed).toBe(true);
     expect(h.fns.resume).toHaveBeenCalled();
+    expect(useTrustStore.getState().armed).toBe(armedBefore);
   });
 });
 

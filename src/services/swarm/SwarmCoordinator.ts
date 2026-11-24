@@ -358,8 +358,11 @@ interface SwarmRun {
   finished: boolean;
   startedAt: number;
   resolveDone: (summary: SwarmRunSummary) => void;
-  /** Set when this run set fullAutonomy, so we restore the prior value. */
-  prevFullAutonomy: boolean | null;
+  /** (S3-13: autonomy save/restore moved to the coordinator — a counter of
+   *  active 'full' runs composes overlapping runs and user toggles.) */
+  /** This run's latest AgentActivityStrip line (S4-24: keyed per run, so
+   *  run A's finishRun can never clear run B's live strip line). */
+  stripLine: string | null;
 }
 
 export class SwarmCoordinator {
@@ -372,9 +375,18 @@ export class SwarmCoordinator {
   private executor: SwarmExecutor;
   private allocator: WorktreeAllocator;
   private killSwitchPaused = false;
+  /** S3-13: swarm-local pause. The kill switch stays the OWNER's global
+   *  stop; the panel's Pause drives this instead of disarming the switch. */
+  private localPaused = false;
+  /** S3-13: count of active 'full'-profile runs composes overlapping runs. */
+  private fullProfileRuns = 0;
+  private fullProfilePrev: boolean | null = null;
+  /** User's fullAutonomy intent if they flipped it while a 'full' run was
+   *  active — the swarm must never clobber it on finish (was S3-13b). */
+  private fullProfileUserTouched: boolean | null = null;
+  private unwatchAutonomy: (() => void) | null = null;
   private unwatchTrust: (() => void) | null = null;
   /** Set while one of our lines is on the activity strip. */
-  private stripLine: string | null = null;
 
   constructor(opts: { executor?: SwarmExecutor; allocator?: WorktreeAllocator } = {}) {
     this.executor = opts.executor ?? defaultSwarmExecutor;
@@ -420,7 +432,7 @@ export class SwarmCoordinator {
       queue: [], records: new Map(), specs: new Map(), controllers: new Map(),
       runningCount: 0, finished: false, startedAt: Date.now(),
       resolveDone: resolveDone.resolve,
-      prevFullAutonomy: null,
+      stripLine: null,
     };
     this.runs.set(runId, run);
 
@@ -467,9 +479,19 @@ export class SwarmCoordinator {
     // Profile wiring. 'ask' touches nothing.
     if (plan.profile === 'full') {
       // fullAutonomy is a global flag with an existing contract (it skips
-      // prompts, never the kill switch). Save and restore so a finished swarm
-      // does not leave silent autonomy behind for unrelated calls.
-      run.prevFullAutonomy = useProtocolStore.getState().fullAutonomy;
+      // prompts, never the kill switch). S3-13: a COUNTER of active 'full'
+      // runs composes overlapping runs, and a watcher records the user's own
+      // mid-run flip so finishRun restores to the user's intent, not a stale
+      // snapshot (a background run used to silently switch the flag back
+      // off under the user's hand).
+      if (this.fullProfileRuns === 0) {
+        this.fullProfilePrev = useProtocolStore.getState().fullAutonomy;
+        this.fullProfileUserTouched = null;
+        // The value we are about to write is OURS, not the user's — the
+        // watcher must not label the swarm's own set as user intent.
+        this.watchAutonomyChanges(true);
+      }
+      this.fullProfileRuns++;
       useProtocolStore.getState().setFullAutonomy(true);
       this.log('tool', `Swarm ${runId}: FULL ACCESS profile — every tool call runs without prompts. The kill switch still stops everything.`);
     } else if (plan.profile === 'auto-read') {
@@ -507,7 +529,7 @@ export class SwarmCoordinator {
     // Pause only withholds NEW dispatches — a run whose queue is drained and
     // lanes are idle must still settle (finishRun restores the full profile
     // and resolves the done promise), so the check requires pending work.
-    if (this.killSwitchPaused && (run.queue.length > 0 || run.runningCount > 0)) {
+    if ((this.killSwitchPaused || this.localPaused) && (run.queue.length > 0 || run.runningCount > 0)) {
       this.emit({ type: 'queue-paused', runId: run.runId, reason: 'kill switch disarmed' });
       return;
     }
@@ -526,11 +548,11 @@ export class SwarmCoordinator {
   private dispatchTask(run: SwarmRun, record: SwarmTaskRecord) {
     // Kill switch check BEFORE each dispatch — a profile pre-grants authority,
     // so the armed state is the one thing that must be re-read per task.
-    if (!useTrustStore.getState().armed) {
-      // Put it back at the head and pause; re-arm resumes from here.
+    if (!useTrustStore.getState().armed || this.localPaused) {
+      // Put it back at the head and pause; re-arm/resume picks up from here.
       run.queue.unshift(record);
-      this.killSwitchPaused = true;
-      this.emit({ type: 'queue-paused', runId: run.runId, reason: 'kill switch disarmed before dispatch' });
+      if (!useTrustStore.getState().armed) this.killSwitchPaused = true;
+      this.emit({ type: 'queue-paused', runId: run.runId, reason: useTrustStore.getState().armed ? 'swarm paused before dispatch' : 'kill switch disarmed before dispatch' });
       return;
     }
 
@@ -554,7 +576,7 @@ export class SwarmCoordinator {
     useAgentTaskStore.getState().markRunning(record.id);
     this.emit({ type: 'task-started', runId: run.runId, taskId: record.id });
     this.log('tool', `[${identity.agentName}] starting — ${summarizePrompt(spec.prompt)}`);
-    this.updateStrip(`${STRIP_MARKER} · ${identity.agentName}: starting…`);
+    this.updateStrip(run, `${STRIP_MARKER} · ${identity.agentName}: starting…`);
 
     // Worktree allocation happens BEFORE execution: the lane must run against
     // its own checkout from the first tool call, not from its second prompt.
@@ -601,7 +623,7 @@ export class SwarmCoordinator {
       }
       useAgentTaskStore.getState().setActivity(record.id, msg);
       this.emit({ type: 'task-activity', runId: run.runId, taskId: record.id, activity: msg });
-      this.updateStrip(`${STRIP_MARKER} · ${identity.agentName}: ${msg}`);
+      this.updateStrip(run, `${STRIP_MARKER} · ${identity.agentName}: ${msg}`);
     };
 
     let outcome: SwarmExecutionResult | null = null;
@@ -759,7 +781,38 @@ export class SwarmCoordinator {
   }
 
   /** Manual resume (mirrors re-arming the kill switch). */
+  /** S3-13: the watcher records any fullAutonomy write that did not come
+   *  from the swarm itself — that is the user's live intent, and finishRun
+   *  restores to it instead of the pre-run snapshot. */
+  private watchAutonomyChanges(swarmWrites: boolean) {
+    if (this.unwatchAutonomy) return;
+    if (typeof useProtocolStore.subscribe !== 'function') return;
+    let lastSwarmWrite = swarmWrites;
+    this.unwatchAutonomy = useProtocolStore.subscribe((state) => {
+      if (state.fullAutonomy !== lastSwarmWrite) {
+        this.fullProfileUserTouched = state.fullAutonomy;
+        lastSwarmWrite = state.fullAutonomy;
+      }
+    });
+  }
+
+  /** S3-13: swarm-local pause — holds new dispatches, plans survive, the
+   *  trust kill switch is untouched. */
+  pause(): void {
+    this.localPaused = true;
+    for (const run of this.runs.values()) {
+      if (!run.finished && (run.queue.length > 0 || run.runningCount > 0)) {
+        this.emit({ type: 'queue-paused', runId: run.runId, reason: 'swarm paused' });
+      }
+    }
+  }
+
+  isPaused(): boolean {
+    return this.localPaused;
+  }
+
   resume(): void {
+    this.localPaused = false;
     this.killSwitchPaused = false;
     for (const run of this.runs.values()) {
       if (!run.finished) {
@@ -774,13 +827,22 @@ export class SwarmCoordinator {
   private finishRun(run: SwarmRun) {
     if (run.finished) return;
     run.finished = true;
-    if (run.prevFullAutonomy !== null) {
-      useProtocolStore.getState().setFullAutonomy(run.prevFullAutonomy);
-      run.prevFullAutonomy = null;
+    if (run.plan.profile === 'full') {
+      this.fullProfileRuns--;
+      if (this.fullProfileRuns <= 0) {
+        this.fullProfileRuns = 0;
+        this.unwatchAutonomy?.();
+        this.unwatchAutonomy = null;
+        // Restore only to what the user last meant: a stale snapshot would
+        // clobber their mid-run flip in either direction.
+        useProtocolStore.getState().setFullAutonomy(
+          this.fullProfileUserTouched ?? this.fullProfilePrev ?? false,
+        );
+      }
     }
-    if (this.stripLine && useGiaStore.getState().currentTool === this.stripLine) {
+    if (run.stripLine && useGiaStore.getState().currentTool === run.stripLine) {
       useGiaStore.getState().setCurrentTool(null);
-      this.stripLine = null;
+      run.stripLine = null;
     }
     if (!this.hasActiveWork() && this.unwatchTrust) {
       this.unwatchTrust();
@@ -898,8 +960,8 @@ export class SwarmCoordinator {
    * is many lanes, so ours carries the swarm marker and the busiest lane's
    * latest activity; the run's finish clears it only if it is still ours.
    */
-  private updateStrip(line: string) {
-    this.stripLine = line;
+  private updateStrip(run: SwarmRun, line: string) {
+    run.stripLine = line;
     useGiaStore.getState().setCurrentTool(line);
   }
 }

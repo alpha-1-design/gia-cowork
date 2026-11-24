@@ -51,6 +51,19 @@ function makeCompactionSummarizer(providerId: string, model: string, signal?: Ab
       },
       providerId,
     );
+    // REVIEW-2 S3-19: compaction spend must be visible. The summarizer goes
+    // around GiaBrain's accounting choke point (it calls ProviderService
+    // directly), so it records its own usage here — tagged to the session
+    // with a compaction marker so per-lane cost reads stay honest.
+    if (res.tokenUsage) {
+      costTracker.record(
+        providerId,
+        model,
+        res.tokenUsage.input || 0,
+        res.tokenUsage.output || 0,
+        `compaction:${useGiaStore.getState().activeSessionId || 'unknown'}`,
+      );
+    }
     return res.text;
   };
 }
@@ -107,7 +120,9 @@ class GiaBrain {
       //    SwarmCoordinator lane (the swarm executor delegates to this call).
       //    In-place splice: toolRunner's ExecutionState holds the same array
       //    reference, so both stay in step.
-      const compaction = await compactIfNeeded(history, resolveActiveContextWindow(effectiveProvider), {
+      // S3-20: measure the window of the model ACTUALLY selected (finalModel
+      // may differ from the store's when selectBestModel auto-switched).
+      const compaction = await compactIfNeeded(history, resolveActiveContextWindow(effectiveProvider, finalModel), {
         summarize: makeCompactionSummarizer(effectiveProvider, finalModel, req.signal),
         onNotice: (notice) => req.onThought?.(notice),
       });

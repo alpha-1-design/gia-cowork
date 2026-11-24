@@ -339,11 +339,15 @@ export class SelfBuilder {
       };
     }
 
-    // 6. Run and judge: exit code plus presence of "error" in the output.
+    // 6. Run and judge: exit code plus presence of error LINES in the output.
     const result = await tool.execute(args);
     const output = [result.content, result.error].filter(Boolean).join('\n');
     const exitCode = result.success ? 0 : parseExitCode(output);
-    const hasError = /\berror\b/i.test(output);
+    // S4-28: match error LINES, not the word — "0 errors" or an "error.ts"
+    // filename in a passing run must not churn a rollback. A real tsc/vitest
+    // failure always has a line that starts with `error`/`error TS` (or a
+    // FAIL/✕ test marker); whitespace-leading lines are matched too.
+    const hasError = /^\s*(error|error TS|FAIL|✕|×)\b/m.test(output);
     const failed = exitCode === null || exitCode !== 0 || hasError;
 
     return {

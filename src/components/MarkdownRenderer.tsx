@@ -352,7 +352,11 @@ const MarkdownRenderer: React.FC<Props> = ({ content, className = '', sources })
       // end of the message means the fence is still streaming (or got cut off
       // by the token limit), which VisualRenderer needs to know so it shows a
       // placeholder instead of an error.
-      const fenceClosed = i < lines.length;
+      // REVIEW-2 S3-17: when the closing fence IS the last line, the consume
+      // loop has already advanced i past it — "i < lines.length" alone would
+      // call a perfectly-closed block incomplete forever. Check the previous
+      // line too.
+      const fenceClosed = i < lines.length || (i > 0 && lines[i - 1].trimStart().startsWith('```'));
       if (lang === 'mermaid') {
         nodes.push(<MermaidRenderer key={`mm-${i}`} definition={codeLines.join('\n')} />);
       } else if (lang === 'svg' || lang === 'svg+xml') {
