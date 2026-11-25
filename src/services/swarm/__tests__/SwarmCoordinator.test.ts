@@ -34,6 +34,8 @@ const trustState = { armed: true };
 const trustListeners = new Set<(s: typeof trustState) => void>();
 const consoleLogs: { type: string; content: string }[] = [];
 const stripState = { currentTool: null as string | null };
+/** S4-26: tagged per-run spend the CostTracker mock reports. */
+const cost = { tagged: 0 };
 
 const worktreeCreated: { taskId: string; path: string }[] = [];
 const worktreeRemoved: string[] = [];
@@ -163,6 +165,9 @@ vi.mock('../../git/worktree', () => ({
 vi.mock('../../CostTracker', () => ({
   costTracker: {
     getSummary: (sinceMs?: number) => ({ totalCost: sinceMs ? 0.42 : 0, calls: 2 }),
+    // S4-26: no lane tagged spend in this harness, so runCost falls back to
+    // the run-window total (the pre-existing behaviour it pins).
+    getSessionCost: () => cost.tagged,
   },
 }));
 
@@ -227,6 +232,7 @@ beforeEach(() => {
   worktreeRemoved.length = 0;
   worktreeMode = 'ok';
   protocolState.fullAutonomy = false;
+  cost.tagged = 0;
   autonomyListeners.clear();
   trustState.armed = true;
   trustListeners.clear();
@@ -706,6 +712,15 @@ describe('SwarmCoordinator — synthesis + events', () => {
     const types = events.filter(e => e.runId === runId).map(e => e.type);
     expect(types).toEqual(['run-started', 'task-started', 'task-activity', 'task-completed', 'run-finished']);
     expect(stripState.currentTool).toBeNull();
+  });
+
+  it("prefers the run's own tagged spend over the whole-window total (S4-26)", async () => {
+    cost.tagged = 1.75;
+    const { executor } = makeExecutor();
+    const coordinator = new SwarmCoordinator({ executor });
+    const { runId } = coordinator.startSwarm({ tasks: [{ prompt: 'a' }], concurrency: 1, profile: 'ask' });
+    expect(coordinator.runCost(runId)).toBe(1.75);
+    cost.tagged = 0;
   });
 
   it('reports run-window cost through CostTracker', async () => {

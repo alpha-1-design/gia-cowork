@@ -123,12 +123,18 @@ export const useAgentTaskStore = create<AgentTaskState>()(
       },
 
       markRunning: (id) => {
-        set(s => ({
-          tasks: s.tasks.map(t =>
-            t.id === id ? { ...t, status: 'running', startedAt: Date.now(), currentActivity: 'Starting…' } : t
-          ),
-          runningIds: [...s.runningIds.filter(r => r !== id), id],
-        }));
+        set(s => {
+          // S4-25: only track ids that actually have a record — a pre-allocated
+          // lane id (SubAgentManager passes spec.id with no store record) must
+          // not accumulate as a phantom in runningIds.
+          if (!s.tasks.some(t => t.id === id)) return s;
+          return {
+            tasks: s.tasks.map(t =>
+              t.id === id ? { ...t, status: 'running', startedAt: Date.now(), currentActivity: 'Starting…' } : t
+            ),
+            runningIds: [...s.runningIds.filter(r => r !== id), id],
+          };
+        });
       },
 
       setActivity: (id, activity) => {

@@ -221,9 +221,13 @@ export function deferredToolsPromptBlock(): string {
   // Count what the model actually cares about — the tools BEYOND the core
   // set. Counting all registered tools made the core sound doubly advertised
   // and the "other N tools" number wrong (V2 clarity audit, (c)-1).
-  const beyondCore = index.filter((e) => !CORE_TOOL_IDS.has(e.id)).length;
+  // S4-31: count the core tools that are ACTUALLY advertised (core ∩ record),
+  // not the constant — a core id with no live record would otherwise inflate
+  // this number and drift silently.
+  const advertisedCore = index.filter((e) => CORE_TOOL_IDS.has(e.id)).length;
+  const beyondCore = index.length - advertisedCore;
   return `## Deferred tool catalog
-This conversation advertises full schemas for the ${CORE_TOOL_IDS.size} CORE TOOLS only. The remaining ${beyondCore} tools — of ${index.length} registered in total, every one of them in the compact index below — are discoverable on demand: call \`tool_search\` with a natural-language query and it returns the matching tools' full schemas, after which you call them by id exactly like a core tool.
+This conversation advertises full schemas for the ${advertisedCore} CORE TOOLS only. The remaining ${beyondCore} tools — of ${index.length} registered in total, every one of them in the compact index below — are discoverable on demand: call \`tool_search\` with a natural-language query and it returns the matching tools' full schemas, after which you call them by id exactly like a core tool.
 
 On providers with native tool calling, the core tools are callable as functions; every tool you find through tool_search is invoked ONLY through a \`\`\`tool fenced block — never as a native function call.
 

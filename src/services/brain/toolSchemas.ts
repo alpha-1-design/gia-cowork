@@ -20,7 +20,9 @@ export const toolSchemas: Record<string, { description: string; required: string
     properties: { query: { type: 'string', description: 'Search query text' } }
   },
   read_url: {
-    description: 'Fetch and read the text content of a URL. Uses Exa/Browserless or CORS proxies. Returns up to 25,000 characters.',
+    // S4-30: dead entry — the registry's schema wins the merge in
+    // getAllToolSchemas(). Kept in sync anyway so it can never mislead.
+    description: 'Fetch and read the text content of a URL. Uses Exa/Browserless or CORS proxies. Returns up to 60,000 characters.',
     required: ['url'],
     properties: { url: { type: 'string', description: 'Full URL to fetch' } }
   },

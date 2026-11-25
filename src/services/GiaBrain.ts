@@ -207,7 +207,7 @@ class GiaBrain {
             finalModel,
             res.tokenUsage.input || 0,
             res.tokenUsage.output || 0,
-            useGiaStore.getState().activeSessionId || 'unknown',
+            req.costTag ?? (useGiaStore.getState().activeSessionId || 'unknown'),
           );
         }
         const finalResponse = await PluginManager.runAfterGenerate({ text, provider: effectiveProvider, model: finalModel });

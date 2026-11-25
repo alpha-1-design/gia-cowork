@@ -160,6 +160,12 @@ export interface SwarmExecutorRequest {
   providerId?: string;
   signal?: AbortSignal;
   onThought?: (msg: string) => void;
+  /** S3-21: live text as the lane generates it, so a long lane renders
+   *  progressively instead of appearing empty until it settles. */
+  onStream?: (chunk: string) => void;
+  /** S4-26: the run this lane belongs to — the default executor tags its
+   *  spend `swarm:<runId>` so runCost is exact, not whole-window. */
+  runId?: string;
 }
 
 export interface SwarmExecutionResult {
@@ -245,6 +251,8 @@ export const defaultSwarmExecutor: SwarmExecutor = async (req) => {
     providerId: req.providerId || undefined,
     signal: req.signal,
     onThought: req.onThought,
+    onStream: req.onStream,
+    costTag: req.runId ? `swarm:${req.runId}` : undefined,
   });
   return {
     text: res.text,
@@ -654,6 +662,17 @@ export class SwarmCoordinator {
         providerId: provider || undefined,
         signal: ctrl.signal,
         onThought,
+        runId: run.runId,
+        // S3-21: live lane text. Mirrored into the store record so the Board
+        // and the panel show progress during a long lane instead of an empty
+        // card until the lane settles.
+        onStream: (chunk) => {
+          if (record.status !== 'running' || !chunk) return;
+          // Keep the coordinator's own record in step so the panel's detail
+          // drawer streams too (setResult overwrites with the final text).
+          record.result = (record.result ?? '') + chunk;
+          useAgentTaskStore.getState().appendResult(record.id, chunk);
+        },
       });
     } catch (e) {
       // An aborted generation surfaces as AbortError; a cancelled task's
@@ -918,7 +937,12 @@ export class SwarmCoordinator {
   runCost(runId: string): number {
     const run = this.runs.get(runId);
     if (!run) return 0;
-    return costTracker.getSummary(run.startedAt).totalCost;
+    // S4-26: lanes tag their spend `swarm:<runId>` (see SwarmExecutorRequest),
+    // so this is the run's own cost. Falls back to the run-window total only
+    // when nothing was tagged (an injected test/custom executor that records
+    // spend itself), which keeps old behaviour rather than reporting 0.
+    const tagged = costTracker.getSessionCost(`swarm:${runId}`);
+    return tagged > 0 ? tagged : costTracker.getSummary(run.startedAt).totalCost;
   }
 
   // ── Synthesis ────────────────────────────────────────────────────────────
